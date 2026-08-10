@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+src/app/functions/node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+hubspot.config.yml
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+coverage/
+lcov-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/
+
+# HubSpot CLI auth
+.hs_prod_login_token
+
+# Git worktrees (Claude Code)
+.claude/worktrees/
+
+# Subagent-driven development workspaces
+.superpowers/

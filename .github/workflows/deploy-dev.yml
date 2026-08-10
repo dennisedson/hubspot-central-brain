@@ -1,0 +1,34 @@
+# Deploy to Dev — auto-uploads on push to develop
+name: Deploy › Dev
+
+on:
+  push:
+    branches: [develop]
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Upload to Dev
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install HubSpot CLI
+        uses: HubSpot/hubspot-project-actions/install-hubspot-cli@v1.1.0
+
+      - name: Upload project
+        uses: HubSpot/hubspot-project-actions/project-upload@v1.1.0
+        env:
+          DEFAULT_ACCOUNT_ID: ${{ secrets.HUBSPOT_DEV_ACCOUNT_ID }}
+          DEFAULT_PERSONAL_ACCESS_KEY: ${{ secrets.HUBSPOT_DEV_PERSONAL_ACCESS_KEY }}

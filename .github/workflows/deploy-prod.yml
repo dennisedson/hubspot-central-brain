@@ -1,0 +1,34 @@
+# Deploy to Production — auto-uploads on merge to main
+name: Deploy › Production
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Upload to Production
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install HubSpot CLI
+        uses: HubSpot/hubspot-project-actions/install-hubspot-cli@v1.1.0
+
+      - name: Upload project
+        uses: HubSpot/hubspot-project-actions/project-upload@v1.1.0
+        env:
+          DEFAULT_ACCOUNT_ID: ${{ secrets.HUBSPOT_PROD_ACCOUNT_ID }}
+          DEFAULT_PERSONAL_ACCESS_KEY: ${{ secrets.HUBSPOT_PROD_PERSONAL_ACCESS_KEY }}

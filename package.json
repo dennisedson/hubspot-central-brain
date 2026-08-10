@@ -1,0 +1,35 @@
+{
+  "name": "hubspot-central-brain",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HubSpot Central Brain — hub-and-spoke system for developer advocacy",
+  "scripts": {
+    "lint": "eslint 'src/**/*.{ts,tsx}'",
+    "lint:fix": "eslint 'src/**/*.{ts,tsx}' --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "validate": "npm run lint && npm run typecheck && npm run test",
+    "dev": "hs project dev",
+    "upload": "hs project upload",
+    "upload:dev": "hs project upload --profile=dev",
+    "upload:staging": "hs project upload --profile=staging",
+    "upload:prod": "hs project upload --profile=prod"
+  },
+  "devDependencies": {
+    "@hubspot/cli": "^8.0.0",
+    "@types/node": "^18.0.0",
+    "eslint": "^9.0.0",
+    "@eslint/js": "^9.0.0",
+    "typescript-eslint": "^8.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  },
+  "dependencies": {
+    "@hubspot/api-client": "^12.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
