@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "validate": "npm run lint && npm run typecheck && npm run test",
+    "provision": "tsx src/scripts/provision-objects.ts",
     "dev": "hs project dev",
     "upload": "hs project upload",
     "upload:dev": "hs project upload --profile=dev",
@@ -24,6 +25,7 @@
     "@eslint/js": "^9.0.0",
     "typescript-eslint": "^8.0.0",
     "typescript": "^5.5.0",
+    "tsx": "^4.0.0",
     "vitest": "^2.0.0"
   },
   "dependencies": {
