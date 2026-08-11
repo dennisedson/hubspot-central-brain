@@ -52,6 +52,22 @@ export async function getCurrentStage(
   return response.results[0]?.properties?.hs_pipeline_stage ?? null;
 }
 
+export async function archiveContentByLinearId(
+  client: Client,
+  linearIssueId: string,
+): Promise<UpsertResult | null> {
+  const objectTypeId = PORTAL_CONFIG.content.objectTypeId;
+  const existingId = await findByLinearId(client, objectTypeId, linearIssueId);
+  if (!existingId) {
+    return null;
+  }
+
+  await client.crm.objects.basicApi.update(objectTypeId, existingId, {
+    properties: { hs_pipeline_stage: PORTAL_CONFIG.content.stageIds.archived },
+  });
+  return { id: existingId, action: 'updated' };
+}
+
 export async function upsertContent(
   client: Client,
   payload: LinearWebhookPayload,

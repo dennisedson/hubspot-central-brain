@@ -12,6 +12,7 @@ beforeEach(async () => {
     getCurrentStage: vi.fn().mockResolvedValue(null),
     upsertContent: vi.fn().mockResolvedValue({ id: 'hs-1', action: 'created' }),
     upsertChangelog: vi.fn().mockResolvedValue({ id: 'hs-2', action: 'created' }),
+    archiveContentByLinearId: vi.fn().mockResolvedValue({ id: 'hs-arch', action: 'updated' }),
   }));
   vi.doMock('../lib/portal-config', () => ({
     PORTAL_CONFIG: {
@@ -104,6 +105,80 @@ describe('LinearWebhook.main', () => {
     const result = await main(baseCtx);
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).reason).toBe('stage already matches');
+  });
+
+  it('accepts an uppercase "Linear-Signature" header (case-insensitive lookup)', async () => {
+    const { verifyLinearSignature: mockVerify } = await import('@lib/hmac');
+    const { upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+    const ctx = { ...baseCtx, headers: { 'Linear-Signature': 'abc123' } };
+    const result = await main(ctx);
+    // The signature value must reach verifyLinearSignature despite the header casing.
+    expect(mockVerify).toHaveBeenCalledWith(expect.anything(), 'abc123', 'test-secret');
+    expect(result.statusCode).toBe(200);
+    expect(mockUpsert).toHaveBeenCalledOnce();
+  });
+
+  it('skips overwrite when the current HubSpot stage shares the incoming Linear state bucket (editing/drafting)', async () => {
+    const { getCurrentStage: mockGetStage, upsertContent: mockUpsertContent, upsertChangelog: mockUpsertChangelog } =
+      await import('@lib/hubspot-client');
+    // Incoming Linear state is 'In Progress'; the record is already in the content 'editing' stage,
+    // which maps forward to 'In Progress' too. This must NOT be overwritten to 'drafting'.
+    vi.mocked(mockGetStage).mockResolvedValue('stage-editing');
+    const ctx = {
+      ...baseCtx,
+      body: {
+        ...baseCtx.body,
+        data: { ...baseCtx.body.data, state: { id: 'st-2', name: 'In Progress', type: 'started' } },
+      },
+    };
+    const result = await main(ctx);
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).skipped).toBe(true);
+    expect(JSON.parse(result.body).reason).toBe('stage already matches');
+    expect(mockUpsertContent).not.toHaveBeenCalled();
+    expect(mockUpsertChangelog).not.toHaveBeenCalled();
+  });
+
+  it('archives the linked content record on a Linear "remove" action', async () => {
+    const { archiveContentByLinearId: mockArchive, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+    const ctx = { ...baseCtx, body: { ...baseCtx.body, action: 'remove' } };
+    const result = await main(ctx);
+    expect(mockArchive).toHaveBeenCalledWith(expect.anything(), 'lin-1');
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).action).toBe('archived');
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it('returns "no matching record" when a "remove" targets an unknown content issue', async () => {
+    const { archiveContentByLinearId: mockArchive } = await import('@lib/hubspot-client');
+    vi.mocked(mockArchive).mockResolvedValue(null);
+    const ctx = { ...baseCtx, body: { ...baseCtx.body, action: 'remove' } };
+    const result = await main(ctx);
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).reason).toBe('remove: no matching record');
+  });
+
+  it('skips (does not archive) a "remove" on a changelog-labeled issue', async () => {
+    const { archiveContentByLinearId: mockArchive } = await import('@lib/hubspot-client');
+    const ctx = {
+      ...baseCtx,
+      body: {
+        ...baseCtx.body,
+        action: 'remove',
+        data: { ...baseCtx.body.data, labels: { nodes: [{ name: 'changelog' }] } },
+      },
+    };
+    const result = await main(ctx);
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).reason).toBe('changelog remove not archived (no archive stage)');
+    expect(mockArchive).not.toHaveBeenCalled();
+  });
+
+  it('returns 500 when getCurrentStage throws', async () => {
+    const { getCurrentStage: mockGetStage } = await import('@lib/hubspot-client');
+    vi.mocked(mockGetStage).mockRejectedValue(new Error('search API down'));
+    const result = await main(baseCtx);
+    expect(result.statusCode).toBe(500);
   });
 
   it('returns 500 when LINEAR_WEBHOOK_SECRET is missing', async () => {

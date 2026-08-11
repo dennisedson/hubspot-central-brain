@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { findByLinearId, getCurrentStage, upsertContent, upsertChangelog } from '@lib/hubspot-client';
+import { findByLinearId, getCurrentStage, upsertContent, upsertChangelog, archiveContentByLinearId } from '@lib/hubspot-client';
+import { PORTAL_CONFIG } from '@lib/portal-config';
 import type { LinearWebhookPayload } from '@lib/types';
 
 const mockSearch = vi.fn();
@@ -123,5 +124,29 @@ describe('upsertChangelog', () => {
       expect.any(String),
       expect.objectContaining({ properties: expect.objectContaining({ linear_issue_id: 'lin-123' }) }),
     );
+  });
+});
+
+describe('archiveContentByLinearId', () => {
+  it('moves the matching record to the archived stage and returns action "updated"', async () => {
+    mockSearch.mockResolvedValue({ results: [{ id: 'hs-existing' }] });
+
+    const result = await archiveContentByLinearId(mockClient, 'lin-123');
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      PORTAL_CONFIG.content.objectTypeId,
+      'hs-existing',
+      { properties: { hs_pipeline_stage: PORTAL_CONFIG.content.stageIds.archived } },
+    );
+    expect(result).toEqual({ id: 'hs-existing', action: 'updated' });
+  });
+
+  it('returns null when no matching record exists', async () => {
+    mockSearch.mockResolvedValue({ results: [] });
+
+    const result = await archiveContentByLinearId(mockClient, 'lin-missing');
+
+    expect(result).toBeNull();
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 });

@@ -14,8 +14,8 @@ describe('LINEAR_STATE_TO_CONTENT_STAGE', () => {
     expect(LINEAR_STATE_TO_CONTENT_STAGE['In Progress']).toBe('drafting'));
   it('maps "Backlog" to "idea"', () =>
     expect(LINEAR_STATE_TO_CONTENT_STAGE['Backlog']).toBe('idea'));
-  it('maps "Cancelled" to "archived"', () =>
-    expect(LINEAR_STATE_TO_CONTENT_STAGE['Cancelled']).toBe('archived'));
+  it('maps "Canceled" to "archived"', () =>
+    expect(LINEAR_STATE_TO_CONTENT_STAGE['Canceled']).toBe('archived'));
 });
 
 describe('CONTENT_STAGE_TO_LINEAR_STATE', () => {
@@ -23,8 +23,8 @@ describe('CONTENT_STAGE_TO_LINEAR_STATE', () => {
     expect(CONTENT_STAGE_TO_LINEAR_STATE['published']).toBe('Done'));
   it('maps "editing" to "In Progress" (same bucket as drafting)', () =>
     expect(CONTENT_STAGE_TO_LINEAR_STATE['editing']).toBe('In Progress'));
-  it('maps "archived" to "Cancelled"', () =>
-    expect(CONTENT_STAGE_TO_LINEAR_STATE['archived']).toBe('Cancelled'));
+  it('maps "archived" to "Canceled"', () =>
+    expect(CONTENT_STAGE_TO_LINEAR_STATE['archived']).toBe('Canceled'));
 });
 
 describe('LINEAR_STATE_TO_CHANGELOG_STAGE', () => {

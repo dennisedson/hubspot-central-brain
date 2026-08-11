@@ -7,7 +7,7 @@ export const LINEAR_STATE_TO_CONTENT_STAGE: Record<string, ContentStage> = {
   'In Progress': 'drafting',
   'In Review': 'review',
   Done: 'published',
-  Cancelled: 'archived',
+  Canceled: 'archived',
 };
 
 // Linear state names → HubSpot Changelog pipeline stage names
@@ -17,7 +17,7 @@ export const LINEAR_STATE_TO_CHANGELOG_STAGE: Record<string, ChangelogStage> = {
   'In Progress': 'drafting',
   'In Review': 'reviewing',
   Done: 'published',
-  Cancelled: 'identified',
+  Canceled: 'identified',
 };
 
 // HubSpot Content stage names → Linear state names
@@ -28,7 +28,7 @@ export const CONTENT_STAGE_TO_LINEAR_STATE: Record<ContentStage, string> = {
   editing: 'In Progress',
   review: 'In Review',
   published: 'Done',
-  archived: 'Cancelled',
+  archived: 'Canceled',
 };
 
 // HubSpot Changelog stage names → Linear state names

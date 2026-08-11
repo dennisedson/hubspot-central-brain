@@ -1,11 +1,17 @@
 import { verifyLinearSignature } from '../lib/hmac';
-import { createHubSpotClient, getCurrentStage, upsertContent, upsertChangelog } from '../lib/hubspot-client';
+import {
+  createHubSpotClient,
+  getCurrentStage,
+  upsertContent,
+  upsertChangelog,
+  archiveContentByLinearId,
+} from '../lib/hubspot-client';
 import type { LinearWebhookPayload } from '../lib/types';
 import {
   LINEAR_CHANGELOG_LABEL,
   HS_SYNC_TAG,
-  LINEAR_STATE_TO_CONTENT_STAGE,
-  LINEAR_STATE_TO_CHANGELOG_STAGE,
+  CONTENT_STAGE_TO_LINEAR_STATE,
+  CHANGELOG_STAGE_TO_LINEAR_STATE,
 } from '../lib/mapping';
 import { PORTAL_CONFIG } from '../lib/portal-config';
 
@@ -17,6 +23,20 @@ interface PublicFunctionContext {
   accountId: number;
 }
 
+// Header lookup that ignores casing: HubSpot's runtime may preserve the
+// original 'Linear-Signature' casing, so a hard-coded lowercase key would miss it.
+function getHeaderCaseInsensitive(
+  headers: Record<string, string> | undefined,
+  name: string,
+): string | undefined {
+  if (!headers) return undefined;
+  const target = name.toLowerCase();
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === target) return headers[key];
+  }
+  return undefined;
+}
+
 export async function main(context: PublicFunctionContext): Promise<{ statusCode: number; body: string }> {
   const secret = process.env.LINEAR_WEBHOOK_SECRET;
   if (!secret) {
@@ -24,7 +44,8 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     return { statusCode: 500, body: JSON.stringify({ error: 'Server misconfiguration' }) };
   }
 
-  if (!verifyLinearSignature(context.body, context.headers['linear-signature'], secret)) {
+  const signature = getHeaderCaseInsensitive(context.headers, 'linear-signature');
+  if (!verifyLinearSignature(context.body, signature, secret)) {
     console.warn('Rejected webhook: invalid Linear signature');
     return { statusCode: 401, body: JSON.stringify({ error: 'Invalid signature' }) };
   }
@@ -44,22 +65,40 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
   const isChangelog = labels.includes(LINEAR_CHANGELOG_LABEL);
   const client = createHubSpotClient();
 
-  // Stage comparison: skip if HubSpot already reflects the incoming Linear state (prevents echo loops)
-  const config = isChangelog ? PORTAL_CONFIG.changelog : PORTAL_CONFIG.content;
-  const stageMap = isChangelog ? LINEAR_STATE_TO_CHANGELOG_STAGE : LINEAR_STATE_TO_CONTENT_STAGE;
-  const incomingStageName = stageMap[payload.data.state.name];
-  const expectedStageId = incomingStageName
-    ? (config.stageIds as Record<string, string>)[incomingStageName]
-    : undefined;
-  if (expectedStageId) {
-    const currentStageId = await getCurrentStage(client, config.objectTypeId, payload.data.id);
-    if (currentStageId === expectedStageId) {
-      console.log(`Skipping echo for Linear ${payload.data.id}: stage already matches`);
-      return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'stage already matches' }) };
-    }
-  }
-
   try {
+    // Linear issue deletion: archive the linked HubSpot record rather than upserting.
+    if (payload.action === 'remove') {
+      if (isChangelog) {
+        // The changelog pipeline has no archived stage, so there is nowhere to move it.
+        return {
+          statusCode: 200,
+          body: JSON.stringify({ skipped: true, reason: 'changelog remove not archived (no archive stage)' }),
+        };
+      }
+      const archived = await archiveContentByLinearId(client, payload.data.id);
+      if (!archived) {
+        return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'remove: no matching record' }) };
+      }
+      console.log(`Archived content ${archived.id} for removed Linear ${payload.data.id}`);
+      return { statusCode: 200, body: JSON.stringify({ ok: true, action: 'archived', id: archived.id }) };
+    }
+
+    // Echo prevention: skip if the current HubSpot stage already maps FORWARD to the
+    // incoming Linear state. This subsumes the exact-match check and also covers the
+    // many-to-one case (e.g. both 'editing' and 'drafting' map to 'In Progress'), so an
+    // inbound webhook triggered by our own outbound sync does not overwrite the user's stage.
+    const config = isChangelog ? PORTAL_CONFIG.changelog : PORTAL_CONFIG.content;
+    const forwardMap = isChangelog ? CHANGELOG_STAGE_TO_LINEAR_STATE : CONTENT_STAGE_TO_LINEAR_STATE;
+    const currentStageId = await getCurrentStage(client, config.objectTypeId, payload.data.id);
+    if (currentStageId) {
+      const stageIds = config.stageIds as Record<string, string>;
+      const currentStageName = Object.keys(stageIds).find(name => stageIds[name] === currentStageId);
+      if (currentStageName && (forwardMap as Record<string, string>)[currentStageName] === payload.data.state.name) {
+        console.log(`Skipping echo for Linear ${payload.data.id}: stage already matches`);
+        return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'stage already matches' }) };
+      }
+    }
+
     const result = isChangelog
       ? await upsertChangelog(client, payload)
       : await upsertContent(client, payload);
