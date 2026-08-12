@@ -1,0 +1,12 @@
+{
+  "uid": "linear_webhook",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/LinearWebhook.js",
+    "endpoint": {
+      "path": "linear-webhook",
+      "methods": ["POST"]
+    },
+    "secretKeys": ["LINEAR_WEBHOOK_SECRET"]
+  }
+}

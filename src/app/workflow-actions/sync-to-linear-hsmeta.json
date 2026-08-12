@@ -1,0 +1,95 @@
+{
+  "uid": "sync_to_linear_action",
+  "type": "workflow-action",
+  "config": {
+    "actionUrl": "https://REPLACE_AFTER_DEPLOY",
+    "isPublished": false,
+    "supportedClients": [{ "client": "WORKFLOWS" }],
+    "objectTypes": [],
+    "inputFields": [
+      {
+        "typeDefinition": {
+          "name": "sharedSecret",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": true
+      },
+      {
+        "typeDefinition": {
+          "name": "linearIssueId",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "isRequired": true
+      },
+      {
+        "typeDefinition": {
+          "name": "hubspotStage",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "isRequired": true
+      },
+      {
+        "typeDefinition": {
+          "name": "objectType",
+          "type": "enumeration",
+          "fieldType": "select",
+          "options": [
+            { "value": "content", "label": "Content" },
+            { "value": "changelog", "label": "Changelog Entry" }
+          ]
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": true
+      },
+      {
+        "typeDefinition": {
+          "name": "linearTeamId",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": true
+      }
+    ],
+    "outputFields": [
+      {
+        "typeDefinition": { "name": "syncStatus", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "linearStateName", "type": "string", "fieldType": "text" }
+      }
+    ],
+    "labels": {
+      "en": {
+        "actionName": "Sync Status to Linear",
+        "appDisplayName": "Central Brain",
+        "actionDescription": "Pushes the current HubSpot pipeline stage to the linked Linear issue",
+        "actionCardContent": "Sync to Linear → {{objectType}}",
+        "inputFieldLabels": {
+          "sharedSecret": "Shared Secret",
+          "linearIssueId": "Linear Issue ID",
+          "hubspotStage": "HubSpot Pipeline Stage",
+          "objectType": "Object Type",
+          "linearTeamId": "Linear Team ID"
+        },
+        "inputFieldDescriptions": {
+          "sharedSecret": "Shared secret that authenticates this request; must match the SYNC_SHARED_SECRET function secret",
+          "linearIssueId": "The linear_issue_id property from the HubSpot record",
+          "hubspotStage": "The hs_pipeline_stage property from the HubSpot record",
+          "objectType": "Whether this is a Content or Changelog Entry record",
+          "linearTeamId": "Your Linear team ID — find it in Linear Settings > API"
+        },
+        "outputFieldLabels": {
+          "syncStatus": "Sync Status",
+          "linearStateName": "Linear State Set"
+        }
+      }
+    }
+  }
+}

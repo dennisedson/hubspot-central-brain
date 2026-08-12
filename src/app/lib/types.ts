@@ -1,8 +1,3 @@
-/**
- * Shared type definitions for the Central Brain system.
- */
-
-// --- Content pipeline stages ---
 export type ContentStage =
   | 'idea'
   | 'outline'
@@ -12,60 +7,90 @@ export type ContentStage =
   | 'published'
   | 'archived';
 
-// --- Changelog pipeline stages ---
-export type ChangelogStage =
-  | 'identified'
-  | 'drafting'
-  | 'reviewing'
-  | 'published';
+export type ChangelogStage = 'identified' | 'drafting' | 'reviewing' | 'published';
 
-// --- Video lifecycle statuses ---
-export type VideoStatus = 'Draft' | 'Scheduled' | 'Public';
+export interface ContentProperties {
+  title: string;
+  content_type?: string;
+  hs_pipeline?: string;
+  hs_pipeline_stage?: string;
+  source_url?: string;
+  published_url?: string;
+  linear_issue_url?: string;
+  linear_issue_id?: string;
+  asana_task_url?: string;
+  asana_task_id?: string;
+  target_date?: string;
+  actual_date?: string;
+  topic_tags?: string;
+  enterpret_theme?: string;
+  enterpret_quote_count?: string;
+  notes?: string;
+  social_post_draft?: string;
+  social_published_at?: string;
+  social_post_url?: string;
+  social_engagement_score?: string;
+}
 
-// --- Project types (native Projects object hs_type enum) ---
-export type ProjectType =
-  | 'content_production'
-  | 'developer_relations'
-  | 'internal'
-  | 'speaking'
-  | 'review'
-  | 'community';
+export interface ChangelogProperties {
+  title: string;
+  product_area?: string;
+  change_type?: string;
+  hs_pipeline?: string;
+  hs_pipeline_stage?: string;
+  linear_issue_url?: string;
+  linear_issue_id?: string;
+  published_url?: string;
+  release_date?: string;
+  publish_date?: string;
+  developer_impact?: string;
+  notes?: string;
+  topic_tags?: string;
+  enterpret_theme?: string;
+}
 
-// --- Content types ---
-export type ContentType =
-  | 'blog_post'
-  | 'video'
-  | 'tutorial'
-  | 'talk'
-  | 'changelog'
-  | 'documentation'
-  | 'social';
+export interface LinearState {
+  id: string;
+  name: string;
+  type: string;
+}
 
-// --- Webhook payload types ---
-export interface WebhookContext {
-  source: string;
-  timestamp: number;
-  signature?: string;
+export interface LinearIssue {
+  id: string;
+  identifier: string;
+  title: string;
+  description?: string;
+  state: LinearState;
+  labels: { nodes: Array<{ name: string }> };
+  url: string;
+  team: { id: string; name: string };
 }
 
 export interface LinearWebhookPayload {
   action: 'create' | 'update' | 'remove';
-  type: 'Issue';
-  data: {
-    id: string;
-    title: string;
-    description?: string;
-    state: { name: string };
-    labels: { nodes: Array<{ name: string }> };
-    url: string;
-  };
+  type: string;
+  data: LinearIssue;
+  organizationId: string;
+  webhookTimestamp: number;
+  webhookId: string;
 }
 
-export interface AsanaWebhookEvent {
-  resource: {
-    gid: string;
-    resource_type: string;
-  };
-  action: string;
-  parent?: { gid: string };
+export interface HubSpotRecord {
+  id: string;
+  properties: Record<string, string | null>;
+  createdAt: string;
+  updatedAt: string;
+  archived: boolean;
+}
+
+export interface UpsertResult {
+  id: string;
+  action: 'created' | 'updated';
+}
+
+export interface SyncToLinearInput {
+  linearIssueId: string;
+  hubspotStage: string;
+  objectType: 'content' | 'changelog';
+  linearTeamId: string;
 }

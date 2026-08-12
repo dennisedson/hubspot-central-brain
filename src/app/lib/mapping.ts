@@ -1,40 +1,46 @@
-/**
- * Property mapping configuration between HubSpot and external systems.
- *
- * Each mapping defines:
- * - The HubSpot property name
- * - The external system's field name
- * - Which system "owns" the value (wins on conflict)
- * - A transform function if the value needs conversion
- */
+import type { ContentStage, ChangelogStage } from './types';
 
-export interface PropertyMapping {
-  hubspot: string;
-  external: string;
-  owner: 'hubspot' | 'external';
-  transform?: (value: unknown) => unknown;
-}
+// Linear state names → HubSpot Content pipeline stage names
+export const LINEAR_STATE_TO_CONTENT_STAGE: Record<string, ContentStage> = {
+  Backlog: 'idea',
+  Todo: 'outline',
+  'In Progress': 'drafting',
+  'In Review': 'review',
+  Done: 'published',
+  Canceled: 'archived',
+};
 
-export interface SyncConfig {
-  system: 'linear' | 'asana' | 'fellow';
-  objectType: 'content' | 'changelog' | 'video' | 'project';
-  mappings: PropertyMapping[];
-}
+// Linear state names → HubSpot Changelog pipeline stage names
+export const LINEAR_STATE_TO_CHANGELOG_STAGE: Record<string, ChangelogStage> = {
+  Backlog: 'identified',
+  Todo: 'identified',
+  'In Progress': 'drafting',
+  'In Review': 'reviewing',
+  Done: 'published',
+  Canceled: 'identified',
+};
 
-// Source tag used to prevent echo loops in bidirectional sync.
-// Outbound updates include this tag; inbound webhooks skip processing
-// if the tag is present.
-export const SYNC_SOURCE_TAG = 'hubspot-central-brain';
+// HubSpot Content stage names → Linear state names
+export const CONTENT_STAGE_TO_LINEAR_STATE: Record<ContentStage, string> = {
+  idea: 'Backlog',
+  outline: 'Todo',
+  drafting: 'In Progress',
+  editing: 'In Progress',
+  review: 'In Review',
+  published: 'Done',
+  archived: 'Canceled',
+};
 
-export const linearChangelogMappings: PropertyMapping[] = [
-  { hubspot: 'title', external: 'title', owner: 'external' },
-  { hubspot: 'linear_issue_id', external: 'id', owner: 'external' },
-  { hubspot: 'linear_issue_url', external: 'url', owner: 'external' },
-  { hubspot: 'notes', external: 'description', owner: 'external' },
-];
+// HubSpot Changelog stage names → Linear state names
+export const CHANGELOG_STAGE_TO_LINEAR_STATE: Record<ChangelogStage, string> = {
+  identified: 'Backlog',
+  drafting: 'In Progress',
+  reviewing: 'In Review',
+  published: 'Done',
+};
 
-export const asanaContentMappings: PropertyMapping[] = [
-  { hubspot: 'title', external: 'name', owner: 'hubspot' },
-  { hubspot: 'asana_task_id', external: 'gid', owner: 'external' },
-  { hubspot: 'asana_task_url', external: 'permalink_url', owner: 'external' },
-];
+// The Linear label that marks an issue as a changelog entry (not a Content record)
+export const LINEAR_CHANGELOG_LABEL = 'changelog';
+
+// Tag added to Linear issue descriptions by our sync to prevent echo loops
+export const HS_SYNC_TAG = '[hs-sync]';

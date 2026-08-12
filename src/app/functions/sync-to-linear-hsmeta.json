@@ -1,0 +1,12 @@
+{
+  "uid": "sync_to_linear",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/SyncToLinear.js",
+    "endpoint": {
+      "path": "sync-to-linear",
+      "methods": ["POST"]
+    },
+    "secretKeys": ["LINEAR_API_KEY", "SYNC_SHARED_SECRET"]
+  }
+}

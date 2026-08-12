@@ -1,0 +1,26 @@
+{
+  "name": "HubSpot Central Brain",
+  "description": "Syncs content, changelogs, and videos between HubSpot and Linear, Asana, Fellow",
+  "auth": {
+    "type": "static",
+    "requiredScopes": [
+      "crm.objects.custom.read",
+      "crm.objects.custom.write",
+      "crm.schemas.custom.read",
+      "crm.schemas.custom.write",
+      "crm.objects.contacts.read",
+      "timeline",
+      "automation"
+    ]
+  },
+  "permittedUrls": {
+    "fetch": [
+      "https://api.linear.app",
+      "https://app.asana.com",
+      "https://api.fellow.app"
+    ],
+    "iframe": [],
+    "img": []
+  },
+  "distribution": "PRIVATE"
+}

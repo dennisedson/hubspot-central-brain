@@ -1,36 +1,47 @@
 import { describe, it, expect } from 'vitest';
 import {
-  SYNC_SOURCE_TAG,
-  linearChangelogMappings,
-  asanaContentMappings,
-} from '../lib/mapping';
+  LINEAR_STATE_TO_CONTENT_STAGE,
+  LINEAR_STATE_TO_CHANGELOG_STAGE,
+  CONTENT_STAGE_TO_LINEAR_STATE,
+  CHANGELOG_STAGE_TO_LINEAR_STATE,
+  LINEAR_CHANGELOG_LABEL,
+} from '@lib/mapping';
 
-describe('mapping config', () => {
-  it('has a sync source tag', () => {
-    expect(SYNC_SOURCE_TAG).toBe('hubspot-central-brain');
-  });
+describe('LINEAR_STATE_TO_CONTENT_STAGE', () => {
+  it('maps "Done" to "published"', () =>
+    expect(LINEAR_STATE_TO_CONTENT_STAGE['Done']).toBe('published'));
+  it('maps "In Progress" to "drafting"', () =>
+    expect(LINEAR_STATE_TO_CONTENT_STAGE['In Progress']).toBe('drafting'));
+  it('maps "Backlog" to "idea"', () =>
+    expect(LINEAR_STATE_TO_CONTENT_STAGE['Backlog']).toBe('idea'));
+  it('maps "Canceled" to "archived"', () =>
+    expect(LINEAR_STATE_TO_CONTENT_STAGE['Canceled']).toBe('archived'));
+});
 
-  it('linear changelog mappings have required fields', () => {
-    const hubspotFields = linearChangelogMappings.map((m) => m.hubspot);
-    expect(hubspotFields).toContain('title');
-    expect(hubspotFields).toContain('linear_issue_id');
-    expect(hubspotFields).toContain('linear_issue_url');
-  });
+describe('CONTENT_STAGE_TO_LINEAR_STATE', () => {
+  it('maps "published" to "Done"', () =>
+    expect(CONTENT_STAGE_TO_LINEAR_STATE['published']).toBe('Done'));
+  it('maps "editing" to "In Progress" (same bucket as drafting)', () =>
+    expect(CONTENT_STAGE_TO_LINEAR_STATE['editing']).toBe('In Progress'));
+  it('maps "archived" to "Canceled"', () =>
+    expect(CONTENT_STAGE_TO_LINEAR_STATE['archived']).toBe('Canceled'));
+});
 
-  it('asana content mappings set hubspot as owner for title', () => {
-    const titleMapping = asanaContentMappings.find(
-      (m) => m.hubspot === 'title'
-    );
-    expect(titleMapping?.owner).toBe('hubspot');
-  });
+describe('LINEAR_STATE_TO_CHANGELOG_STAGE', () => {
+  it('maps "In Review" to "reviewing"', () =>
+    expect(LINEAR_STATE_TO_CHANGELOG_STAGE['In Review']).toBe('reviewing'));
+  it('maps "Done" to "published"', () =>
+    expect(LINEAR_STATE_TO_CHANGELOG_STAGE['Done']).toBe('published'));
+});
 
-  it('all mappings have valid owner values', () => {
-    const allMappings = [
-      ...linearChangelogMappings,
-      ...asanaContentMappings,
-    ];
-    for (const mapping of allMappings) {
-      expect(['hubspot', 'external']).toContain(mapping.owner);
-    }
-  });
+describe('CHANGELOG_STAGE_TO_LINEAR_STATE', () => {
+  it('maps "published" to "Done"', () =>
+    expect(CHANGELOG_STAGE_TO_LINEAR_STATE['published']).toBe('Done'));
+  it('maps "reviewing" to "In Review"', () =>
+    expect(CHANGELOG_STAGE_TO_LINEAR_STATE['reviewing']).toBe('In Review'));
+});
+
+describe('constants', () => {
+  it('LINEAR_CHANGELOG_LABEL is "changelog"', () =>
+    expect(LINEAR_CHANGELOG_LABEL).toBe('changelog'));
 });
