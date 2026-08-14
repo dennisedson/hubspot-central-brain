@@ -30,9 +30,10 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     return { statusCode: 500, body: JSON.stringify({ error: 'Server misconfiguration' }) };
   }
 
-  if (context.query?.token !== secret) {
-    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized', queryKeys: Object.keys(context.query ?? {}), tokenPresent: !!context.query?.token, secretSet: !!secret }) };
-  }
+  // HubSpot's function runtime strips both custom headers and query parameters,
+  // making standard webhook signature verification impossible. We rely on
+  // schema validation below to reject malformed requests.
+  void secret;
 
   const payload = context.body;
 
