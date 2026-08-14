@@ -35,3 +35,4 @@ jobs:
         env:
           DEFAULT_ACCOUNT_ID: ${{ secrets.HUBSPOT_PROD_ACCOUNT_ID }}
           DEFAULT_PERSONAL_ACCESS_KEY: ${{ secrets.HUBSPOT_PROD_PERSONAL_ACCESS_KEY }}
+          SYNC_TO_LINEAR_URL: https://api.hubspot.com/integrations/v1/49129343/serverless/sync-to-linear
