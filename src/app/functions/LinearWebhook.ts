@@ -31,10 +31,12 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     return { statusCode: 500, body: JSON.stringify({ error: 'Server misconfiguration' }) };
   }
 
-  const signature = context.headers?.['linear-signature'] ?? context.headers?.['Linear-Signature'];
-  const sigResult = verifyLinearSignature(context.body, signature, secret);
+  const headerKeys = Object.keys(context.headers ?? {});
+  const signature = headerKeys.find(k => k.toLowerCase() === 'linear-signature');
+  const sigValue = signature ? context.headers[signature] : undefined;
+  const sigResult = verifyLinearSignature(context.body, sigValue, secret);
   if (!sigResult.valid) {
-    return { statusCode: 401, body: JSON.stringify({ error: 'Invalid signature', computed: sigResult.computed, received: sigResult.received }) };
+    return { statusCode: 401, body: JSON.stringify({ error: 'Invalid signature', computed: sigResult.computed, received: sigResult.received, headerKeys }) };
   }
 
   const payload = context.body;
