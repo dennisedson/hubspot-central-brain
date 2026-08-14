@@ -2,7 +2,7 @@ import { Client } from '@hubspot/api-client';
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects/models/Filter';
 import type { LinearWebhookPayload, UpsertResult } from './types';
 import { LINEAR_STATE_TO_CONTENT_STAGE, LINEAR_STATE_TO_CHANGELOG_STAGE } from './mapping';
-import { PORTAL_CONFIG } from './portal-config';
+import { getPortalConfig } from './portal-config';
 
 export function createHubSpotClient(token?: string): Client {
   return new Client({ accessToken: token ?? process.env.PRIVATE_APP_ACCESS_TOKEN });
@@ -55,15 +55,17 @@ export async function getCurrentStage(
 export async function archiveContentByLinearId(
   client: Client,
   linearIssueId: string,
+  portalId: number,
 ): Promise<UpsertResult | null> {
-  const objectTypeId = PORTAL_CONFIG.content.objectTypeId;
+  const config = getPortalConfig(portalId);
+  const objectTypeId = config.content.objectTypeId;
   const existingId = await findByLinearId(client, objectTypeId, linearIssueId);
   if (!existingId) {
     return null;
   }
 
   await client.crm.objects.basicApi.update(objectTypeId, existingId, {
-    properties: { hs_pipeline_stage: PORTAL_CONFIG.content.stageIds.archived },
+    properties: { hs_pipeline_stage: config.content.stageIds.archived },
   });
   return { id: existingId, action: 'updated' };
 }
@@ -71,17 +73,19 @@ export async function archiveContentByLinearId(
 export async function upsertContent(
   client: Client,
   payload: LinearWebhookPayload,
+  portalId: number,
 ): Promise<UpsertResult> {
   const { data } = payload;
+  const config = getPortalConfig(portalId);
   const stageName = LINEAR_STATE_TO_CONTENT_STAGE[data.state.name] ?? 'idea';
-  const stageId = PORTAL_CONFIG.content.stageIds[stageName] ?? stageName;
-  const objectTypeId = PORTAL_CONFIG.content.objectTypeId;
+  const stageId = config.content.stageIds[stageName] ?? stageName;
+  const objectTypeId = config.content.objectTypeId;
 
   const properties: Record<string, string> = {
     title: data.title,
     linear_issue_id: data.id,
     linear_issue_url: data.url,
-    hs_pipeline: PORTAL_CONFIG.content.pipelineId,
+    hs_pipeline: config.content.pipelineId,
     hs_pipeline_stage: stageId,
     ...(data.description ? { notes: data.description } : {}),
   };
@@ -99,17 +103,19 @@ export async function upsertContent(
 export async function upsertChangelog(
   client: Client,
   payload: LinearWebhookPayload,
+  portalId: number,
 ): Promise<UpsertResult> {
   const { data } = payload;
+  const config = getPortalConfig(portalId);
   const stageName = LINEAR_STATE_TO_CHANGELOG_STAGE[data.state.name] ?? 'identified';
-  const stageId = PORTAL_CONFIG.changelog.stageIds[stageName] ?? stageName;
-  const objectTypeId = PORTAL_CONFIG.changelog.objectTypeId;
+  const stageId = config.changelog.stageIds[stageName] ?? stageName;
+  const objectTypeId = config.changelog.objectTypeId;
 
   const properties: Record<string, string> = {
     title: data.title,
     linear_issue_id: data.id,
     linear_issue_url: data.url,
-    hs_pipeline: PORTAL_CONFIG.changelog.pipelineId,
+    hs_pipeline: config.changelog.pipelineId,
     hs_pipeline_stage: stageId,
     ...(data.description ? { notes: data.description } : {}),
   };

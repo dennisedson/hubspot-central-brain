@@ -13,7 +13,7 @@ import {
   CONTENT_STAGE_TO_LINEAR_STATE,
   CHANGELOG_STAGE_TO_LINEAR_STATE,
 } from '../lib/mapping';
-import { PORTAL_CONFIG } from '../lib/portal-config';
+import { getPortalConfig } from '../lib/portal-config';
 
 interface PublicFunctionContext {
   method: string;
@@ -75,7 +75,7 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
           body: JSON.stringify({ skipped: true, reason: 'changelog remove not archived (no archive stage)' }),
         };
       }
-      const archived = await archiveContentByLinearId(client, payload.data.id);
+      const archived = await archiveContentByLinearId(client, payload.data.id, context.accountId);
       if (!archived) {
         return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'remove: no matching record' }) };
       }
@@ -87,7 +87,8 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     // incoming Linear state. This subsumes the exact-match check and also covers the
     // many-to-one case (e.g. both 'editing' and 'drafting' map to 'In Progress'), so an
     // inbound webhook triggered by our own outbound sync does not overwrite the user's stage.
-    const config = isChangelog ? PORTAL_CONFIG.changelog : PORTAL_CONFIG.content;
+    const portalConfig = getPortalConfig(context.accountId);
+    const config = isChangelog ? portalConfig.changelog : portalConfig.content;
     const forwardMap = isChangelog ? CHANGELOG_STAGE_TO_LINEAR_STATE : CONTENT_STAGE_TO_LINEAR_STATE;
     const currentStageId = await getCurrentStage(client, config.objectTypeId, payload.data.id);
     if (currentStageId) {
@@ -100,8 +101,8 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     }
 
     const result = isChangelog
-      ? await upsertChangelog(client, payload)
-      : await upsertContent(client, payload);
+      ? await upsertChangelog(client, payload, context.accountId)
+      : await upsertContent(client, payload, context.accountId);
 
     console.log(`${result.action} ${isChangelog ? 'changelog' : 'content'} ${result.id} for Linear ${payload.data.id}`);
     return { statusCode: 200, body: JSON.stringify({ ok: true, ...result }) };

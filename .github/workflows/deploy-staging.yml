@@ -24,6 +24,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Build functions
+        run: npm run build
+
       - name: Install HubSpot CLI
         uses: HubSpot/hubspot-project-actions/install-hubspot-cli@v1.1.0
 

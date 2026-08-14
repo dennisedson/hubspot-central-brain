@@ -13,7 +13,7 @@ jobs:
   deploy:
     name: Upload to Production
     runs-on: ubuntu-latest
-    environment: production
+    environment: Prod
     steps:
       - uses: actions/checkout@v4
 
@@ -23,6 +23,9 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      - name: Build functions
+        run: npm run build
 
       - name: Install HubSpot CLI
         uses: HubSpot/hubspot-project-actions/install-hubspot-cli@v1.1.0

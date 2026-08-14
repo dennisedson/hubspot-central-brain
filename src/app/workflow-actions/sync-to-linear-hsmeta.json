@@ -2,8 +2,8 @@
   "uid": "sync_to_linear_action",
   "type": "workflow-action",
   "config": {
-    "actionUrl": "https://REPLACE_AFTER_DEPLOY",
-    "isPublished": false,
+    "actionUrl": "${SYNC_TO_LINEAR_URL}",
+    "isPublished": true,
     "supportedClients": [{ "client": "WORKFLOWS" }],
     "objectTypes": [],
     "inputFields": [

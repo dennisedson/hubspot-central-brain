@@ -12,11 +12,12 @@
     "test:coverage": "vitest run --coverage",
     "validate": "npm run lint && npm run typecheck && npm run test",
     "provision": "tsx src/scripts/provision-objects.ts",
+    "build": "tsc -p tsconfig.functions.json",
     "dev": "hs project dev",
-    "upload": "hs project upload",
-    "upload:dev": "hs project upload --profile=dev",
-    "upload:staging": "hs project upload --profile=staging",
-    "upload:prod": "hs project upload --profile=prod"
+    "upload": "npm run build && hs project upload",
+    "upload:dev": "npm run build && hs project upload --profile=dev",
+    "upload:staging": "npm run build && hs project upload --profile=staging",
+    "upload:prod": "npm run build && hs project upload --profile=prod"
   },
   "devDependencies": {
     "@hubspot/cli": "^8.0.0",
