@@ -7,6 +7,6 @@
       "path": "linear-webhook",
       "methods": ["POST"]
     },
-    "secretKeys": ["LINEAR_WEBHOOK_SECRET"]
+    "secretKeys": ["LINEAR_WEBHOOK_SECRET", "PRIVATE_APP_ACCESS_TOKEN"]
   }
 }
