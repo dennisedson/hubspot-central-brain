@@ -32,9 +32,9 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
   }
 
   const signature = context.headers?.['linear-signature'] ?? context.headers?.['Linear-Signature'];
-  if (!verifyLinearSignature(context.body, signature, secret)) {
-    console.warn('Rejected webhook: invalid Linear signature');
-    return { statusCode: 401, body: JSON.stringify({ error: 'Invalid signature' }) };
+  const sigResult = verifyLinearSignature(context.body, signature, secret);
+  if (!sigResult.valid) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Invalid signature', computed: sigResult.computed, received: sigResult.received }) };
   }
 
   const payload = context.body;
