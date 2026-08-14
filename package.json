@@ -12,7 +12,7 @@
     "test:coverage": "vitest run --coverage",
     "validate": "npm run lint && npm run typecheck && npm run test",
     "provision": "tsx src/scripts/provision-objects.ts",
-    "build": "tsc -p tsconfig.functions.json",
+    "build": "esbuild src/app/functions/LinearWebhook.ts src/app/functions/SyncToLinear.ts --bundle --platform=node --target=node18 --outdir=src/app/functions --external:@hubspot/api-client",
     "dev": "hs project dev",
     "upload": "npm run build && hs project upload",
     "upload:dev": "npm run build && hs project upload --profile=dev",
@@ -20,13 +20,14 @@
     "upload:prod": "npm run build && hs project upload --profile=prod"
   },
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
     "@hubspot/cli": "^8.0.0",
     "@types/node": "^18.0.0",
+    "esbuild": "^0.28.2",
     "eslint": "^9.0.0",
-    "@eslint/js": "^9.0.0",
-    "typescript-eslint": "^8.0.0",
-    "typescript": "^5.5.0",
     "tsx": "^4.0.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.0.0",
     "vitest": "^2.0.0"
   },
   "dependencies": {
