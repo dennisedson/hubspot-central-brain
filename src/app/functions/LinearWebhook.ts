@@ -114,7 +114,8 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     console.log(`${result.action} ${isChangelog ? 'changelog' : 'content'} ${result.id} for Linear ${payload.data.id}`);
     return { statusCode: 200, body: JSON.stringify({ ok: true, ...result }) };
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     console.error('Upsert failed:', err);
-    return { statusCode: 500, body: JSON.stringify({ error: 'Internal error' }) };
+    return { statusCode: 500, body: JSON.stringify({ error: 'Internal error', detail: msg }) };
   }
 }
