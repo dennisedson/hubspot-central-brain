@@ -1,3 +1,4 @@
+import { verifyLinearSignature } from '../lib/hmac';
 import {
   createHubSpotClient,
   getCurrentStage,
@@ -30,9 +31,10 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     return { statusCode: 500, body: JSON.stringify({ error: 'Server misconfiguration' }) };
   }
 
-  if (context.query?.token !== secret) {
-    console.warn('Rejected webhook: invalid token');
-    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+  const signature = context.headers?.['linear-signature'] ?? context.headers?.['Linear-Signature'];
+  if (!verifyLinearSignature(context.body, signature, secret)) {
+    console.warn('Rejected webhook: invalid Linear signature');
+    return { statusCode: 401, body: JSON.stringify({ error: 'Invalid signature' }) };
   }
 
   const payload = context.body;
