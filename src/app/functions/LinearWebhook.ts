@@ -48,6 +48,8 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
   console.log('[debug] accountId:', context.accountId);
   console.log('[debug] body type:', typeof context.body);
   console.log('[debug] signature present:', !!signature);
+  console.log('[debug] PRIVATE_APP_ACCESS_TOKEN set:', !!process.env.PRIVATE_APP_ACCESS_TOKEN);
+  console.log('[debug] HS_ACCESS_TOKEN set:', !!process.env.HS_ACCESS_TOKEN);
   const sigValid = verifyLinearSignature(context.body, signature, secret);
   console.log('[debug] signature valid:', sigValid);
   // TODO: re-enable once we confirm body format — HubSpot may pre-parse JSON, breaking HMAC
