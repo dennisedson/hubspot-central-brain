@@ -7,6 +7,6 @@
       "path": "sync-to-linear",
       "methods": ["POST"]
     },
-    "secretKeys": ["LINEAR_API_KEY", "SYNC_SHARED_SECRET", "PRIVATE_APP_ACCESS_TOKEN"]
+    "secretKeys": ["LINEAR_API_KEY", "SYNC_SHARED_SECRET", "HS_ACCESS_TOKEN"]
   }
 }

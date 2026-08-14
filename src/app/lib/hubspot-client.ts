@@ -5,7 +5,7 @@ import { LINEAR_STATE_TO_CONTENT_STAGE, LINEAR_STATE_TO_CHANGELOG_STAGE } from '
 import { getPortalConfig } from './portal-config';
 
 export function createHubSpotClient(token?: string): Client {
-  return new Client({ accessToken: token ?? process.env.PRIVATE_APP_ACCESS_TOKEN });
+  return new Client({ accessToken: token ?? process.env.HS_ACCESS_TOKEN ?? process.env.PRIVATE_APP_ACCESS_TOKEN });
 }
 
 export async function findByLinearId(
