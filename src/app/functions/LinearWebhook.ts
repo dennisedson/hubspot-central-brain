@@ -31,7 +31,7 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
   }
 
   if (context.query?.token !== secret) {
-    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized', queryKeys: Object.keys(context.query ?? {}), tokenPresent: !!context.query?.token, secretSet: !!secret }) };
   }
 
   const payload = context.body;
