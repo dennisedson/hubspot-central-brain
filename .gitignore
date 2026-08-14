@@ -34,8 +34,7 @@ Thumbs.db
 # HubSpot CLI auth
 .hs_prod_login_token
 
-# HubSpot project profiles (contain portal IDs and URLs, managed per-developer)
-hsprofile.*.json
+# HubSpot project profiles are committed — they contain no secrets
 
 # Git worktrees (Claude Code)
 .claude/worktrees/
