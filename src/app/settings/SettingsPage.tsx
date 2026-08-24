@@ -24,7 +24,7 @@ interface FunctionResponse {
   body: string;
 }
 
-hubspot.extend(() => <SettingsPage />);
+hubspot.extend<'settings'>(() => <SettingsPage />);
 
 const SettingsPage = () => {
   const [settings, setSettings] = useState<AppSettings>({

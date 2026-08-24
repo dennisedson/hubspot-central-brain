@@ -72,6 +72,7 @@ const SettingsPage = () => {
 
   return (
     <Form>
+      <PageTitle>Linear Sync Settings</PageTitle>
       <Heading>Linear Sync Settings</Heading>
       <Text>Configure how this portal syncs with Linear.</Text>
 
@@ -134,7 +135,6 @@ const SettingsPage = () => {
 
 const PageRouter = createPageRouter(
   <PageRoutes>
-    <PageTitle>Linear Sync Settings</PageTitle>
     <PageRoutes.IndexRoute component={SettingsPage} />
   </PageRoutes>
 );
