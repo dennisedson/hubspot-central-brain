@@ -1,0 +1,7 @@
+{
+  "uid": "central-brain-pages",
+  "type": "page",
+  "config": {
+    "entrypoint": "/app/pages/SettingsApp.tsx"
+  }
+}

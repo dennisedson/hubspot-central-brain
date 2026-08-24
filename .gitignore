@@ -32,6 +32,8 @@ Thumbs.db
 src/app/settings/package-lock.json
 src/app/settings/node_modules/
 src/app/functions/package-lock.json
+src/app/pages/package-lock.json
+src/app/pages/node_modules/
 .idea/
 
 # HubSpot CLI auth
