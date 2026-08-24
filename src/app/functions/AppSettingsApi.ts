@@ -14,8 +14,14 @@ interface AppSettingsContext {
 
 export async function main(context: AppSettingsContext): Promise<{ statusCode: number; body: string }> {
   const client = createHubSpotClient();
-  const portalConfig = getPortalConfig(context.accountId);
-  const objectTypeId = portalConfig.appConfig.objectTypeId;
+
+  let objectTypeId: string;
+  try {
+    objectTypeId = getPortalConfig(context.accountId).appConfig.objectTypeId;
+  } catch (err) {
+    console.error('getPortalConfig failed for portal', context.accountId, err);
+    return { statusCode: 500, body: JSON.stringify({ error: 'Portal not configured' }) };
+  }
 
   if (!objectTypeId) {
     console.error('appConfig objectTypeId not configured for portal', context.accountId);
@@ -46,7 +52,7 @@ export async function main(context: AppSettingsContext): Promise<{ statusCode: n
       return { statusCode: 200, body: JSON.stringify(settings) };
     } catch (err) {
       console.error('Failed to load settings:', err);
-      return { statusCode: 200, body: JSON.stringify(DEFAULT_APP_SETTINGS) };
+      return { statusCode: 500, body: JSON.stringify({ error: 'Failed to load settings' }) };
     }
   }
 
