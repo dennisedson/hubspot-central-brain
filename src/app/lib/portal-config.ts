@@ -1,4 +1,19 @@
+export interface AppSettings {
+  linearTeamId: string;
+  assigneeFilter: 'all' | 'assigned' | 'mine';
+  linearAssigneeId: string;
+}
+
+export const DEFAULT_APP_SETTINGS: AppSettings = {
+  linearTeamId: '',
+  assigneeFilter: 'all',
+  linearAssigneeId: '',
+};
+
 export interface PortalConfig {
+  appConfig: {
+    objectTypeId: string;
+  };
   content: {
     objectTypeId: string;
     pipelineId: string;
@@ -36,6 +51,7 @@ export interface PortalConfig {
 const CONFIGS: Record<number, PortalConfig> = {
   // dev
   51869810: {
+    appConfig: { objectTypeId: '2-68071489' },
     content: {
       objectTypeId: '2-67505887',
       pipelineId: '926238627',
@@ -71,6 +87,7 @@ const CONFIGS: Record<number, PortalConfig> = {
   },
   // staging
   51869787: {
+    appConfig: { objectTypeId: '' },
     content: {
       objectTypeId: '2-67508770',
       pipelineId: '926239377',
@@ -106,6 +123,7 @@ const CONFIGS: Record<number, PortalConfig> = {
   },
   // prod
   22047910: {
+    appConfig: { objectTypeId: '' },
     content: {
       objectTypeId: '2-67508928',
       pipelineId: '926239383',
