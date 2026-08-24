@@ -1,0 +1,7 @@
+{
+  "uid": "settings-hubspot-central-brain",
+  "type": "settings",
+  "config": {
+    "entrypoint": "/app/settings/SettingsPage.tsx"
+  }
+}

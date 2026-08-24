@@ -62,6 +62,25 @@ if (payload.type !== 'Issue') {
 }
 ```
 
+---
+
+**🚀 Going Further: Selling This to a Client**
+
+The architecture above works perfectly for self-use. If you want to sell this as a product, there's one important gap: **a non-developer admin can't set it up.**
+
+The current workflow configuration requires entering a `sharedSecret` value and a Linear `teamId` UUID directly into the HubSpot workflow action fields — values no non-technical admin would know. The `sync-to-linear` URL is also not secret (portal ID is in the domain; the path is in this repo), so the shared secret is the only real auth layer.
+
+**The productized version would add a programmatic onboarding flow:**
+1. HubSpot OAuth install — app requests permissions on first connect
+2. App auto-generates `SYNC_SHARED_SECRET` and stores it as a function secret via the HubSpot API (admin never sees it)
+3. Linear OAuth — app reads team IDs automatically, no UUID lookup required
+4. App creates the sync workflow via HubSpot Workflows API, pre-populating all fields
+5. Admin experience: "Connect" buttons + flip a workflow on
+
+**For a build tutorial:** cover the self-hosted version first (what this episode shows), then frame the onboarding flow as the "productization chapter" — the architecture doesn't change, you're just adding the setup wizard that wires it together without technical knowledge.
+
+---
+
 ```bash
 # Test your endpoint directly without needing a Linear issue
 curl -s -X POST https://{portalId}.hs-sites.com/hs/serverless/linear-webhook \
