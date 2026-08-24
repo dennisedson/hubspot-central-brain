@@ -1,14 +1,12 @@
 import { getPortalConfig, DEFAULT_APP_SETTINGS } from '../lib/portal-config';
 import type { AppSettings } from '../lib/portal-config';
 
-interface AppSettingsContext {
-  parameters: {
-    method: 'GET' | 'POST';
-    linearTeamId?: string;
-    assigneeFilter?: string;
-    linearAssigneeId?: string;
-  };
-  accountId: number;
+// hubspot.fetch() adds portalId/userId/userEmail/appId as query params server-side
+interface EndpointContext {
+  method: string;
+  body: Record<string, string | undefined>;
+  query: Record<string, string>;
+  accountId?: number;
 }
 
 const HS_BASE = 'https://api.hubapi.com';
@@ -41,7 +39,12 @@ async function hsUpdate(objectTypeId: string, objectId: string, properties: Reco
   if (!res.ok) throw new Error(`HubSpot update failed ${res.status}: ${await res.text()}`);
 }
 
-export async function main(context: AppSettingsContext): Promise<{ statusCode: number; body: string }> {
+export async function main(context: EndpointContext): Promise<{ statusCode: number; body: string }> {
+  const portalId = parseInt(context.query.portalId ?? '', 10);
+  if (!portalId) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'Missing portalId' }) };
+  }
+
   const token = process.env.PRIVATE_APP_ACCESS_TOKEN ?? process.env.HS_ACCESS_TOKEN;
   if (!token) {
     return { statusCode: 500, body: JSON.stringify({ error: 'No access token available' }) };
@@ -49,9 +52,8 @@ export async function main(context: AppSettingsContext): Promise<{ statusCode: n
 
   let objectTypeId: string;
   try {
-    objectTypeId = getPortalConfig(context.accountId).appConfig.objectTypeId;
+    objectTypeId = getPortalConfig(portalId).appConfig.objectTypeId;
   } catch (err) {
-    console.error('getPortalConfig failed for portal', context.accountId, err);
     const detail = err instanceof Error ? err.message : String(err);
     return { statusCode: 500, body: JSON.stringify({ error: 'Portal not configured', detail }) };
   }
@@ -60,7 +62,7 @@ export async function main(context: AppSettingsContext): Promise<{ statusCode: n
     return { statusCode: 500, body: JSON.stringify({ error: 'App config object type not configured' }) };
   }
 
-  if (context.parameters.method === 'GET') {
+  if (context.method === 'GET') {
     try {
       const result = await hsSearch(objectTypeId, ['linear_team_id', 'assignee_filter', 'linear_assignee_id'], token);
       const record = result.results[0];
@@ -74,14 +76,13 @@ export async function main(context: AppSettingsContext): Promise<{ statusCode: n
       };
       return { statusCode: 200, body: JSON.stringify(settings) };
     } catch (err) {
-      console.error('Failed to load settings:', err);
       const detail = err instanceof Error ? err.message : String(err);
       return { statusCode: 500, body: JSON.stringify({ error: 'Failed to load settings', detail }) };
     }
   }
 
-  if (context.parameters.method === 'POST') {
-    const { linearTeamId, assigneeFilter, linearAssigneeId } = context.parameters;
+  if (context.method === 'POST') {
+    const { linearTeamId, assigneeFilter, linearAssigneeId } = context.body ?? {};
     if (!linearTeamId || !assigneeFilter) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing settings payload' }) };
     }
@@ -100,14 +101,13 @@ export async function main(context: AppSettingsContext): Promise<{ statusCode: n
       } else {
         await hsCreate(objectTypeId, properties, token);
       }
-      console.log(`Saved app settings for portal ${context.accountId}`);
+      console.log(`Saved app settings for portal ${portalId}`);
       return { statusCode: 200, body: JSON.stringify({ ok: true }) };
     } catch (err) {
-      console.error('Failed to save settings:', err);
       const detail = err instanceof Error ? err.message : String(err);
       return { statusCode: 500, body: JSON.stringify({ error: 'Failed to save settings', detail }) };
     }
   }
 
-  return { statusCode: 400, body: JSON.stringify({ error: 'Unknown method' }) };
+  return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   hubspot,
   Form,
@@ -19,14 +19,15 @@ interface AppSettings {
   linearAssigneeId: string;
 }
 
-interface FunctionResponse {
-  statusCode: number;
-  body: string;
-}
+const PORTAL_SETTINGS_URLS: Record<number, string> = {
+  51869810: 'https://51869810.hs-sites.com/hs/serverless/settings-api',
+  51869787: 'https://51869787.hs-sites.com/hs/serverless/settings-api',
+  22047910: 'https://22047910.hs-sites.com/hs/serverless/settings-api',
+};
 
-hubspot.extend<'settings'>(() => <SettingsPage />);
+hubspot.extend<'settings'>(({ context }) => <SettingsPage portalId={context.portal.id} />);
 
-const SettingsPage = () => {
+const SettingsPage = ({ portalId }: { portalId: number }) => {
   const [settings, setSettings] = useState<AppSettings>({
     linearTeamId: '',
     assigneeFilter: 'all',
@@ -37,58 +38,59 @@ const SettingsPage = () => {
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorDetail, setErrorDetail] = useState<string>('');
 
+  const apiUrl = PORTAL_SETTINGS_URLS[portalId];
+
   useEffect(() => {
+    if (!apiUrl) {
+      setErrorDetail(`Portal ${portalId} is not configured`);
+      setStatus('error');
+      setLoading(false);
+      return;
+    }
+
     hubspot
-      .serverless('app_settings_api', {
-        parameters: { method: 'GET' },
-      })
-      .then(result => {
-        if (result.status === 'SUCCESS') {
-          const res = result.response as FunctionResponse;
-          if (res.statusCode === 200) {
-            setSettings(JSON.parse(res.body) as AppSettings);
-          } else {
-            const parsed = JSON.parse(res.body) as { error?: string; detail?: string };
-            setErrorDetail(`${res.statusCode}: ${parsed.detail ?? parsed.error ?? res.body}`);
-            setStatus('error');
-            console.error('AppSettingsApi GET non-200:', res.statusCode, res.body);
-          }
+      .fetch(apiUrl, { method: 'GET' })
+      .then(async res => {
+        const data = await res.json() as AppSettings & { error?: string; detail?: string };
+        if (res.ok) {
+          setSettings(data as AppSettings);
         } else {
-          setErrorDetail(result.message ?? 'Serverless invocation failed');
+          setErrorDetail(`${res.status}: ${data.detail ?? data.error ?? JSON.stringify(data)}`);
           setStatus('error');
-          console.error('AppSettingsApi GET serverless error:', result.message);
         }
       })
       .catch((err: unknown) => {
+        setErrorDetail(err instanceof Error ? err.message : 'Failed to load settings');
         setStatus('error');
-        console.error('AppSettingsApi GET rejected:', err);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [apiUrl]);
 
   const handleSave = useCallback(() => {
+    if (!apiUrl) return;
     setSaving(true);
     setStatus('idle');
     hubspot
-      .serverless('app_settings_api', {
-        parameters: {
-          method: 'POST',
+      .fetch(apiUrl, {
+        method: 'POST',
+        body: {
           linearTeamId: settings.linearTeamId,
           assigneeFilter: settings.assigneeFilter,
           linearAssigneeId: settings.linearAssigneeId,
         },
       })
-      .then(result => {
-        if (result.status === 'SUCCESS') {
-          const res = result.response as FunctionResponse;
-          setStatus(res.statusCode === 200 ? 'success' : 'error');
+      .then(async res => {
+        if (res.ok) {
+          setStatus('success');
         } else {
+          const data = await res.json() as { error?: string; detail?: string };
+          setErrorDetail(`${res.status}: ${data.detail ?? data.error ?? ''}`);
           setStatus('error');
         }
       })
       .catch(() => setStatus('error'))
       .finally(() => setSaving(false));
-  }, [settings]);
+  }, [apiUrl, settings]);
 
   if (loading) {
     return (
@@ -101,7 +103,7 @@ const SettingsPage = () => {
   if (status === 'error' && !settings.linearTeamId) {
     return (
       <Alert title="Failed to load settings" variant="error">
-        <Text>{errorDetail || 'AppSettingsApi returned an error. Check function logs in the developer portal.'}</Text>
+        <Text>{errorDetail || 'Check function logs in the developer portal.'}</Text>
       </Alert>
     );
   }
@@ -155,7 +157,7 @@ const SettingsPage = () => {
       {status === 'success' && <Alert title="Settings saved" variant="success" />}
       {status === 'error' && (
         <Alert title="Failed to save settings" variant="error">
-          <Text>Check the function logs in Sentry for details.</Text>
+          <Text>{errorDetail || 'Check the function logs for details.'}</Text>
         </Alert>
       )}
 

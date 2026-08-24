@@ -21,7 +21,10 @@
       "fetch": [
         "https://api.linear.app",
         "https://app.asana.com",
-        "https://api.fellow.app"
+        "https://api.fellow.app",
+        "https://51869810.hs-sites.com/hs/serverless/settings-api",
+        "https://51869787.hs-sites.com/hs/serverless/settings-api",
+        "https://22047910.hs-sites.com/hs/serverless/settings-api"
       ],
       "iframe": [],
       "img": []
