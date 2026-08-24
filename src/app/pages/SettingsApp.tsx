@@ -31,10 +31,19 @@ const SettingsPage = () => {
           const res = result.response as FunctionResponse;
           if (res.statusCode === 200) {
             setSettings(JSON.parse(res.body) as AppSettings);
+          } else {
+            setStatus('error');
+            console.error('AppSettingsApi GET non-200:', res.statusCode, res.body);
           }
+        } else {
+          setStatus('error');
+          console.error('AppSettingsApi GET serverless error:', result.message);
         }
       })
-      .catch(() => {})
+      .catch((err: unknown) => {
+        setStatus('error');
+        console.error('AppSettingsApi GET rejected:', err);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -67,6 +76,14 @@ const SettingsPage = () => {
       <Flex justify="center" align="center">
         <LoadingSpinner label="Loading settings..." />
       </Flex>
+    );
+  }
+
+  if (status === 'error' && !settings.linearTeamId) {
+    return (
+      <Alert title="Failed to load settings" variant="error">
+        <Text>Check Sentry for AppSettingsApi errors. Portal may be missing App Config object type ID in portal-config.ts.</Text>
+      </Alert>
     );
   }
 

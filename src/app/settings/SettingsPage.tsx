@@ -46,10 +46,19 @@ const SettingsPage = () => {
           const res = result.response as FunctionResponse;
           if (res.statusCode === 200) {
             setSettings(JSON.parse(res.body) as AppSettings);
+          } else {
+            setStatus('error');
+            console.error('AppSettingsApi GET non-200:', res.statusCode, res.body);
           }
+        } else {
+          setStatus('error');
+          console.error('AppSettingsApi GET serverless error:', result.message);
         }
       })
-      .catch(() => {})
+      .catch((err: unknown) => {
+        setStatus('error');
+        console.error('AppSettingsApi GET rejected:', err);
+      })
       .finally(() => setLoading(false));
   }, []);
 
