@@ -1,0 +1,14 @@
+{
+  "uid": "telemetry",
+  "type": "telemetry",
+  "config": {
+    "providerType": "SENTRY",
+    "datasetName": "hubspot-central-brain",
+    "logTypes": [
+      "APP_FUNCTION",
+      "ENDPOINT_FUNCTION",
+      "WEBHOOKS"
+    ],
+    "logLevels": ["ERROR", "WARN", "INFO"]
+  }
+}

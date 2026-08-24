@@ -44,6 +44,7 @@ export async function main(context: SyncToLinearContext): Promise<{ statusCode: 
   }
 
   const { linearIssueId, hubspotStage, objectType, linearTeamId } = context.body.inputFields;
+  console.log('SyncToLinear received:', JSON.stringify({ linearIssueId, hubspotStage, objectType, linearTeamId }));
 
   const stageMap = objectType === 'changelog'
     ? CHANGELOG_STAGE_TO_LINEAR_STATE

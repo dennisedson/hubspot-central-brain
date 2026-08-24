@@ -4,17 +4,19 @@ export function verifyLinearSignature(
   body: unknown,
   signature: string | undefined,
   secret: string,
-): boolean {
-  if (!signature) return false;
+): { valid: boolean; computed: string; received: string } {
+  if (!signature) return { valid: false, computed: '', received: '' };
+  const cleanSig = signature.replace(/^sha256=/, '').trim();
   const payload = typeof body === 'string' ? body : JSON.stringify(body);
   const digest = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+  let valid = false;
   try {
-    return crypto.timingSafeEqual(
+    valid = crypto.timingSafeEqual(
       Buffer.from(digest, 'hex'),
-      Buffer.from(signature, 'hex'),
+      Buffer.from(cleanSig, 'hex'),
     );
   } catch {
-    // Buffer.from throws if signature is not valid hex
-    return false;
+    // invalid hex
   }
+  return { valid, computed: digest.slice(0, 16), received: cleanSig.slice(0, 16) };
 }
