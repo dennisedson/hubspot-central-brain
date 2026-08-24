@@ -52,7 +52,8 @@ export async function main(context: AppSettingsContext): Promise<{ statusCode: n
       return { statusCode: 200, body: JSON.stringify(settings) };
     } catch (err) {
       console.error('Failed to load settings:', err);
-      return { statusCode: 500, body: JSON.stringify({ error: 'Failed to load settings' }) };
+      const detail = err instanceof Error ? err.message : String(err);
+      return { statusCode: 500, body: JSON.stringify({ error: 'Failed to load settings', detail }) };
     }
   }
 

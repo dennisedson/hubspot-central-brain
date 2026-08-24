@@ -35,6 +35,7 @@ const SettingsPage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [errorDetail, setErrorDetail] = useState<string>('');
 
   useEffect(() => {
     hubspot
@@ -47,10 +48,13 @@ const SettingsPage = () => {
           if (res.statusCode === 200) {
             setSettings(JSON.parse(res.body) as AppSettings);
           } else {
+            const parsed = JSON.parse(res.body) as { error?: string; detail?: string };
+            setErrorDetail(`${res.statusCode}: ${parsed.detail ?? parsed.error ?? res.body}`);
             setStatus('error');
             console.error('AppSettingsApi GET non-200:', res.statusCode, res.body);
           }
         } else {
+          setErrorDetail(result.message ?? 'Serverless invocation failed');
           setStatus('error');
           console.error('AppSettingsApi GET serverless error:', result.message);
         }
@@ -91,6 +95,14 @@ const SettingsPage = () => {
       <Flex justify="center" align="center">
         <LoadingSpinner label="Loading settings..." />
       </Flex>
+    );
+  }
+
+  if (status === 'error' && !settings.linearTeamId) {
+    return (
+      <Alert title="Failed to load settings" variant="error">
+        <Text>{errorDetail || 'AppSettingsApi returned an error. Check function logs in the developer portal.'}</Text>
+      </Alert>
     );
   }
 
