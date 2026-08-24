@@ -3,9 +3,11 @@ import { getPortalConfig, DEFAULT_APP_SETTINGS } from '../lib/portal-config';
 import type { AppSettings } from '../lib/portal-config';
 
 interface AppSettingsContext {
-  body: {
+  parameters: {
     method: 'GET' | 'POST';
-    settings?: AppSettings;
+    linearTeamId?: string;
+    assigneeFilter?: string;
+    linearAssigneeId?: string;
   };
   accountId: number;
 }
@@ -20,7 +22,7 @@ export async function main(context: AppSettingsContext): Promise<{ statusCode: n
     return { statusCode: 500, body: JSON.stringify({ error: 'App config object type not configured' }) };
   }
 
-  if (context.body.method === 'GET') {
+  if (context.parameters.method === 'GET') {
     try {
       const response = await client.crm.objects.searchApi.doSearch(objectTypeId, {
         filterGroups: [],
@@ -48,16 +50,16 @@ export async function main(context: AppSettingsContext): Promise<{ statusCode: n
     }
   }
 
-  if (context.body.method === 'POST') {
-    const settings = context.body.settings;
-    if (!settings) {
+  if (context.parameters.method === 'POST') {
+    const { linearTeamId, assigneeFilter, linearAssigneeId } = context.parameters;
+    if (!linearTeamId || !assigneeFilter) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing settings payload' }) };
     }
 
     const properties: Record<string, string> = {
-      linear_team_id: settings.linearTeamId,
-      assignee_filter: settings.assigneeFilter,
-      linear_assignee_id: settings.linearAssigneeId ?? '',
+      linear_team_id: linearTeamId,
+      assignee_filter: assigneeFilter,
+      linear_assignee_id: linearAssigneeId ?? '',
     };
 
     try {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   hubspot,
   ExtensionPointApiActions,
@@ -6,7 +6,6 @@ import {
   Form,
   Input,
   Select,
-  Option,
   Button,
   Alert,
   Heading,
@@ -23,6 +22,11 @@ interface AppSettings {
   linearAssigneeId: string;
 }
 
+interface FunctionResponse {
+  statusCode: number;
+  body: string;
+}
+
 interface SettingsExtensionProps {
   context: SettingsContext;
   actions: ExtensionPointApiActions<'settings'>;
@@ -32,7 +36,7 @@ hubspot.extend<'settings'>(({ context, actions }: SettingsExtensionProps) => (
   <SettingsPage context={context} actions={actions} />
 ));
 
-const SettingsPage = ({ actions }: SettingsExtensionProps) => {
+const SettingsPage = (_props: SettingsExtensionProps) => {
   const [settings, setSettings] = useState<AppSettings>({
     linearTeamId: '',
     assigneeFilter: 'all',
@@ -43,32 +47,45 @@ const SettingsPage = ({ actions }: SettingsExtensionProps) => {
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   useEffect(() => {
-    actions.serverless('app_settings_api', {
+    hubspot.serverless('app_settings_api', {
       parameters: { method: 'GET' },
-    }).then((response: { status: number; body: string }) => {
-      if (response.status === 200) {
-        setSettings(JSON.parse(response.body));
+    }).then(result => {
+      if (result.status === 'SUCCESS') {
+        const res = result.response as FunctionResponse;
+        if (res.statusCode === 200) {
+          setSettings(JSON.parse(res.body) as AppSettings);
+        }
       }
     }).catch(() => {
       // use defaults on error
     }).finally(() => {
       setLoading(false);
     });
-  }, [actions]);
+  }, []);
 
   const handleSave = useCallback(() => {
     setSaving(true);
     setStatus('idle');
-    actions.serverless('app_settings_api', {
-      parameters: { method: 'POST', settings },
-    }).then((response: { status: number; body: string }) => {
-      setStatus(response.status === 200 ? 'success' : 'error');
+    hubspot.serverless('app_settings_api', {
+      parameters: {
+        method: 'POST',
+        linearTeamId: settings.linearTeamId,
+        assigneeFilter: settings.assigneeFilter,
+        linearAssigneeId: settings.linearAssigneeId,
+      },
+    }).then(result => {
+      if (result.status === 'SUCCESS') {
+        const res = result.response as FunctionResponse;
+        setStatus(res.statusCode === 200 ? 'success' : 'error');
+      } else {
+        setStatus('error');
+      }
     }).catch(() => {
       setStatus('error');
     }).finally(() => {
       setSaving(false);
     });
-  }, [actions, settings]);
+  }, [settings]);
 
   if (loading) {
     return (
@@ -86,7 +103,7 @@ const SettingsPage = ({ actions }: SettingsExtensionProps) => {
       <Divider />
 
       <Box>
-        <Heading level={3}>Linear Configuration</Heading>
+        <Heading>Linear Configuration</Heading>
         <Input
           label="Linear Team ID"
           name="linearTeamId"
@@ -97,17 +114,18 @@ const SettingsPage = ({ actions }: SettingsExtensionProps) => {
       </Box>
 
       <Box>
-        <Heading level={3}>Issue Filter</Heading>
+        <Heading>Issue Filter</Heading>
         <Select
           label="Which issues should sync to HubSpot?"
           name="assigneeFilter"
           value={settings.assigneeFilter}
           onChange={value => setSettings(s => ({ ...s, assigneeFilter: value as AppSettings['assigneeFilter'] }))}
-        >
-          <Option value="all" label="All issues" />
-          <Option value="assigned" label="Assigned issues only" />
-          <Option value="mine" label="My issues only" />
-        </Select>
+          options={[
+            { label: 'All issues', value: 'all' },
+            { label: 'Assigned issues only', value: 'assigned' },
+            { label: 'My issues only', value: 'mine' },
+          ]}
+        />
 
         {settings.assigneeFilter === 'mine' && (
           <Input
