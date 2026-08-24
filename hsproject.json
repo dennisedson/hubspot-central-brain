@@ -2,5 +2,5 @@
   "name": "hubspot-central-brain",
   "platformVersion": "2026.03",
   "srcDir": "src",
-  "autoDeploy": true
+  "autoDeploy": false
 }
