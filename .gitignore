@@ -31,6 +31,7 @@ Thumbs.db
 .vscode/settings.json
 src/app/settings/package-lock.json
 src/app/settings/node_modules/
+src/app/functions/package-lock.json
 .idea/
 
 # HubSpot CLI auth
