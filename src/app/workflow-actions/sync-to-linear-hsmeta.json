@@ -1,5 +1,5 @@
 {
-  "uid": "sync_to_linear_action",
+  "uid": "sync_to_linear_v2",
   "type": "workflow-action",
   "config": {
     "actionUrl": "${SYNC_TO_LINEAR_URL}",
@@ -67,7 +67,7 @@
     ],
     "labels": {
       "en": {
-        "actionName": "Sync Status to Linear",
+        "actionName": "Sync Stage to Linear",
         "appDisplayName": "Central Brain",
         "actionDescription": "Pushes the current HubSpot pipeline stage to the linked Linear issue",
         "actionCardContent": "Sync to Linear → {{objectType}}",
