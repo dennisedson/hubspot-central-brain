@@ -36,7 +36,20 @@ export async function main(context: SyncToLinearContext): Promise<{ statusCode: 
 
   if (!verifySharedSecret(context.body.inputFields?.sharedSecret, expectedSecret)) {
     console.warn('Rejected SyncToLinear request: invalid shared secret');
-    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+    const body = context.body as unknown as Record<string, unknown>;
+    return {
+      statusCode: 401,
+      body: JSON.stringify({
+        error: 'Unauthorized',
+        _debug: {
+          topLevelKeys: Object.keys(body),
+          hasInputFields: 'inputFields' in body,
+          inputFieldKeys: Object.keys((body.inputFields as Record<string, unknown>) ?? {}),
+          providedLen: ((body.inputFields as Record<string, string>)?.sharedSecret ?? '').length,
+          expectedLen: (expectedSecret ?? '').length,
+        },
+      }),
+    };
   }
 
   const apiKey = process.env.LINEAR_API_KEY;
