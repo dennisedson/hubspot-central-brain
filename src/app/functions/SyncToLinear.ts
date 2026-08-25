@@ -40,7 +40,7 @@ export async function main(context: SyncToLinearContext): Promise<{ statusCode: 
     return {
       statusCode: 401,
       body: JSON.stringify({
-        error: 'Unauthorized',
+        error: 'Unauthorized-HSB-v3',
         _debug: {
           topLevelKeys: Object.keys(body),
           hasInputFields: 'inputFields' in body,
