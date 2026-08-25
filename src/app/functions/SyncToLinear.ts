@@ -26,6 +26,8 @@ export async function main(context: SyncToLinearContext): Promise<{ statusCode: 
   // Authenticate FIRST, before reading any other input fields. This endpoint is a
   // public serverless function backing a workflow action, so a shared secret sent by
   // the workflow (a STATIC_VALUE input field) is required to prove the caller is ours.
+  console.log('SyncToLinear body:', JSON.stringify(context.body));
+
   const expectedSecret = process.env.SYNC_SHARED_SECRET;
   if (!expectedSecret) {
     console.error('SYNC_SHARED_SECRET is not set');
