@@ -1,6 +1,7 @@
 import { findStateIdByName, updateLinearIssueState } from '../lib/linear-client';
 import { CONTENT_STAGE_TO_LINEAR_STATE, CHANGELOG_STAGE_TO_LINEAR_STATE } from '../lib/mapping';
 import { verifySharedSecret } from '../lib/shared-secret';
+import { getPortalConfig } from '../lib/portal-config';
 
 interface SyncToLinearBody {
   callbackId: string;
@@ -41,13 +42,16 @@ export async function main(context: SyncToLinearContext): Promise<{ statusCode: 
   }
 
   const { linearIssueId, hubspotStage, objectType, linearTeamId } = context.body.inputFields;
-  console.log('SyncToLinear received:', JSON.stringify({ linearIssueId, hubspotStage, objectType, linearTeamId }));
+
+  const config = getPortalConfig(context.accountId);
+  const stageIds = objectType === 'changelog' ? config.changelog.stageIds : config.content.stageIds;
+  const stageName = Object.entries(stageIds).find(([, id]) => id === hubspotStage)?.[0];
 
   const stageMap = objectType === 'changelog'
     ? CHANGELOG_STAGE_TO_LINEAR_STATE
     : CONTENT_STAGE_TO_LINEAR_STATE;
 
-  const targetStateName = (stageMap as Record<string, string>)[hubspotStage];
+  const targetStateName = stageName ? (stageMap as Record<string, string>)[stageName] : undefined;
   if (!targetStateName) {
     return {
       statusCode: 400,
