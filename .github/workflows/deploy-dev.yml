@@ -40,9 +40,7 @@ jobs:
           DEFAULT_PERSONAL_ACCESS_KEY: ${{ secrets.HUBSPOT_DEV_PERSONAL_ACCESS_KEY }}
 
       - name: Deploy project
-        uses: HubSpot/hubspot-project-actions/project-deploy@v1.1.0
-        with:
-          deploy_latest_build: true
+        run: hs project deploy --deploy-latest-build --force
         env:
           DEFAULT_ACCOUNT_ID: ${{ secrets.HUBSPOT_DEV_ACCOUNT_ID }}
           DEFAULT_PERSONAL_ACCESS_KEY: ${{ secrets.HUBSPOT_DEV_PERSONAL_ACCESS_KEY }}

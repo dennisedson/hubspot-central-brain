@@ -1,5 +1,5 @@
 {
-  "uid": "sync_to_linear_action",
+  "uid": "sync_to_linear_v2",
   "type": "workflow-action",
   "config": {
     "actionUrl": "${SYNC_TO_LINEAR_URL}",

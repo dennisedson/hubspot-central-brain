@@ -23,11 +23,6 @@ interface SyncToLinearContext {
 }
 
 export async function main(context: SyncToLinearContext): Promise<{ statusCode: number; body: string }> {
-  // Authenticate FIRST, before reading any other input fields. This endpoint is a
-  // public serverless function backing a workflow action, so a shared secret sent by
-  // the workflow (a STATIC_VALUE input field) is required to prove the caller is ours.
-  console.log('SyncToLinear body:', JSON.stringify(context.body));
-
   const expectedSecret = process.env.SYNC_SHARED_SECRET;
   if (!expectedSecret) {
     console.error('SYNC_SHARED_SECRET is not set');
@@ -36,20 +31,7 @@ export async function main(context: SyncToLinearContext): Promise<{ statusCode: 
 
   if (!verifySharedSecret(context.body.inputFields?.sharedSecret, expectedSecret)) {
     console.warn('Rejected SyncToLinear request: invalid shared secret');
-    const body = context.body as unknown as Record<string, unknown>;
-    return {
-      statusCode: 401,
-      body: JSON.stringify({
-        error: 'Unauthorized-HSB-v3',
-        _debug: {
-          topLevelKeys: Object.keys(body),
-          hasInputFields: 'inputFields' in body,
-          inputFieldKeys: Object.keys((body.inputFields as Record<string, unknown>) ?? {}),
-          providedLen: ((body.inputFields as Record<string, string>)?.sharedSecret ?? '').length,
-          expectedLen: (expectedSecret ?? '').length,
-        },
-      }),
-    };
+    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
   }
 
   const apiKey = process.env.LINEAR_API_KEY;
