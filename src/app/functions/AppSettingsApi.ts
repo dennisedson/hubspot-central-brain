@@ -1,11 +1,10 @@
 import { getPortalConfig, DEFAULT_APP_SETTINGS } from '../lib/portal-config';
 import type { AppSettings } from '../lib/portal-config';
 
-// hubspot.fetch() adds portalId/userId/userEmail/appId as query params server-side
 interface EndpointContext {
   method: string;
   body: Record<string, string | undefined>;
-  query: Record<string, string>;
+  query?: Record<string, string>;
   accountId?: number;
 }
 
@@ -40,9 +39,11 @@ async function hsUpdate(objectTypeId: string, objectId: string, properties: Reco
 }
 
 export async function main(context: EndpointContext): Promise<{ statusCode: number; body: string }> {
-  const portalId = parseInt(context.query.portalId ?? '', 10);
+  // accountId is the portal ID for authenticated calls from UI extensions;
+  // query.portalId is the fallback that hubspot.fetch() appends as a query param
+  const portalId = context.accountId ?? parseInt(context.query?.portalId ?? '0', 10);
   if (!portalId) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Missing portalId' }) };
+    return { statusCode: 400, body: JSON.stringify({ error: 'Missing portalId — context.accountId and query.portalId both unavailable' }) };
   }
 
   const token = process.env.PRIVATE_APP_ACCESS_TOKEN ?? process.env.HS_ACCESS_TOKEN;
