@@ -39,8 +39,17 @@ jobs:
           DEFAULT_ACCOUNT_ID: ${{ secrets.HUBSPOT_DEV_ACCOUNT_ID }}
           DEFAULT_PERSONAL_ACCESS_KEY: ${{ secrets.HUBSPOT_DEV_PERSONAL_ACCESS_KEY }}
 
+      - name: Configure HubSpot CLI account
+        env:
+          DEFAULT_ACCOUNT_ID: ${{ secrets.HUBSPOT_DEV_ACCOUNT_ID }}
+          DEFAULT_PERSONAL_ACCESS_KEY: ${{ secrets.HUBSPOT_DEV_PERSONAL_ACCESS_KEY }}
+        run: |
+          mkdir -p ~/.hscli
+          printf "defaultAccount: ci\naccounts:\n  - name: ci\n    accountId: %s\n    env: prod\n    authType: personalaccesskey\n    personalAccessKey: '%s'\n" \
+            "$DEFAULT_ACCOUNT_ID" "$DEFAULT_PERSONAL_ACCESS_KEY" > ~/.hscli/config.yml
+
       - name: Deploy project
-        run: hs project deploy --deploy-latest-build --force --use-env
+        run: hs project deploy --deploy-latest-build --force
         env:
           DEFAULT_ACCOUNT_ID: ${{ secrets.HUBSPOT_DEV_ACCOUNT_ID }}
           DEFAULT_PERSONAL_ACCESS_KEY: ${{ secrets.HUBSPOT_DEV_PERSONAL_ACCESS_KEY }}
