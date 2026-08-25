@@ -8,7 +8,51 @@ interface EndpointContext {
   accountId?: number;
 }
 
+interface LinearTeam {
+  id: string;
+  name: string;
+}
+
+interface LinearMember {
+  id: string;
+  name: string;
+}
+
 const HS_BASE = 'https://api.hubapi.com';
+const LINEAR_API = 'https://api.linear.app/graphql';
+
+async function linearQuery(gql: string, variables: Record<string, unknown>, apiKey: string) {
+  const res = await fetch(LINEAR_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: apiKey },
+    body: JSON.stringify({ query: gql, variables }),
+  });
+  if (!res.ok) throw new Error(`Linear API error ${res.status}: ${await res.text()}`);
+  return res.json() as Promise<{ data: Record<string, unknown> }>;
+}
+
+async function getLinearTeams(apiKey: string): Promise<LinearTeam[]> {
+  try {
+    const data = await linearQuery(`query { teams { nodes { id name } } }`, {}, apiKey);
+    return (data.data?.teams as { nodes: LinearTeam[] } | undefined)?.nodes ?? [];
+  } catch {
+    return [];
+  }
+}
+
+async function getLinearTeamMembers(teamId: string, apiKey: string): Promise<LinearMember[]> {
+  try {
+    const data = await linearQuery(
+      `query($id: String!) { team(id: $id) { members { nodes { id name } } } }`,
+      { id: teamId },
+      apiKey,
+    );
+    const team = data.data?.team as { members: { nodes: LinearMember[] } } | undefined;
+    return team?.members?.nodes ?? [];
+  } catch {
+    return [];
+  }
+}
 
 async function hsSearch(objectTypeId: string, props: string[], token: string) {
   const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}/search`, {
@@ -39,16 +83,16 @@ async function hsUpdate(objectTypeId: string, objectId: string, properties: Reco
 }
 
 export async function main(context: EndpointContext): Promise<{ statusCode: number; body: string }> {
-  // accountId is the portal ID for authenticated calls from UI extensions;
-  // query.portalId is the fallback that hubspot.fetch() appends as a query param
   const portalId = context.accountId ?? parseInt(context.query?.portalId ?? '0', 10);
   if (!portalId) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Missing portalId — context.accountId and query.portalId both unavailable' }) };
+    return { statusCode: 400, body: JSON.stringify({ error: 'Missing portalId' }) };
   }
 
   const token = process.env.PRIVATE_APP_ACCESS_TOKEN ?? process.env.HS_ACCESS_TOKEN;
+  const linearApiKey = process.env.LINEAR_API_KEY;
+
   if (!token) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'No access token available' }) };
+    return { statusCode: 500, body: JSON.stringify({ error: 'No HubSpot access token available' }) };
   }
 
   let objectTypeId: string;
@@ -65,17 +109,28 @@ export async function main(context: EndpointContext): Promise<{ statusCode: numb
 
   if (context.method === 'GET') {
     try {
-      const result = await hsSearch(objectTypeId, ['linear_team_id', 'assignee_filter', 'linear_assignee_id'], token);
+      const result = await hsSearch(
+        objectTypeId,
+        ['linear_team_id', 'assignee_filter', 'linear_assignee_id'],
+        token,
+      );
       const record = result.results[0];
-      if (!record) {
-        return { statusCode: 200, body: JSON.stringify(DEFAULT_APP_SETTINGS) };
-      }
-      const settings: AppSettings = {
-        linearTeamId: record.properties.linear_team_id ?? '',
-        assigneeFilter: (record.properties.assignee_filter as AppSettings['assigneeFilter']) ?? 'all',
-        linearAssigneeId: record.properties.linear_assignee_id ?? '',
-      };
-      return { statusCode: 200, body: JSON.stringify(settings) };
+      const settings: AppSettings = record
+        ? {
+            linearTeamId: record.properties.linear_team_id ?? '',
+            assigneeFilter: (record.properties.assignee_filter as AppSettings['assigneeFilter']) ?? 'all',
+            linearAssigneeId: record.properties.linear_assignee_id ?? '',
+          }
+        : { ...DEFAULT_APP_SETTINGS };
+
+      const [teams, teamMembers] = await Promise.all([
+        linearApiKey ? getLinearTeams(linearApiKey) : Promise.resolve<LinearTeam[]>([]),
+        linearApiKey && settings.linearTeamId
+          ? getLinearTeamMembers(settings.linearTeamId, linearApiKey)
+          : Promise.resolve<LinearMember[]>([]),
+      ]);
+
+      return { statusCode: 200, body: JSON.stringify({ ...settings, teams, teamMembers }) };
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       return { statusCode: 500, body: JSON.stringify({ error: 'Failed to load settings', detail }) };
@@ -83,9 +138,19 @@ export async function main(context: EndpointContext): Promise<{ statusCode: numb
   }
 
   if (context.method === 'POST') {
-    const { linearTeamId, assigneeFilter, linearAssigneeId } = context.body ?? {};
+    const body = context.body ?? {};
+
+    if (body.action === 'loadTeamMembers') {
+      if (!body.teamId || !linearApiKey) {
+        return { statusCode: 200, body: JSON.stringify({ teamMembers: [] }) };
+      }
+      const teamMembers = await getLinearTeamMembers(body.teamId, linearApiKey);
+      return { statusCode: 200, body: JSON.stringify({ teamMembers }) };
+    }
+
+    const { linearTeamId, assigneeFilter, linearAssigneeId } = body;
     if (!linearTeamId || !assigneeFilter) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'Missing settings payload' }) };
+      return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields' }) };
     }
 
     const properties: Record<string, string> = {
@@ -102,7 +167,6 @@ export async function main(context: EndpointContext): Promise<{ statusCode: numb
       } else {
         await hsCreate(objectTypeId, properties, token);
       }
-      console.log(`Saved app settings for portal ${portalId}`);
       return { statusCode: 200, body: JSON.stringify({ ok: true }) };
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
