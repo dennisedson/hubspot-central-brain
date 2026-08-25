@@ -64,6 +64,7 @@ export interface LinearIssue {
   labels: { nodes: Array<{ name: string }> };
   url: string;
   team: { id: string; name: string };
+  assignee?: { id: string; name: string } | null;
 }
 
 export interface LinearWebhookPayload {

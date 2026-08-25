@@ -1,77 +1,93 @@
-import { Client } from '@hubspot/api-client';
-import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects/models/Filter';
 import type { LinearWebhookPayload, UpsertResult } from './types';
 import { LINEAR_STATE_TO_CONTENT_STAGE, LINEAR_STATE_TO_CHANGELOG_STAGE } from './mapping';
-import { getPortalConfig } from './portal-config';
+import { getPortalConfig, DEFAULT_APP_SETTINGS } from './portal-config';
+import type { AppSettings } from './portal-config';
 
-export function createHubSpotClient(token?: string): Client {
-  return new Client({ accessToken: token ?? process.env.HS_ACCESS_TOKEN ?? process.env.PRIVATE_APP_ACCESS_TOKEN });
+const HS_BASE = 'https://api.hubapi.com';
+
+function getToken(): string {
+  const token = process.env.HS_ACCESS_TOKEN ?? process.env.PRIVATE_APP_ACCESS_TOKEN;
+  if (!token) throw new Error('No HubSpot access token available');
+  return token;
+}
+
+async function hsSearch(
+  objectTypeId: string,
+  filters: Array<{ propertyName: string; operator: string; value: string }>,
+  properties: string[],
+): Promise<{ results: Array<{ id: string; properties: Record<string, string | null> }> }> {
+  const token = getToken();
+  const filterGroups = filters.length > 0 ? [{ filters }] : [];
+  const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ filterGroups, properties, limit: 1, sorts: [], query: '', after: '0' }),
+  });
+  if (!res.ok) throw new Error(`HubSpot search failed ${res.status}: ${await res.text()}`);
+  return res.json() as Promise<{ results: Array<{ id: string; properties: Record<string, string | null> }> }>;
+}
+
+async function hsCreate(objectTypeId: string, properties: Record<string, string>): Promise<{ id: string }> {
+  const token = getToken();
+  const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ properties, associations: [] }),
+  });
+  if (!res.ok) throw new Error(`HubSpot create failed ${res.status}: ${await res.text()}`);
+  return res.json() as Promise<{ id: string }>;
+}
+
+async function hsUpdate(objectTypeId: string, objectId: string, properties: Record<string, string>): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}/${objectId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ properties }),
+  });
+  if (!res.ok) throw new Error(`HubSpot update failed ${res.status}: ${await res.text()}`);
 }
 
 export async function findByLinearId(
-  client: Client,
   objectTypeId: string,
   linearIssueId: string,
 ): Promise<string | null> {
-  const response = await client.crm.objects.searchApi.doSearch(objectTypeId, {
-    filterGroups: [{
-      filters: [{
-        propertyName: 'linear_issue_id',
-        operator: FilterOperatorEnum.Eq,
-        value: linearIssueId,
-      }],
-    }],
-    properties: ['linear_issue_id'],
-    limit: 1,
-    sorts: [],
-    query: '',
-    after: '0',
-  });
+  const response = await hsSearch(
+    objectTypeId,
+    [{ propertyName: 'linear_issue_id', operator: 'EQ', value: linearIssueId }],
+    ['linear_issue_id'],
+  );
   return response.results[0]?.id ?? null;
 }
 
 export async function getCurrentStage(
-  client: Client,
   objectTypeId: string,
   linearIssueId: string,
 ): Promise<string | null> {
-  const response = await client.crm.objects.searchApi.doSearch(objectTypeId, {
-    filterGroups: [{
-      filters: [{
-        propertyName: 'linear_issue_id',
-        operator: FilterOperatorEnum.Eq,
-        value: linearIssueId,
-      }],
-    }],
-    properties: ['linear_issue_id', 'hs_pipeline_stage'],
-    limit: 1,
-    sorts: [],
-    query: '',
-    after: '0',
-  });
+  const response = await hsSearch(
+    objectTypeId,
+    [{ propertyName: 'linear_issue_id', operator: 'EQ', value: linearIssueId }],
+    ['linear_issue_id', 'hs_pipeline_stage'],
+  );
   return response.results[0]?.properties?.hs_pipeline_stage ?? null;
 }
 
 export async function archiveContentByLinearId(
-  client: Client,
   linearIssueId: string,
   portalId: number,
 ): Promise<UpsertResult | null> {
   const config = getPortalConfig(portalId);
   const objectTypeId = config.content.objectTypeId;
-  const existingId = await findByLinearId(client, objectTypeId, linearIssueId);
+  const existingId = await findByLinearId(objectTypeId, linearIssueId);
   if (!existingId) {
     return null;
   }
 
-  await client.crm.objects.basicApi.update(objectTypeId, existingId, {
-    properties: { hs_pipeline_stage: config.content.stageIds.archived },
-  });
+  await hsUpdate(objectTypeId, existingId, { hs_pipeline_stage: config.content.stageIds.archived });
   return { id: existingId, action: 'updated' };
 }
 
 export async function upsertContent(
-  client: Client,
   payload: LinearWebhookPayload,
   portalId: number,
 ): Promise<UpsertResult> {
@@ -90,18 +106,17 @@ export async function upsertContent(
     ...(data.description ? { notes: data.description } : {}),
   };
 
-  const existingId = await findByLinearId(client, objectTypeId, data.id);
+  const existingId = await findByLinearId(objectTypeId, data.id);
   if (existingId) {
-    await client.crm.objects.basicApi.update(objectTypeId, existingId, { properties });
+    await hsUpdate(objectTypeId, existingId, properties);
     return { id: existingId, action: 'updated' };
   }
 
-  const created = await client.crm.objects.basicApi.create(objectTypeId, { properties, associations: [] });
+  const created = await hsCreate(objectTypeId, properties);
   return { id: created.id, action: 'created' };
 }
 
 export async function upsertChangelog(
-  client: Client,
   payload: LinearWebhookPayload,
   portalId: number,
 ): Promise<UpsertResult> {
@@ -120,12 +135,35 @@ export async function upsertChangelog(
     ...(data.description ? { notes: data.description } : {}),
   };
 
-  const existingId = await findByLinearId(client, objectTypeId, data.id);
+  const existingId = await findByLinearId(objectTypeId, data.id);
   if (existingId) {
-    await client.crm.objects.basicApi.update(objectTypeId, existingId, { properties });
+    await hsUpdate(objectTypeId, existingId, properties);
     return { id: existingId, action: 'updated' };
   }
 
-  const created = await client.crm.objects.basicApi.create(objectTypeId, { properties, associations: [] });
+  const created = await hsCreate(objectTypeId, properties);
   return { id: created.id, action: 'created' };
+}
+
+export async function readAppSettings(portalId: number): Promise<AppSettings> {
+  const config = getPortalConfig(portalId);
+  const objectTypeId = config.appConfig.objectTypeId;
+  if (!objectTypeId) return { ...DEFAULT_APP_SETTINGS };
+
+  try {
+    const response = await hsSearch(
+      objectTypeId,
+      [],
+      ['linear_team_id', 'assignee_filter', 'linear_assignee_id'],
+    );
+    const record = response.results[0];
+    if (!record) return { ...DEFAULT_APP_SETTINGS };
+    return {
+      linearTeamId: record.properties.linear_team_id ?? '',
+      assigneeFilter: (record.properties.assignee_filter as AppSettings['assigneeFilter']) ?? 'all',
+      linearAssigneeId: record.properties.linear_assignee_id ?? '',
+    };
+  } catch {
+    return { ...DEFAULT_APP_SETTINGS };
+  }
 }

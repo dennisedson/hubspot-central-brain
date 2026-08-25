@@ -1,9 +1,9 @@
 import {
-  createHubSpotClient,
   getCurrentStage,
   upsertContent,
   upsertChangelog,
   archiveContentByLinearId,
+  readAppSettings,
 } from '../lib/hubspot-client';
 import type { LinearWebhookPayload } from '../lib/types';
 import {
@@ -48,7 +48,6 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
 
   const labels = payload.data.labels?.nodes?.map(l => l.name) ?? [];
   const isChangelog = labels.includes(LINEAR_CHANGELOG_LABEL);
-  const client = createHubSpotClient();
 
   try {
     // Linear issue deletion: archive the linked HubSpot record rather than upserting.
@@ -60,12 +59,22 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
           body: JSON.stringify({ skipped: true, reason: 'changelog remove not archived (no archive stage)' }),
         };
       }
-      const archived = await archiveContentByLinearId(client, payload.data.id, context.accountId);
+      const archived = await archiveContentByLinearId(payload.data.id, context.accountId);
       if (!archived) {
         return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'remove: no matching record' }) };
       }
       console.log(`Archived content ${archived.id} for removed Linear ${payload.data.id}`);
       return { statusCode: 200, body: JSON.stringify({ ok: true, action: 'archived', id: archived.id }) };
+    }
+
+    // Apply assignee filter from saved settings before doing any further work.
+    const settings = await readAppSettings(context.accountId);
+    const assigneeId = payload.data.assignee?.id;
+    if (settings.assigneeFilter === 'assigned' && !assigneeId) {
+      return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'no assignee' }) };
+    }
+    if (settings.assigneeFilter === 'mine' && assigneeId !== settings.linearAssigneeId) {
+      return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'not assigned to configured user' }) };
     }
 
     // Echo prevention: skip if the current HubSpot stage already maps FORWARD to the
@@ -75,7 +84,7 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     const portalConfig = getPortalConfig(context.accountId);
     const config = isChangelog ? portalConfig.changelog : portalConfig.content;
     const forwardMap = isChangelog ? CHANGELOG_STAGE_TO_LINEAR_STATE : CONTENT_STAGE_TO_LINEAR_STATE;
-    const currentStageId = await getCurrentStage(client, config.objectTypeId, payload.data.id);
+    const currentStageId = await getCurrentStage(config.objectTypeId, payload.data.id);
     if (currentStageId) {
       const stageIds = config.stageIds as Record<string, string>;
       const currentStageName = Object.keys(stageIds).find(name => stageIds[name] === currentStageId);
@@ -86,8 +95,8 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     }
 
     const result = isChangelog
-      ? await upsertChangelog(client, payload, context.accountId)
-      : await upsertContent(client, payload, context.accountId);
+      ? await upsertChangelog(payload, context.accountId)
+      : await upsertContent(payload, context.accountId);
 
     console.log(`${result.action} ${isChangelog ? 'changelog' : 'content'} ${result.id} for Linear ${payload.data.id}`);
     return { statusCode: 200, body: JSON.stringify({ ok: true, ...result }) };
