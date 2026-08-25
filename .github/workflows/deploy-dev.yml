@@ -45,7 +45,7 @@ jobs:
           DEFAULT_PERSONAL_ACCESS_KEY: ${{ secrets.HUBSPOT_DEV_PERSONAL_ACCESS_KEY }}
         run: |
           mkdir -p ~/.hscli
-          printf "defaultAccount: ci\naccounts:\n  - name: ci\n    accountId: %s\n    env: prod\n    authType: personalaccesskey\n    personalAccessKey: '%s'\n" \
+          printf "defaultAccount: ci\naccounts:\n  - name: ci\n    accountId: %s\n    env: prod\n    authType: personalaccesskey\n    personalAccessKey: '%s'\n    auth:\n      tokenInfo:\n        accessToken: null\n        expiresAt: null\n" \
             "$DEFAULT_ACCOUNT_ID" "$DEFAULT_PERSONAL_ACCESS_KEY" > ~/.hscli/config.yml
 
       - name: Deploy project
