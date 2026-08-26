@@ -15,7 +15,8 @@ interface SyncToAsanaBody {
   inputFields: {
     sharedSecret: string;
     title?: string;
-    linearIssueUrl: string;
+    existingAsanaTaskUrl?: string;
+    linearIssueUrl?: string;
     hubspotStage: string;
     objectType: 'content' | 'changelog';
   };
@@ -46,7 +47,7 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
     return { statusCode: 500, body: JSON.stringify({ error: 'Server misconfiguration' }) };
   }
 
-  const { title, linearIssueUrl, hubspotStage, objectType } = context.body.inputFields;
+  const { title, existingAsanaTaskUrl, linearIssueUrl, hubspotStage, objectType } = context.body.inputFields;
 
   const config = getPortalConfig(context.accountId);
   const stageIds = objectType === 'changelog' ? config.changelog.stageIds : config.content.stageIds;
@@ -63,18 +64,28 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
   }
 
   try {
-    let taskGid = await findTaskByLinearIssueUrl(asanaApiKey, ASANA_PROJECT_GID, linearIssueUrl);
+    let taskGid: string | null = null;
+
+    // 1. Prefer the stored Asana task URL — no API search needed
+    if (existingAsanaTaskUrl) {
+      const parts = existingAsanaTaskUrl.split('/');
+      taskGid = parts[parts.length - 1] || null;
+    }
+
+    // 2. Fall back to searching by Linear issue URL (only when non-empty)
+    if (!taskGid && linearIssueUrl) {
+      taskGid = await findTaskByLinearIssueUrl(asanaApiKey, ASANA_PROJECT_GID, linearIssueUrl);
+    }
 
     if (taskGid) {
       await updateTaskPipelineStage(asanaApiKey, taskGid, asanaStageGid);
-      console.log(`Updated Asana task ${taskGid} → stage ${asanaStageGid} for ${linearIssueUrl}`);
+      console.log(`Updated Asana task ${taskGid} → stage ${asanaStageGid}`);
     } else {
-      const task = await createTask(asanaApiKey, ASANA_PROJECT_GID, title ?? 'Untitled', {
-        [ASANA_LINEAR_ISSUE_URL_FIELD_GID]: linearIssueUrl,
-        [ASANA_PIPELINE_STAGE_FIELD_GID]: asanaStageGid,
-      });
+      const customFields: Record<string, string> = { [ASANA_PIPELINE_STAGE_FIELD_GID]: asanaStageGid };
+      if (linearIssueUrl) customFields[ASANA_LINEAR_ISSUE_URL_FIELD_GID] = linearIssueUrl;
+      const task = await createTask(asanaApiKey, ASANA_PROJECT_GID, title ?? 'Untitled', customFields);
       taskGid = task.gid;
-      console.log(`Created Asana task ${taskGid} for ${linearIssueUrl}`);
+      console.log(`Created Asana task ${taskGid}`);
     }
 
     const asanaTaskUrl = `https://app.asana.com/0/${ASANA_PROJECT_GID}/${taskGid}`;

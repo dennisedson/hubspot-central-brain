@@ -27,6 +27,15 @@
       },
       {
         "typeDefinition": {
+          "name": "existingAsanaTaskUrl",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
           "name": "linearIssueUrl",
           "type": "string",
           "fieldType": "text"
@@ -77,6 +86,7 @@
         "inputFieldLabels": {
           "sharedSecret": "Shared Secret",
           "title": "Content Title",
+          "existingAsanaTaskUrl": "Existing Asana Task URL",
           "linearIssueUrl": "Linear Issue URL",
           "hubspotStage": "HubSpot Pipeline Stage",
           "objectType": "Object Type"
@@ -84,7 +94,8 @@
         "inputFieldDescriptions": {
           "sharedSecret": "Shared secret that authenticates this request; must match the SYNC_SHARED_SECRET function secret",
           "title": "The title property from the HubSpot record — used as the Asana task name when creating a new task",
-          "linearIssueUrl": "The linear_issue_url property from the HubSpot record — used to look up or link the Asana task",
+          "existingAsanaTaskUrl": "The asana_task_url property from the HubSpot record — if set, the task is updated directly without searching",
+          "linearIssueUrl": "The linear_issue_url property from the HubSpot record — used to look up the Asana task if no asana_task_url is stored",
           "hubspotStage": "The hs_pipeline_stage property from the HubSpot record",
           "objectType": "Whether this is a Content or Changelog Entry record"
         },
