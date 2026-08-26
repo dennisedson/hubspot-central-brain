@@ -50,7 +50,7 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
 
   const config = getPortalConfig(context.accountId);
   const asanaProjectGid = config.asanaProjectGid;
-  const stageIds = objectType === 'changelog' ? config.changelog.stageIds : config.content.stageIds;
+  const stageIds = config.content.pipelines[objectType as 'content' | 'changelog'].stageIds;
   const stageName = Object.entries(stageIds).find(([, id]) => id === hubspotStage)?.[0];
 
   const stageMap = objectType === 'changelog' ? CHANGELOG_STAGE_TO_ASANA_STAGE : CONTENT_STAGE_TO_ASANA_STAGE;

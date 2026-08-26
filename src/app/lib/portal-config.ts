@@ -10,6 +10,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   linearAssigneeId: '',
 };
 
+interface PipelineConfig {
+  pipelineId: string;
+  stageIds: Record<string, string>;
+}
+
 export interface PortalConfig {
   appConfig: {
     objectTypeId: string;
@@ -21,25 +26,9 @@ export interface PortalConfig {
   };
   content: {
     objectTypeId: string;
-    pipelineId: string;
-    stageIds: {
-      idea: string;
-      outline: string;
-      drafting: string;
-      editing: string;
-      review: string;
-      published: string;
-      archived: string;
-    };
-  };
-  changelog: {
-    objectTypeId: string;
-    pipelineId: string;
-    stageIds: {
-      identified: string;
-      drafting: string;
-      reviewing: string;
-      published: string;
+    pipelines: {
+      content: PipelineConfig;  // Content Lifecycle: idea/outline/drafting/editing/review/published/archived
+      changelog: PipelineConfig; // Changelog Lifecycle: identified/drafting/reviewing/published
     };
   };
   video: {
@@ -64,25 +53,23 @@ const CONFIGS: Record<number, PortalConfig> = {
     },
     content: {
       objectTypeId: '2-67505887',
-      pipelineId: '926238627',
-      stageIds: {
-        idea: '1418659999',
-        outline: '1418660000',
-        drafting: '1418660001',
-        editing: '1418660002',
-        review: '1418660003',
-        published: '1418660004',
-        archived: '1418660005',
-      },
-    },
-    changelog: {
-      objectTypeId: '2-67505888',
-      pipelineId: '926238628',
-      stageIds: {
-        identified: '1418660006',
-        drafting: '1418660007',
-        reviewing: '1418660008',
-        published: '1418660009',
+      pipelines: {
+        content: {
+          pipelineId: '926238627',
+          stageIds: {
+            idea: '1418659999',
+            outline: '1418660000',
+            drafting: '1418660001',
+            editing: '1418660002',
+            review: '1418660003',
+            published: '1418660004',
+            archived: '1418660005',
+          },
+        },
+        changelog: {
+          pipelineId: '',
+          stageIds: {},
+        },
       },
     },
     video: {
@@ -105,25 +92,23 @@ const CONFIGS: Record<number, PortalConfig> = {
     },
     content: {
       objectTypeId: '2-67508770',
-      pipelineId: '926239377',
-      stageIds: {
-        idea: '1418723701',
-        outline: '1418723702',
-        drafting: '1418723703',
-        editing: '1418723704',
-        review: '1418723705',
-        published: '1418723706',
-        archived: '1418723707',
-      },
-    },
-    changelog: {
-      objectTypeId: '2-67508772',
-      pipelineId: '926366568',
-      stageIds: {
-        identified: '1418723403',
-        drafting: '1418723404',
-        reviewing: '1418723405',
-        published: '1418723406',
+      pipelines: {
+        content: {
+          pipelineId: '926239377',
+          stageIds: {
+            idea: '1418723701',
+            outline: '1418723702',
+            drafting: '1418723703',
+            editing: '1418723704',
+            review: '1418723705',
+            published: '1418723706',
+            archived: '1418723707',
+          },
+        },
+        changelog: {
+          pipelineId: '',
+          stageIds: {},
+        },
       },
     },
     video: {
@@ -146,25 +131,23 @@ const CONFIGS: Record<number, PortalConfig> = {
     },
     content: {
       objectTypeId: '2-67508928',
-      pipelineId: '926239383',
-      stageIds: {
-        idea: '1418723716',
-        outline: '1418723717',
-        drafting: '1418723718',
-        editing: '1418723719',
-        review: '1418723720',
-        published: '1418723721',
-        archived: '1418723722',
-      },
-    },
-    changelog: {
-      objectTypeId: '2-67508929',
-      pipelineId: '926366569',
-      stageIds: {
-        identified: '1418723408',
-        drafting: '1418723409',
-        reviewing: '1418723410',
-        published: '1418723411',
+      pipelines: {
+        content: {
+          pipelineId: '926239383',
+          stageIds: {
+            idea: '1418723716',
+            outline: '1418723717',
+            drafting: '1418723718',
+            editing: '1418723719',
+            review: '1418723720',
+            published: '1418723721',
+            archived: '1418723722',
+          },
+        },
+        changelog: {
+          pipelineId: '',
+          stageIds: {},
+        },
       },
     },
     video: {

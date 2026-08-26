@@ -7,13 +7,16 @@ const TEST_PORTAL_CONFIG = {
   appConfig: { objectTypeId: '2-app' },
   content: {
     objectTypeId: '2-content',
-    pipelineId: 'pipe-content',
-    stageIds: { idea: 'idea', outline: 'outline', drafting: 'drafting', editing: 'editing', review: 'review', published: 'published', archived: 'archived' },
-  },
-  changelog: {
-    objectTypeId: '2-changelog',
-    pipelineId: 'pipe-changelog',
-    stageIds: { identified: 'identified', drafting: 'drafting', reviewing: 'reviewing', published: 'published' },
+    pipelines: {
+      content: {
+        pipelineId: 'pipe-content',
+        stageIds: { idea: 'idea', outline: 'outline', drafting: 'drafting', editing: 'editing', review: 'review', published: 'published', archived: 'archived' },
+      },
+      changelog: {
+        pipelineId: 'pipe-changelog',
+        stageIds: { identified: 'identified', drafting: 'drafting', reviewing: 'reviewing', published: 'published' },
+      },
+    },
   },
   video: {
     objectTypeId: '2-video',
@@ -149,9 +152,9 @@ describe('upsertContent', () => {
   });
 });
 
-describe('upsertChangelog', () => {
+describe('upsertContent (changelog pipeline)', () => {
   it('creates a changelog record, maps "Done" to "published"', async () => {
-    const { upsertChangelog } = await import('@lib/hubspot-client');
+    const { upsertContent } = await import('@lib/hubspot-client');
     const doneIssue: LinearWebhookPayload = {
       ...baseIssue,
       data: { ...baseIssue.data, state: { id: 'st-done', name: 'Done', type: 'completed' } },
@@ -159,7 +162,7 @@ describe('upsertChangelog', () => {
     mockSearchResponse([]);
     mockMutationResponse({ id: 'hs-cl-1' });
 
-    const result = await upsertChangelog(doneIssue, TEST_PORTAL_ID);
+    const result = await upsertContent(doneIssue, TEST_PORTAL_ID, 'changelog');
 
     expect(result.action).toBe('created');
     const body = JSON.parse(mockFetch.mock.calls[1][1].body);

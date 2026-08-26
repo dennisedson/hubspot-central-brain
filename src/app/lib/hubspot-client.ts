@@ -83,57 +83,35 @@ export async function archiveContentByLinearId(
     return null;
   }
 
-  await hsUpdate(objectTypeId, existingId, { hs_pipeline_stage: config.content.stageIds.archived });
+  await hsUpdate(objectTypeId, existingId, { hs_pipeline_stage: config.content.pipelines.content.stageIds.archived });
   return { id: existingId, action: 'updated' };
 }
 
 export async function upsertContent(
   payload: LinearWebhookPayload,
   portalId: number,
+  pipelineKey: 'content' | 'changelog' = 'content',
 ): Promise<UpsertResult> {
   const { data } = payload;
   const config = getPortalConfig(portalId);
-  const stageName = LINEAR_STATE_TO_CONTENT_STAGE[data.state.name] ?? 'idea';
-  const stageId = config.content.stageIds[stageName] ?? stageName;
+  const stateMap = pipelineKey === 'changelog' ? LINEAR_STATE_TO_CHANGELOG_STAGE : LINEAR_STATE_TO_CONTENT_STAGE;
+  const stageName = stateMap[data.state.name] ?? (pipelineKey === 'changelog' ? 'identified' : 'idea');
+  const pipelineConfig = config.content.pipelines[pipelineKey];
+  const stageId = pipelineConfig.stageIds[stageName] ?? stageName;
   const objectTypeId = config.content.objectTypeId;
 
   const properties: Record<string, string> = {
     title: data.title,
     linear_issue_id: data.id,
     linear_issue_url: data.url,
-    hs_pipeline: config.content.pipelineId,
+    hs_pipeline: pipelineConfig.pipelineId,
     hs_pipeline_stage: stageId,
+    content_type: pipelineKey === 'changelog' ? 'changelog' : '',
     ...(data.description ? { notes: data.description } : {}),
   };
 
-  const existingId = await findByLinearId(objectTypeId, data.id);
-  if (existingId) {
-    await hsUpdate(objectTypeId, existingId, properties);
-    return { id: existingId, action: 'updated' };
-  }
-
-  const created = await hsCreate(objectTypeId, properties);
-  return { id: created.id, action: 'created' };
-}
-
-export async function upsertChangelog(
-  payload: LinearWebhookPayload,
-  portalId: number,
-): Promise<UpsertResult> {
-  const { data } = payload;
-  const config = getPortalConfig(portalId);
-  const stageName = LINEAR_STATE_TO_CHANGELOG_STAGE[data.state.name] ?? 'identified';
-  const stageId = config.changelog.stageIds[stageName] ?? stageName;
-  const objectTypeId = config.changelog.objectTypeId;
-
-  const properties: Record<string, string> = {
-    title: data.title,
-    linear_issue_id: data.id,
-    linear_issue_url: data.url,
-    hs_pipeline: config.changelog.pipelineId,
-    hs_pipeline_stage: stageId,
-    ...(data.description ? { notes: data.description } : {}),
-  };
+  // remove content_type if empty to avoid overwriting user-set value
+  if (!properties.content_type) delete properties.content_type;
 
   const existingId = await findByLinearId(objectTypeId, data.id);
   if (existingId) {

@@ -8,13 +8,16 @@ const TEST_PORTAL_CONFIG = {
   asanaSections: { content: 'section-blog', changelog: 'section-changelog' },
   content: {
     objectTypeId: '2-content',
-    pipelineId: 'pipe-1',
-    stageIds: { idea: 'idea', outline: 'outline', drafting: 'drafting', editing: 'editing', review: 'review', published: 'published', archived: 'archived' },
-  },
-  changelog: {
-    objectTypeId: '2-changelog',
-    pipelineId: 'pipe-2',
-    stageIds: { identified: 'identified', drafting: 'drafting', reviewing: 'reviewing', published: 'published' },
+    pipelines: {
+      content: {
+        pipelineId: 'pipe-1',
+        stageIds: { idea: 'idea', outline: 'outline', drafting: 'drafting', editing: 'editing', review: 'review', published: 'published', archived: 'archived' },
+      },
+      changelog: {
+        pipelineId: 'pipe-2',
+        stageIds: { identified: 'identified', drafting: 'drafting', reviewing: 'reviewing', published: 'published' },
+      },
+    },
   },
   video: { objectTypeId: '2-video', pipelineId: 'pipe-3', stageIds: { draft: 'draft', scheduled: 'scheduled', public: 'public' } },
 };

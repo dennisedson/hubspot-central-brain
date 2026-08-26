@@ -44,7 +44,7 @@ export async function main(context: SyncToLinearContext): Promise<{ statusCode: 
   const { linearIssueId, hubspotStage, objectType, linearTeamId } = context.body.inputFields;
 
   const config = getPortalConfig(context.accountId);
-  const stageIds = objectType === 'changelog' ? config.changelog.stageIds : config.content.stageIds;
+  const stageIds = config.content.pipelines[objectType as 'content' | 'changelog'].stageIds;
   const stageName = Object.entries(stageIds).find(([, id]) => id === hubspotStage)?.[0];
 
   const stageMap = objectType === 'changelog'

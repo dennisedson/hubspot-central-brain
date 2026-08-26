@@ -5,13 +5,16 @@ let main: (ctx: any) => Promise<any>;
 const TEST_PORTAL_CONFIG = {
   content: {
     objectTypeId: '2-content',
-    pipelineId: 'pipe-1',
-    stageIds: { idea: 'stage-idea', outline: 'stage-outline', drafting: 'stage-drafting', editing: 'stage-editing', review: 'stage-review', published: 'stage-published', archived: 'stage-archived' },
-  },
-  changelog: {
-    objectTypeId: '2-changelog',
-    pipelineId: 'pipe-2',
-    stageIds: { identified: 'stage-identified', drafting: 'stage-drafting-cl', reviewing: 'stage-reviewing', published: 'stage-published-cl' },
+    pipelines: {
+      content: {
+        pipelineId: 'pipe-1',
+        stageIds: { idea: 'stage-idea', outline: 'stage-outline', drafting: 'stage-drafting', editing: 'stage-editing', review: 'stage-review', published: 'stage-published', archived: 'stage-archived' },
+      },
+      changelog: {
+        pipelineId: 'pipe-2',
+        stageIds: { identified: 'stage-identified', drafting: 'stage-drafting-cl', reviewing: 'stage-reviewing', published: 'stage-published-cl' },
+      },
+    },
   },
   video: { objectTypeId: '2-video', pipelineId: 'pipe-3', stageIds: { draft: 'draft', scheduled: 'scheduled', public: 'public' } },
   appConfig: { objectTypeId: '2-app' },
@@ -24,7 +27,6 @@ beforeEach(async () => {
   vi.doMock('@lib/hubspot-client', () => ({
     getCurrentStage: vi.fn().mockResolvedValue(null),
     upsertContent: vi.fn().mockResolvedValue({ id: 'hs-1', action: 'created' }),
-    upsertChangelog: vi.fn().mockResolvedValue({ id: 'hs-2', action: 'created' }),
     archiveContentByLinearId: vi.fn().mockResolvedValue({ id: 'hs-arch', action: 'updated' }),
     readAppSettings: vi.fn().mockResolvedValue({ linearTeamId: '', assigneeFilter: 'all', linearAssigneeId: '' }),
   }));
@@ -76,8 +78,8 @@ describe('LinearWebhook.main', () => {
     expect(mockUpsert).toHaveBeenCalledOnce();
   });
 
-  it('calls upsertChangelog for issues with the "changelog" label', async () => {
-    const { upsertChangelog: mockUpsert } = await import('@lib/hubspot-client');
+  it('calls upsertContent with pipelineKey "changelog" for issues with the "changelog" label', async () => {
+    const { upsertContent: mockUpsert } = await import('@lib/hubspot-client');
     const ctx = {
       ...baseCtx,
       body: {
@@ -86,7 +88,7 @@ describe('LinearWebhook.main', () => {
       },
     };
     await main(ctx);
-    expect(mockUpsert).toHaveBeenCalledOnce();
+    expect(mockUpsert).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'changelog');
   });
 
   it('returns 200 and ok:true on success', async () => {
@@ -105,7 +107,7 @@ describe('LinearWebhook.main', () => {
   });
 
   it('skips overwrite when the current HubSpot stage shares the incoming Linear state bucket (editing/drafting)', async () => {
-    const { getCurrentStage: mockGetStage, upsertContent: mockUpsertContent, upsertChangelog: mockUpsertChangelog } =
+    const { getCurrentStage: mockGetStage, upsertContent: mockUpsertContent } =
       await import('@lib/hubspot-client');
     // Incoming Linear state is 'In Progress'; the record is already in the content 'editing' stage,
     // which maps forward to 'In Progress' too. This must NOT be overwritten to 'drafting'.
@@ -122,7 +124,6 @@ describe('LinearWebhook.main', () => {
     expect(JSON.parse(result.body).skipped).toBe(true);
     expect(JSON.parse(result.body).reason).toBe('stage already matches');
     expect(mockUpsertContent).not.toHaveBeenCalled();
-    expect(mockUpsertChangelog).not.toHaveBeenCalled();
   });
 
   it('archives the linked content record on a Linear "remove" action', async () => {

@@ -21,14 +21,25 @@ async function findExistingPipeline(objectTypeId: string, label: string): Promis
   return response.results.find((p: any) => p.label === label) ?? null; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
-function printPortalConfig(label: string, objectTypeId: string, pipeline: any): void { // eslint-disable-line @typescript-eslint/no-explicit-any
-  console.log(`\n  Paste this into src/app/lib/portal-config.ts → ${label}:`);
-  console.log(`    objectTypeId: '${objectTypeId}',`);
-  console.log(`    pipelineId: '${pipeline.id}',`);
-  console.log(`    stageIds: {`);
+function printPipelineBlock(name: string, pipeline: any): void { // eslint-disable-line @typescript-eslint/no-explicit-any
+  console.log(`      ${name}: {`);
+  console.log(`        pipelineId: '${pipeline.id}',`);
+  console.log(`        stageIds: {`);
   pipeline.stages.forEach((s: { label: string; id: string }) =>
-    console.log(`      ${s.label.toLowerCase()}: '${s.id}',`),
+    console.log(`          ${s.label.toLowerCase()}: '${s.id}',`),
   );
+  console.log(`        },`);
+  console.log(`      },`);
+}
+
+function printPortalConfig(objectTypeId: string, contentPipeline: any, changelogPipeline: any): void { // eslint-disable-line @typescript-eslint/no-explicit-any
+  console.log(`\n  Paste this into src/app/lib/portal-config.ts → content:`);
+  console.log(`    content: {`);
+  console.log(`      objectTypeId: '${objectTypeId}',`);
+  console.log(`      pipelines: {`);
+  printPipelineBlock('content', contentPipeline);
+  printPipelineBlock('changelog', changelogPipeline);
+  console.log(`      },`);
   console.log(`    },`);
 }
 
@@ -89,11 +100,11 @@ async function provisionContent(): Promise<void> {
     console.log('  Created. objectTypeId:', objectTypeId);
   }
 
-  let pipeline = await findExistingPipeline(objectTypeId, 'Content Lifecycle');
-  if (pipeline) {
-    console.log('  Pipeline already exists. pipelineId:', pipeline.id);
+  let contentPipeline = await findExistingPipeline(objectTypeId, 'Content Lifecycle');
+  if (contentPipeline) {
+    console.log('  Content Lifecycle pipeline already exists. pipelineId:', contentPipeline.id);
   } else {
-    pipeline = await client.crm.pipelines.pipelinesApi.create(objectTypeId, {
+    contentPipeline = await client.crm.pipelines.pipelinesApi.create(objectTypeId, {
       label: 'Content Lifecycle',
       displayOrder: 0,
       stages: [
@@ -106,84 +117,16 @@ async function provisionContent(): Promise<void> {
         { label: 'Archived', displayOrder: 6, metadata: { probability: '0.0' } },
       ],
     } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
-    console.log('  Created pipeline. pipelineId:', pipeline.id);
+    console.log('  Created Content Lifecycle pipeline. pipelineId:', contentPipeline.id);
   }
 
-  printPortalConfig('content', objectTypeId, pipeline);
-}
-
-async function provisionChangelog(): Promise<void> {
-  console.log('\n--- Changelog Entry custom object ---');
-
-  let objectTypeId = await findExistingSchema('changelog_entry', 'Changelog Entry');
-  if (objectTypeId) {
-    console.log('  Already exists. objectTypeId:', objectTypeId);
+  let changelogPipeline = await findExistingPipeline(objectTypeId, 'Changelog Lifecycle');
+  if (changelogPipeline) {
+    console.log('  Changelog Lifecycle pipeline already exists. pipelineId:', changelogPipeline.id);
   } else {
-    const schema = await client.crm.schemas.coreApi.create({
-      name: 'changelog_entry',
-      labels: { singular: 'Changelog Entry', plural: 'Changelog Entries' },
-      primaryDisplayProperty: 'title',
-      requiredProperties: [],
-      properties: [
-        { name: 'title', label: 'Title', type: 'string', fieldType: 'text', groupName: 'changelog_entryinformation' },
-        { name: 'product_area', label: 'Product Area', type: 'enumeration', fieldType: 'select', groupName: 'changelog_entryinformation',
-          options: [
-            { label: 'CRM', value: 'crm', displayOrder: 0, hidden: false },
-            { label: 'Marketing', value: 'marketing', displayOrder: 1, hidden: false },
-            { label: 'Sales', value: 'sales', displayOrder: 2, hidden: false },
-            { label: 'Service', value: 'service', displayOrder: 3, hidden: false },
-            { label: 'Operations', value: 'operations', displayOrder: 4, hidden: false },
-            { label: 'Developer Platform', value: 'developer_platform', displayOrder: 5, hidden: false },
-          ],
-        },
-        { name: 'change_type', label: 'Change Type', type: 'enumeration', fieldType: 'select', groupName: 'changelog_entryinformation',
-          options: [
-            { label: 'New Feature', value: 'new_feature', displayOrder: 0, hidden: false },
-            { label: 'Improvement', value: 'improvement', displayOrder: 1, hidden: false },
-            { label: 'Deprecation', value: 'deprecation', displayOrder: 2, hidden: false },
-            { label: 'Bug Fix', value: 'bug_fix', displayOrder: 3, hidden: false },
-            { label: 'Breaking Change', value: 'breaking_change', displayOrder: 4, hidden: false },
-          ],
-        },
-        { name: 'linear_issue_url', label: 'Linear Issue URL', type: 'string', fieldType: 'text', groupName: 'changelog_entryinformation' },
-        { name: 'linear_issue_id', label: 'Linear Issue ID', type: 'string', fieldType: 'text', groupName: 'changelog_entryinformation' },
-        { name: 'asana_task_url', label: 'Asana Task URL', type: 'string', fieldType: 'text', groupName: 'changelog_entryinformation' },
-        { name: 'published_url', label: 'Published URL', type: 'string', fieldType: 'text', groupName: 'changelog_entryinformation' },
-        { name: 'release_date', label: 'Release Date', type: 'date', fieldType: 'date', groupName: 'changelog_entryinformation' },
-        { name: 'publish_date', label: 'Publish Date', type: 'date', fieldType: 'date', groupName: 'changelog_entryinformation' },
-        { name: 'developer_impact', label: 'Developer Impact', type: 'enumeration', fieldType: 'select', groupName: 'changelog_entryinformation',
-          options: [
-            { label: 'Breaking', value: 'breaking', displayOrder: 0, hidden: false },
-            { label: 'Action Required', value: 'action_required', displayOrder: 1, hidden: false },
-            { label: 'Informational', value: 'informational', displayOrder: 2, hidden: false },
-          ],
-        },
-        { name: 'notes', label: 'Notes', type: 'string', fieldType: 'textarea', groupName: 'changelog_entryinformation' },
-        { name: 'topic_tags', label: 'Topic Tags', type: 'enumeration', fieldType: 'checkbox', groupName: 'changelog_entryinformation',
-          options: [
-            { label: 'API', value: 'api', displayOrder: 0, hidden: false },
-            { label: 'CRM', value: 'crm', displayOrder: 1, hidden: false },
-            { label: 'Workflows', value: 'workflows', displayOrder: 2, hidden: false },
-            { label: 'UI Extensions', value: 'ui_extensions', displayOrder: 3, hidden: false },
-            { label: 'Integrations', value: 'integrations', displayOrder: 4, hidden: false },
-            { label: 'Developer Platform', value: 'developer_platform', displayOrder: 5, hidden: false },
-          ],
-        },
-        { name: 'enterpret_theme', label: 'Enterpret Theme', type: 'string', fieldType: 'text', groupName: 'changelog_entryinformation' },
-      ],
-      associatedObjects: ['CONTACT', 'COMPANY'],
-    } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
-    objectTypeId = schema.objectTypeId as string;
-    console.log('  Created. objectTypeId:', objectTypeId);
-  }
-
-  let pipeline = await findExistingPipeline(objectTypeId, 'Changelog Lifecycle');
-  if (pipeline) {
-    console.log('  Pipeline already exists. pipelineId:', pipeline.id);
-  } else {
-    pipeline = await client.crm.pipelines.pipelinesApi.create(objectTypeId, {
+    changelogPipeline = await client.crm.pipelines.pipelinesApi.create(objectTypeId, {
       label: 'Changelog Lifecycle',
-      displayOrder: 0,
+      displayOrder: 1,
       stages: [
         { label: 'Identified', displayOrder: 0, metadata: { probability: '0.2' } },
         { label: 'Drafting', displayOrder: 1, metadata: { probability: '0.5' } },
@@ -191,10 +134,10 @@ async function provisionChangelog(): Promise<void> {
         { label: 'Published', displayOrder: 3, metadata: { probability: '1.0' } },
       ],
     } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
-    console.log('  Created pipeline. pipelineId:', pipeline.id);
+    console.log('  Created Changelog Lifecycle pipeline. pipelineId:', changelogPipeline.id);
   }
 
-  printPortalConfig('changelog', objectTypeId, pipeline);
+  printPortalConfig(objectTypeId, contentPipeline, changelogPipeline);
 }
 
 async function provisionVideo(): Promise<void> {
@@ -266,7 +209,6 @@ async function main() {
   try {
     await listAllSchemas();
     await provisionContent();
-    await provisionChangelog();
     await provisionVideo();
     console.log('\n✓ Provisioning complete. Update portal-config.ts with the values above.');
   } catch (err: unknown) {

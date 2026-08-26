@@ -1,7 +1,6 @@
 import {
   getCurrentStage,
   upsertContent,
-  upsertChangelog,
   archiveContentByLinearId,
   readAppSettings,
 } from '../lib/hubspot-client';
@@ -88,11 +87,12 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     // many-to-one case (e.g. both 'editing' and 'drafting' map to 'In Progress'), so an
     // inbound webhook triggered by our own outbound sync does not overwrite the user's stage.
     const portalConfig = getPortalConfig(context.accountId);
-    const config = isChangelog ? portalConfig.changelog : portalConfig.content;
+    const pipelineKey: 'content' | 'changelog' = isChangelog ? 'changelog' : 'content';
+    const pipelineConfig = portalConfig.content.pipelines[pipelineKey];
     const forwardMap = isChangelog ? CHANGELOG_STAGE_TO_LINEAR_STATE : CONTENT_STAGE_TO_LINEAR_STATE;
-    const currentStageId = await getCurrentStage(config.objectTypeId, payload.data.id);
+    const currentStageId = await getCurrentStage(portalConfig.content.objectTypeId, payload.data.id);
     if (currentStageId) {
-      const stageIds = config.stageIds as Record<string, string>;
+      const stageIds = pipelineConfig.stageIds;
       const currentStageName = Object.keys(stageIds).find(name => stageIds[name] === currentStageId);
       if (currentStageName && (forwardMap as Record<string, string>)[currentStageName] === payload.data.state.name) {
         console.log(`Skipping echo for Linear ${payload.data.id}: stage already matches`);
@@ -100,9 +100,7 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
       }
     }
 
-    const result = isChangelog
-      ? await upsertChangelog(payload, context.accountId)
-      : await upsertContent(payload, context.accountId);
+    const result = await upsertContent(payload, context.accountId, pipelineKey);
 
     console.log(`${result.action} ${isChangelog ? 'changelog' : 'content'} ${result.id} for Linear ${payload.data.id}`);
     return { statusCode: 200, body: JSON.stringify({ ok: true, ...result }) };

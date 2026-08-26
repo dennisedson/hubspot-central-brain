@@ -16,13 +16,16 @@ beforeEach(async () => {
       appConfig: { objectTypeId: '2-test' },
       content: {
         objectTypeId: '2-content',
-        pipelineId: 'pipe-1',
-        stageIds: { idea: 'idea', outline: 'outline', drafting: 'drafting', editing: 'editing', review: 'review', published: 'published', archived: 'archived' },
-      },
-      changelog: {
-        objectTypeId: '2-changelog',
-        pipelineId: 'pipe-2',
-        stageIds: { identified: 'identified', drafting: 'drafting', reviewing: 'reviewing', published: 'published' },
+        pipelines: {
+          content: {
+            pipelineId: 'pipe-1',
+            stageIds: { idea: 'idea', outline: 'outline', drafting: 'drafting', editing: 'editing', review: 'review', published: 'published', archived: 'archived' },
+          },
+          changelog: {
+            pipelineId: 'pipe-2',
+            stageIds: { identified: 'identified', drafting: 'drafting', reviewing: 'reviewing', published: 'published' },
+          },
+        },
       },
       video: {
         objectTypeId: '2-video',
