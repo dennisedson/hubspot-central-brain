@@ -4,6 +4,7 @@ name: Deploy › Dev
 on:
   push:
     branches: [develop]
+  workflow_dispatch:
 
 concurrency:
   group: deploy-dev
