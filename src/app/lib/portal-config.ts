@@ -59,8 +59,8 @@ const CONFIGS: Record<number, PortalConfig> = {
     appConfig: { objectTypeId: '2-68071489' },
     asanaProjectGid: '1217881318437204', // Dennis-Staging (test project)
     asanaSections: {
-      content: '',    // fill in after running provision:asana-test-project
-      changelog: '',  // fill in after running provision:asana-test-project
+      content: '1217881758656068',   // Developer Blog
+      changelog: '1217881620715042', // Developer Changelog
     },
     content: {
       objectTypeId: '2-67505887',
