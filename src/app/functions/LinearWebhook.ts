@@ -50,6 +50,13 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
   const isChangelog = labels.includes(LINEAR_CHANGELOG_LABEL);
 
   try {
+    const settings = await readAppSettings(context.accountId);
+
+    // Filter to configured team if set — applies to all action types including removes.
+    if (settings.linearTeamId && payload.data.team.id !== settings.linearTeamId) {
+      return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'not configured team' }) };
+    }
+
     // Linear issue deletion: archive the linked HubSpot record rather than upserting.
     if (payload.action === 'remove') {
       if (isChangelog) {
@@ -67,8 +74,7 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
       return { statusCode: 200, body: JSON.stringify({ ok: true, action: 'archived', id: archived.id }) };
     }
 
-    // Apply assignee filter from saved settings before doing any further work.
-    const settings = await readAppSettings(context.accountId);
+    // Apply assignee filter.
     const assigneeId = payload.data.assignee?.id;
     if (settings.assigneeFilter === 'assigned' && !assigneeId) {
       return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'no assignee' }) };
