@@ -7,7 +7,7 @@
 
 *   **Hook & Demo (0:00 - 1:00):** "What if every time you move a content piece to 'Published' in HubSpot, the linked Linear issue automatically moves to 'Done'? That's exactly what we're building. Watch: I trigger a HubSpot workflow, and in seconds the Linear board updates itself — no manual work. This is the HubSpot-to-Linear sync direction, the missing half of a fully bidirectional integration."
 
-*   **The Architecture (1:00 - 3:00):** Three pieces work together. First, a HubSpot Workflow Action definition — a JSON config that tells HubSpot what fields to collect and where to POST them. Second, a serverless function (`SyncToLinear.ts`) that receives that POST, translates the HubSpot pipeline stage to a Linear state name using our mapping table, resolves the state ID from the Linear GraphQL API, and calls `issueUpdate`. Third, the function config JSON that registers the function with the HubSpot project runtime. The stage mapping is the heart of it: `CONTENT_STAGE_TO_LINEAR_STATE` and `CHANGELOG_STAGE_TO_LINEAR_STATE` translate internal HubSpot stage names like `'published'` to Linear state names like `'Done'`.
+*   **The Architecture (1:00 - 3:00):** Three pieces work together. First, a HubSpot Workflow Action definition — a JSON config that tells HubSpot what fields to collect and where to POST them. Second, a serverless function (`SyncToLinear.ts`) that receives that POST, translates the HubSpot pipeline stage to a Linear state name using our mapping table, resolves the state ID from the Linear GraphQL API, and calls `issueUpdate`. Third, the function config JSON that registers the function with the HubSpot project runtime. The stage mapping is the heart of it: `CONTENT_STAGE_TO_LINEAR_STATE` and `CHANGELOG_STAGE_TO_LINEAR_STATE` translate stage names like `'published'` to Linear state names like `'Done'`. Important caveat: HubSpot's `hs_pipeline_stage` property sends a numeric stage **ID** (e.g. `"1418660002"`), not a name. The function must reverse-lookup the ID against the portal config's `stageIds` map to get the name before hitting the mapping table.
 
 *   **Step-by-Step Implementation (3:00 - 8:00):**
     *   **Step 1 — The test file** (`src/app/__tests__/sync-to-linear.test.ts`): Show the `beforeEach` pattern with `vi.resetModules()` and `vi.doMock()` to isolate each test's import. Explain why we use `import('../functions/SyncToLinear')` dynamically — so the mock is in place before the module loads. Run `npm test -- sync-to-linear` and watch it fail with "module not found."
@@ -19,13 +19,19 @@
 
 **💻 Screen-Ready Code Snippets:**
 
-**The stage-map lookup (the critical cast):**
+**The stage-map lookup — with ID reverse-lookup (required):**
 ```typescript
+// hs_pipeline_stage sends a numeric ID like "1418660002", not a name like "editing"
+// Reverse-lookup the ID to get the name, then hit the mapping table
+const config = getPortalConfig(context.accountId);
+const stageIds = objectType === 'changelog' ? config.changelog.stageIds : config.content.stageIds;
+const stageName = Object.entries(stageIds).find(([, id]) => id === hubspotStage)?.[0];
+
 const stageMap = objectType === 'changelog'
   ? CHANGELOG_STAGE_TO_LINEAR_STATE
   : CONTENT_STAGE_TO_LINEAR_STATE;
 
-const targetStateName = (stageMap as Record<string, string>)[hubspotStage];
+const targetStateName = stageName ? (stageMap as Record<string, string>)[stageName] : undefined;
 if (!targetStateName) {
   return { statusCode: 400, body: JSON.stringify({ error: `Unknown stage: "${hubspotStage}"` }) };
 }
@@ -38,8 +44,11 @@ export async function main(context) {
   if (!apiKey) return { statusCode: 500, body: JSON.stringify({ error: 'Server misconfiguration' }) };
 
   const { linearIssueId, hubspotStage, objectType, linearTeamId } = context.body.inputFields;
+  const config = getPortalConfig(context.accountId);
+  const stageIds = objectType === 'changelog' ? config.changelog.stageIds : config.content.stageIds;
+  const stageName = Object.entries(stageIds).find(([, id]) => id === hubspotStage)?.[0];
   const stageMap = objectType === 'changelog' ? CHANGELOG_STAGE_TO_LINEAR_STATE : CONTENT_STAGE_TO_LINEAR_STATE;
-  const targetStateName = (stageMap as Record<string, string>)[hubspotStage];
+  const targetStateName = stageName ? (stageMap as Record<string, string>)[stageName] : undefined;
   if (!targetStateName) return { statusCode: 400, body: JSON.stringify({ error: `Unknown stage: "${hubspotStage}"` }) };
 
   const stateId = await findStateIdByName(apiKey, linearTeamId, targetStateName);

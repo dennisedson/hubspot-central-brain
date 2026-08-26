@@ -7,11 +7,11 @@
 
 *   **Hook & Demo (0:00 - 1:00):** "We already have Linear pushing changes into HubSpot. Now we close the loop — move a Content Piece to a new pipeline stage in HubSpot, and watch the linked Linear issue update automatically. Here's the live demo."
 
-*   **The Architecture (1:00 - 3:00):** A custom workflow action is a registered extension point in your app that appears in HubSpot's workflow editor. When a Content Piece stage changes, the workflow calls your public endpoint function with input fields you define. The function maps the HubSpot stage name to a Linear state name, looks up the state ID via Linear's GraphQL API, and fires an `issueUpdate` mutation.
+*   **The Architecture (1:00 - 3:00):** A custom workflow action is a registered extension point in your app that appears in HubSpot's workflow editor. When a Content Piece stage changes, the workflow calls your public endpoint function with input fields you define. The function receives the HubSpot pipeline stage **ID** (a numeric string like `"1418660002"`), reverse-looks it up against the portal config's `stageIds` map to get the stage name, maps that name to a Linear state name, looks up the state ID via Linear's GraphQL API, and fires an `issueUpdate` mutation.
 
 *   **Step-by-Step Implementation (3:00 - 8:00):**
     1.  **Register the custom action** — `src/app/workflow-actions/sync-to-linear-hsmeta.json`. The `actionUrl` is the public endpoint URL (injected via `${SYNC_TO_LINEAR_URL}` at deploy time). Define `inputFields` for `sharedSecret`, `linearIssueId`, `hubspotStage`, `objectType`, and `linearTeamId`, plus `outputFields` for `syncStatus` and `linearStateName`.
-    2.  **The serverless function** — `SyncToLinear.ts`. Verify the shared secret first (it's the only auth possible since headers are stripped). Map `hubspotStage` → Linear state name via `CONTENT_STAGE_TO_LINEAR_STATE`. Call `findStateIdByName` then `updateLinearIssueState`.
+    2.  **The serverless function** — `SyncToLinear.ts`. Verify the shared secret first (it's the only auth possible since headers are stripped). The `hubspotStage` input is a numeric stage **ID** (e.g. `"1418660002"`), not a name — reverse-lookup the ID against `portal-config.ts`'s `stageIds` map using `Object.entries(stageIds).find(([, id]) => id === hubspotStage)?.[0]`, then use that name as the key into `CONTENT_STAGE_TO_LINEAR_STATE`. Call `findStateIdByName` then `updateLinearIssueState`.
     3.  **Create the workflow in HubSpot** — Object-based workflow on Content Pieces. Enrollment trigger: `hs_pipeline_stage is known`. Re-enrollment: enabled, same condition. Add the "Sync Status to Linear" action. Configure input fields: `sharedSecret` as a static value, `linearIssueId` and `hubspotStage` as object properties, `objectType` and `linearTeamId` as static values.
     4.  **Enrollment settings** — When turning the workflow on, choose "No" for retroactive enrollment. You don't want to fire the action on all existing records (many won't have a valid `linear_issue_id`).
 
@@ -56,11 +56,16 @@
 // SyncToLinear.ts — core logic
 const { linearIssueId, hubspotStage, objectType, linearTeamId } = context.body.inputFields;
 
+// hs_pipeline_stage sends a numeric ID — reverse-lookup to get the name
+const config = getPortalConfig(context.accountId);
+const stageIds = objectType === 'changelog' ? config.changelog.stageIds : config.content.stageIds;
+const stageName = Object.entries(stageIds).find(([, id]) => id === hubspotStage)?.[0];
+
 const stageMap = objectType === 'changelog'
   ? CHANGELOG_STAGE_TO_LINEAR_STATE
   : CONTENT_STAGE_TO_LINEAR_STATE;
 
-const targetStateName = (stageMap as Record<string, string>)[hubspotStage];
+const targetStateName = stageName ? (stageMap as Record<string, string>)[stageName] : undefined;
 if (!targetStateName) {
   return { statusCode: 400, body: JSON.stringify({ error: `Unknown stage: "${hubspotStage}"` }) };
 }

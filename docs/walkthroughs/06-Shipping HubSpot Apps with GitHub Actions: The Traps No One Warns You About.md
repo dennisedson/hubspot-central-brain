@@ -45,8 +45,12 @@ jobs:
         run: npm run build
 
       # Trap 3 fix: substitute placeholder URLs before HubSpot sees them
+      # URL format: https://{portalId}.hs-sites.com/hs/serverless/{functionPath}
+      # WARNING: actionUrl is write-once on first registration. If you deploy with
+      # the wrong URL here, subsequent deploys will NOT fix it — you must change the
+      # component UID to force a fresh registration.
       - name: Set sync function URL
-        run: sed -i 's|${SYNC_TO_LINEAR_URL}|https://api.hubspot.com/integrations/v1/APP_ID/serverless/sync-to-linear|g' src/app/workflow-actions/sync-to-linear-hsmeta.json
+        run: sed -i 's|${SYNC_TO_LINEAR_URL}|https://51869810.hs-sites.com/hs/serverless/sync-to-linear|g' src/app/workflow-actions/sync-to-linear-hsmeta.json
 
       - name: Install HubSpot CLI
         uses: HubSpot/hubspot-project-actions/install-hubspot-cli@v1.1.0
