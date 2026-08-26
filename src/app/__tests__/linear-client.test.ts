@@ -13,7 +13,7 @@ const STATES = [
 function mockStatesResponse() {
   mockFetch.mockResolvedValueOnce({
     ok: true,
-    json: async () => ({ data: { team: { states: { nodes: STATES } } } }),
+    json: async () => ({ data: { teams: { nodes: [{ states: { nodes: STATES } }] } } }),
   });
 }
 

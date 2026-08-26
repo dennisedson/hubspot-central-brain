@@ -11,6 +11,28 @@ beforeEach(async () => {
     updateLinearIssueState: vi.fn().mockResolvedValue(undefined),
   }));
 
+  vi.doMock('@lib/portal-config', () => ({
+    getPortalConfig: vi.fn().mockReturnValue({
+      appConfig: { objectTypeId: '2-test' },
+      content: {
+        objectTypeId: '2-content',
+        pipelineId: 'pipe-1',
+        stageIds: { idea: 'idea', outline: 'outline', drafting: 'drafting', editing: 'editing', review: 'review', published: 'published', archived: 'archived' },
+      },
+      changelog: {
+        objectTypeId: '2-changelog',
+        pipelineId: 'pipe-2',
+        stageIds: { identified: 'identified', drafting: 'drafting', reviewing: 'reviewing', published: 'published' },
+      },
+      video: {
+        objectTypeId: '2-video',
+        pipelineId: 'pipe-3',
+        stageIds: { draft: 'draft', scheduled: 'scheduled', public: 'public' },
+      },
+    }),
+    DEFAULT_APP_SETTINGS: { linearTeamId: '', assigneeFilter: 'all', linearAssigneeId: '' },
+  }));
+
   process.env.LINEAR_API_KEY = 'lin_test_key';
   process.env.SYNC_SHARED_SECRET = 'top-secret';
 

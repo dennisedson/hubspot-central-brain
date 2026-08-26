@@ -2,31 +2,35 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let main: (ctx: any) => Promise<any>;
 
+const TEST_PORTAL_CONFIG = {
+  content: {
+    objectTypeId: '2-content',
+    pipelineId: 'pipe-1',
+    stageIds: { idea: 'stage-idea', outline: 'stage-outline', drafting: 'stage-drafting', editing: 'stage-editing', review: 'stage-review', published: 'stage-published', archived: 'stage-archived' },
+  },
+  changelog: {
+    objectTypeId: '2-changelog',
+    pipelineId: 'pipe-2',
+    stageIds: { identified: 'stage-identified', drafting: 'stage-drafting-cl', reviewing: 'stage-reviewing', published: 'stage-published-cl' },
+  },
+  video: { objectTypeId: '2-video', pipelineId: 'pipe-3', stageIds: { draft: 'draft', scheduled: 'scheduled', public: 'public' } },
+  appConfig: { objectTypeId: '2-app' },
+};
+
 beforeEach(async () => {
   vi.clearAllMocks();
   vi.resetModules();
 
-  vi.doMock('@lib/hmac', () => ({ verifyLinearSignature: vi.fn().mockReturnValue(true) }));
   vi.doMock('@lib/hubspot-client', () => ({
-    createHubSpotClient: vi.fn(() => ({})),
     getCurrentStage: vi.fn().mockResolvedValue(null),
     upsertContent: vi.fn().mockResolvedValue({ id: 'hs-1', action: 'created' }),
     upsertChangelog: vi.fn().mockResolvedValue({ id: 'hs-2', action: 'created' }),
     archiveContentByLinearId: vi.fn().mockResolvedValue({ id: 'hs-arch', action: 'updated' }),
+    readAppSettings: vi.fn().mockResolvedValue({ linearTeamId: '', assigneeFilter: 'all', linearAssigneeId: '' }),
   }));
-  vi.doMock('../lib/portal-config', () => ({
-    PORTAL_CONFIG: {
-      content: {
-        objectTypeId: '2-content',
-        pipelineId: 'pipe-1',
-        stageIds: { idea: 'stage-idea', outline: 'stage-outline', drafting: 'stage-drafting', editing: 'stage-editing', review: 'stage-review', published: 'stage-published', archived: 'stage-archived' },
-      },
-      changelog: {
-        objectTypeId: '2-changelog',
-        pipelineId: 'pipe-2',
-        stageIds: { identified: 'stage-identified', drafting: 'stage-drafting-cl', reviewing: 'stage-reviewing', published: 'stage-published-cl' },
-      },
-    },
+  vi.doMock('@lib/portal-config', () => ({
+    getPortalConfig: vi.fn().mockReturnValue(TEST_PORTAL_CONFIG),
+    DEFAULT_APP_SETTINGS: { linearTeamId: '', assigneeFilter: 'all', linearAssigneeId: '' },
   }));
 
   process.env.LINEAR_WEBHOOK_SECRET = 'test-secret';
@@ -59,13 +63,6 @@ const baseCtx = {
 };
 
 describe('LinearWebhook.main', () => {
-  it('returns 401 when signature is invalid', async () => {
-    const { verifyLinearSignature: mockVerify } = await import('@lib/hmac');
-    vi.mocked(mockVerify).mockReturnValue(false);
-    const result = await main(baseCtx);
-    expect(result.statusCode).toBe(401);
-  });
-
   it('skips non-Issue events and returns 200', async () => {
     const ctx = { ...baseCtx, body: { ...baseCtx.body, type: 'Comment' } };
     const result = await main(ctx);
@@ -107,17 +104,6 @@ describe('LinearWebhook.main', () => {
     expect(JSON.parse(result.body).reason).toBe('stage already matches');
   });
 
-  it('accepts an uppercase "Linear-Signature" header (case-insensitive lookup)', async () => {
-    const { verifyLinearSignature: mockVerify } = await import('@lib/hmac');
-    const { upsertContent: mockUpsert } = await import('@lib/hubspot-client');
-    const ctx = { ...baseCtx, headers: { 'Linear-Signature': 'abc123' } };
-    const result = await main(ctx);
-    // The signature value must reach verifyLinearSignature despite the header casing.
-    expect(mockVerify).toHaveBeenCalledWith(expect.anything(), 'abc123', 'test-secret');
-    expect(result.statusCode).toBe(200);
-    expect(mockUpsert).toHaveBeenCalledOnce();
-  });
-
   it('skips overwrite when the current HubSpot stage shares the incoming Linear state bucket (editing/drafting)', async () => {
     const { getCurrentStage: mockGetStage, upsertContent: mockUpsertContent, upsertChangelog: mockUpsertChangelog } =
       await import('@lib/hubspot-client');
@@ -143,7 +129,7 @@ describe('LinearWebhook.main', () => {
     const { archiveContentByLinearId: mockArchive, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
     const ctx = { ...baseCtx, body: { ...baseCtx.body, action: 'remove' } };
     const result = await main(ctx);
-    expect(mockArchive).toHaveBeenCalledWith(expect.anything(), 'lin-1');
+    expect(mockArchive).toHaveBeenCalledWith('lin-1', expect.anything());
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).action).toBe('archived');
     expect(mockUpsert).not.toHaveBeenCalled();

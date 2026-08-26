@@ -1,20 +1,50 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { findByLinearId, getCurrentStage, upsertContent, upsertChangelog, archiveContentByLinearId } from '@lib/hubspot-client';
-import { PORTAL_CONFIG } from '@lib/portal-config';
 import type { LinearWebhookPayload } from '@lib/types';
 
-const mockSearch = vi.fn();
-const mockUpdate = vi.fn();
-const mockCreate = vi.fn();
+const TEST_PORTAL_ID = 999;
 
-const mockClient = {
-  crm: {
-    objects: {
-      searchApi: { doSearch: mockSearch },
-      basicApi: { update: mockUpdate, create: mockCreate },
-    },
+const TEST_PORTAL_CONFIG = {
+  appConfig: { objectTypeId: '2-app' },
+  content: {
+    objectTypeId: '2-content',
+    pipelineId: 'pipe-content',
+    stageIds: { idea: 'idea', outline: 'outline', drafting: 'drafting', editing: 'editing', review: 'review', published: 'published', archived: 'archived' },
   },
-} as any;
+  changelog: {
+    objectTypeId: '2-changelog',
+    pipelineId: 'pipe-changelog',
+    stageIds: { identified: 'identified', drafting: 'drafting', reviewing: 'reviewing', published: 'published' },
+  },
+  video: {
+    objectTypeId: '2-video',
+    pipelineId: 'pipe-video',
+    stageIds: { draft: 'draft', scheduled: 'scheduled', public: 'public' },
+  },
+};
+
+vi.mock('@lib/portal-config', () => ({
+  getPortalConfig: vi.fn().mockReturnValue(TEST_PORTAL_CONFIG),
+  DEFAULT_APP_SETTINGS: { linearTeamId: '', assigneeFilter: 'all', linearAssigneeId: '' },
+}));
+
+const mockFetch = vi.fn();
+vi.stubGlobal('fetch', mockFetch);
+
+function mockSearchResponse(results: unknown[]) {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ results }),
+    text: async () => '',
+  });
+}
+
+function mockMutationResponse(body: unknown = {}) {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => body,
+    text: async () => '',
+  });
+}
 
 const baseIssue: LinearWebhookPayload = {
   action: 'create',
@@ -33,120 +63,136 @@ const baseIssue: LinearWebhookPayload = {
   },
 };
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  process.env.PRIVATE_APP_ACCESS_TOKEN = 'hs-test-token';
+});
 
 describe('findByLinearId', () => {
   it('returns null when no records match', async () => {
-    mockSearch.mockResolvedValue({ results: [] });
-    expect(await findByLinearId(mockClient, '2-content', 'lin-999')).toBeNull();
-    expect(mockSearch).toHaveBeenCalledWith('2-content', expect.objectContaining({
-      filterGroups: [{ filters: [{ propertyName: 'linear_issue_id', operator: 'EQ', value: 'lin-999' }] }],
-    }));
+    const { findByLinearId } = await import('@lib/hubspot-client');
+    mockSearchResponse([]);
+    expect(await findByLinearId('2-content', 'lin-999')).toBeNull();
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('2-content/search'),
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 
   it('returns the id of the first matching record', async () => {
-    mockSearch.mockResolvedValue({ results: [{ id: 'hs-456' }, { id: 'hs-789' }] });
-    expect(await findByLinearId(mockClient, '2-content', 'lin-123')).toBe('hs-456');
+    const { findByLinearId } = await import('@lib/hubspot-client');
+    mockSearchResponse([{ id: 'hs-456' }, { id: 'hs-789' }]);
+    expect(await findByLinearId('2-content', 'lin-123')).toBe('hs-456');
   });
 });
 
 describe('getCurrentStage', () => {
   it('returns null when no record exists', async () => {
-    mockSearch.mockResolvedValue({ results: [] });
-    expect(await getCurrentStage(mockClient, '2-content', 'lin-999')).toBeNull();
+    const { getCurrentStage } = await import('@lib/hubspot-client');
+    mockSearchResponse([]);
+    expect(await getCurrentStage('2-content', 'lin-999')).toBeNull();
   });
 
   it('returns the hs_pipeline_stage value from the matching record', async () => {
-    mockSearch.mockResolvedValue({ results: [{ id: 'hs-1', properties: { hs_pipeline_stage: 'stage-abc' } }] });
-    expect(await getCurrentStage(mockClient, '2-content', 'lin-123')).toBe('stage-abc');
+    const { getCurrentStage } = await import('@lib/hubspot-client');
+    mockSearchResponse([{ id: 'hs-1', properties: { hs_pipeline_stage: 'stage-abc' } }]);
+    expect(await getCurrentStage('2-content', 'lin-123')).toBe('stage-abc');
   });
 
   it('returns null when the record has no stage set', async () => {
-    mockSearch.mockResolvedValue({ results: [{ id: 'hs-1', properties: { hs_pipeline_stage: null } }] });
-    expect(await getCurrentStage(mockClient, '2-content', 'lin-123')).toBeNull();
+    const { getCurrentStage } = await import('@lib/hubspot-client');
+    mockSearchResponse([{ id: 'hs-1', properties: { hs_pipeline_stage: null } }]);
+    expect(await getCurrentStage('2-content', 'lin-123')).toBeNull();
   });
 });
 
 describe('upsertContent', () => {
   it('creates a new record when no existing match, maps "In Progress" to "drafting"', async () => {
-    mockSearch.mockResolvedValue({ results: [] });
-    mockCreate.mockResolvedValue({ id: 'hs-new-1' });
+    const { upsertContent } = await import('@lib/hubspot-client');
+    mockSearchResponse([]);
+    mockMutationResponse({ id: 'hs-new-1' });
 
-    const result = await upsertContent(mockClient, baseIssue);
+    const result = await upsertContent(baseIssue, TEST_PORTAL_ID);
 
-    expect(mockCreate).toHaveBeenCalledOnce();
-    const createCall = mockCreate.mock.calls[0];
-    expect(createCall[1].properties).toMatchObject({
+    const createCall = mockFetch.mock.calls[1];
+    const body = JSON.parse(createCall[1].body);
+    expect(body.properties).toMatchObject({
       title: 'Add API endpoint docs',
       linear_issue_id: 'lin-123',
       linear_issue_url: 'https://linear.app/team/issue/ENG-1',
+      hs_pipeline_stage: 'drafting',
     });
-    // Stage must be an ID (non-empty string) — actual value depends on portal-config
-    expect(typeof createCall[1].properties.hs_pipeline_stage).toBe('string');
     expect(result).toEqual({ id: 'hs-new-1', action: 'created' });
   });
 
   it('maps description to the notes property', async () => {
+    const { upsertContent } = await import('@lib/hubspot-client');
     const issueWithDesc = { ...baseIssue, data: { ...baseIssue.data, description: 'Some notes here' } };
-    mockSearch.mockResolvedValue({ results: [] });
-    mockCreate.mockResolvedValue({ id: 'hs-new-2' });
-    await upsertContent(mockClient, issueWithDesc);
-    expect(mockCreate.mock.calls[0][1].properties.notes).toBe('Some notes here');
+    mockSearchResponse([]);
+    mockMutationResponse({ id: 'hs-new-2' });
+    await upsertContent(issueWithDesc, TEST_PORTAL_ID);
+    const body = JSON.parse(mockFetch.mock.calls[1][1].body);
+    expect(body.properties.notes).toBe('Some notes here');
   });
 
   it('updates when a matching record exists', async () => {
-    mockSearch.mockResolvedValue({ results: [{ id: 'hs-existing' }] });
+    const { upsertContent } = await import('@lib/hubspot-client');
+    mockSearchResponse([{ id: 'hs-existing' }]);
+    mockMutationResponse();
 
-    const result = await upsertContent(mockClient, baseIssue);
+    const result = await upsertContent(baseIssue, TEST_PORTAL_ID);
 
-    expect(mockUpdate).toHaveBeenCalledWith(
-      expect.any(String),
-      'hs-existing',
-      expect.objectContaining({ properties: expect.objectContaining({ title: 'Add API endpoint docs' }) }),
-    );
+    const updateCall = mockFetch.mock.calls[1];
+    expect(updateCall[0]).toContain('hs-existing');
+    expect(updateCall[1].method).toBe('PATCH');
     expect(result).toEqual({ id: 'hs-existing', action: 'updated' });
   });
 });
 
 describe('upsertChangelog', () => {
   it('creates a changelog record, maps "Done" to "published"', async () => {
+    const { upsertChangelog } = await import('@lib/hubspot-client');
     const doneIssue: LinearWebhookPayload = {
       ...baseIssue,
       data: { ...baseIssue.data, state: { id: 'st-done', name: 'Done', type: 'completed' } },
     };
-    mockSearch.mockResolvedValue({ results: [] });
-    mockCreate.mockResolvedValue({ id: 'hs-cl-1' });
+    mockSearchResponse([]);
+    mockMutationResponse({ id: 'hs-cl-1' });
 
-    const result = await upsertChangelog(mockClient, doneIssue);
+    const result = await upsertChangelog(doneIssue, TEST_PORTAL_ID);
 
     expect(result.action).toBe('created');
-    expect(mockCreate).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ properties: expect.objectContaining({ linear_issue_id: 'lin-123' }) }),
-    );
+    const body = JSON.parse(mockFetch.mock.calls[1][1].body);
+    expect(body.properties).toMatchObject({
+      linear_issue_id: 'lin-123',
+      hs_pipeline_stage: 'published',
+    });
   });
 });
 
 describe('archiveContentByLinearId', () => {
   it('moves the matching record to the archived stage and returns action "updated"', async () => {
-    mockSearch.mockResolvedValue({ results: [{ id: 'hs-existing' }] });
+    const { archiveContentByLinearId } = await import('@lib/hubspot-client');
+    mockSearchResponse([{ id: 'hs-existing' }]);
+    mockMutationResponse();
 
-    const result = await archiveContentByLinearId(mockClient, 'lin-123');
+    const result = await archiveContentByLinearId('lin-123', TEST_PORTAL_ID);
 
-    expect(mockUpdate).toHaveBeenCalledWith(
-      PORTAL_CONFIG.content.objectTypeId,
-      'hs-existing',
-      { properties: { hs_pipeline_stage: PORTAL_CONFIG.content.stageIds.archived } },
-    );
+    const updateCall = mockFetch.mock.calls[1];
+    expect(updateCall[0]).toContain('2-content');
+    expect(updateCall[0]).toContain('hs-existing');
+    const body = JSON.parse(updateCall[1].body);
+    expect(body.properties.hs_pipeline_stage).toBe('archived');
     expect(result).toEqual({ id: 'hs-existing', action: 'updated' });
   });
 
   it('returns null when no matching record exists', async () => {
-    mockSearch.mockResolvedValue({ results: [] });
+    const { archiveContentByLinearId } = await import('@lib/hubspot-client');
+    mockSearchResponse([]);
 
-    const result = await archiveContentByLinearId(mockClient, 'lin-missing');
+    const result = await archiveContentByLinearId('lin-missing', TEST_PORTAL_ID);
 
     expect(result).toBeNull();
-    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledOnce();
   });
 });

@@ -14,6 +14,7 @@ export default defineConfig({
     },
   },
   resolve: {
+    extensions: ['.mts', '.ts', '.tsx', '.mjs', '.js', '.jsx', '.json'],
     alias: {
       '@lib': path.resolve(__dirname, 'src/app/lib'),
     },
