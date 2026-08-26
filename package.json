@@ -14,6 +14,7 @@
     "provision": "tsx src/scripts/provision-objects.ts",
     "provision:app-settings": "tsx src/scripts/provision-app-settings.ts",
     "provision:asana-property": "tsx src/scripts/provision-asana-property.ts",
+    "provision:asana-test-project": "tsx src/scripts/provision-asana-test-project.ts",
     "build": "esbuild src/app/functions/LinearWebhook.ts src/app/functions/SyncToLinear.ts src/app/functions/AppSettingsApi.ts src/app/functions/SyncToAsana.ts --bundle --platform=node --target=node18 --outdir=src/app/functions",
     "dev": "hs project dev",
     "upload": "npm run build && hs project upload",

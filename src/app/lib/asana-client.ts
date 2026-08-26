@@ -37,12 +37,17 @@ export async function createTask(
   projectGid: string,
   name: string,
   customFields: Record<string, string>,
+  sectionGid?: string,
 ): Promise<{ gid: string }> {
+  const memberships = sectionGid
+    ? [{ project: projectGid, section: sectionGid }]
+    : undefined;
   return request<{ gid: string }>(apiKey, 'POST', '/tasks', {
     data: {
       name,
       projects: [projectGid],
       custom_fields: customFields,
+      ...(memberships ? { memberships } : {}),
     },
   });
 }

@@ -83,7 +83,8 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
     } else {
       const customFields: Record<string, string> = { [ASANA_PIPELINE_STAGE_FIELD_GID]: asanaStageGid };
       if (linearIssueUrl) customFields[ASANA_LINEAR_ISSUE_URL_FIELD_GID] = linearIssueUrl;
-      const task = await createTask(asanaApiKey, asanaProjectGid, title ?? 'Untitled', customFields);
+      const sectionGid = config.asanaSections[objectType] || undefined;
+      const task = await createTask(asanaApiKey, asanaProjectGid, title ?? 'Untitled', customFields, sectionGid || undefined);
       taskGid = task.gid;
       console.log(`Created Asana task ${taskGid}`);
     }

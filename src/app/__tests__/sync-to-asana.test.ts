@@ -5,6 +5,7 @@ let main: (ctx: any) => Promise<any>;
 const TEST_PORTAL_CONFIG = {
   appConfig: { objectTypeId: '2-app' },
   asanaProjectGid: '1202179514576728',
+  asanaSections: { content: 'section-blog', changelog: 'section-changelog' },
   content: {
     objectTypeId: '2-content',
     pipelineId: 'pipe-1',

@@ -15,6 +15,10 @@ export interface PortalConfig {
     objectTypeId: string;
   };
   asanaProjectGid: string;
+  asanaSections: {
+    content: string;
+    changelog: string;
+  };
   content: {
     objectTypeId: string;
     pipelineId: string;
@@ -54,6 +58,10 @@ const CONFIGS: Record<number, PortalConfig> = {
   51869810: {
     appConfig: { objectTypeId: '2-68071489' },
     asanaProjectGid: '1217881318437204', // Dennis-Staging (test project)
+    asanaSections: {
+      content: '',    // fill in after running provision:asana-test-project
+      changelog: '',  // fill in after running provision:asana-test-project
+    },
     content: {
       objectTypeId: '2-67505887',
       pipelineId: '926238627',
@@ -91,6 +99,10 @@ const CONFIGS: Record<number, PortalConfig> = {
   51869787: {
     appConfig: { objectTypeId: '2-68180080' },
     asanaProjectGid: '1202179514576728', // BuildRel | Advocacy Content Factory
+    asanaSections: {
+      content: '1210601763434613',   // Developer Blog
+      changelog: '1210743009828493', // Developer Changelog
+    },
     content: {
       objectTypeId: '2-67508770',
       pipelineId: '926239377',
@@ -128,6 +140,10 @@ const CONFIGS: Record<number, PortalConfig> = {
   22047910: {
     appConfig: { objectTypeId: '2-68180129' },
     asanaProjectGid: '1202179514576728', // BuildRel | Advocacy Content Factory
+    asanaSections: {
+      content: '1210601763434613',   // Developer Blog
+      changelog: '1210743009828493', // Developer Changelog
+    },
     content: {
       objectTypeId: '2-67508928',
       pipelineId: '926239383',
