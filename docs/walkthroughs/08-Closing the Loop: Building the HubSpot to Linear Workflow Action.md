@@ -58,7 +58,7 @@ const { linearIssueId, hubspotStage, objectType, linearTeamId } = context.body.i
 
 // hs_pipeline_stage sends a numeric ID — reverse-lookup to get the name
 const config = getPortalConfig(context.accountId);
-const stageIds = objectType === 'changelog' ? config.changelog.stageIds : config.content.stageIds;
+const stageIds = config.content.pipelines[objectType as 'content' | 'changelog'].stageIds;
 const stageName = Object.entries(stageIds).find(([, id]) => id === hubspotStage)?.[0];
 
 const stageMap = objectType === 'changelog'
