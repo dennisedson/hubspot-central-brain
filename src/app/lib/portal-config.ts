@@ -14,6 +14,7 @@ export interface PortalConfig {
   appConfig: {
     objectTypeId: string;
   };
+  asanaProjectGid: string;
   content: {
     objectTypeId: string;
     pipelineId: string;
@@ -52,6 +53,7 @@ const CONFIGS: Record<number, PortalConfig> = {
   // dev
   51869810: {
     appConfig: { objectTypeId: '2-68071489' },
+    asanaProjectGid: '1217881318437204', // Dennis-Staging (test project)
     content: {
       objectTypeId: '2-67505887',
       pipelineId: '926238627',
@@ -88,6 +90,7 @@ const CONFIGS: Record<number, PortalConfig> = {
   // staging
   51869787: {
     appConfig: { objectTypeId: '2-68180080' },
+    asanaProjectGid: '1202179514576728', // BuildRel | Advocacy Content Factory
     content: {
       objectTypeId: '2-67508770',
       pipelineId: '926239377',
@@ -124,6 +127,7 @@ const CONFIGS: Record<number, PortalConfig> = {
   // prod
   22047910: {
     appConfig: { objectTypeId: '2-68180129' },
+    asanaProjectGid: '1202179514576728', // BuildRel | Advocacy Content Factory
     content: {
       objectTypeId: '2-67508928',
       pipelineId: '926239383',

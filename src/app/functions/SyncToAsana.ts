@@ -1,6 +1,5 @@
 import { findTaskByLinearIssueUrl, updateTaskPipelineStage, createTask } from '../lib/asana-client';
 import {
-  ASANA_PROJECT_GID,
   ASANA_PIPELINE_STAGE_FIELD_GID,
   ASANA_LINEAR_ISSUE_URL_FIELD_GID,
   CONTENT_STAGE_TO_ASANA_STAGE,
@@ -50,6 +49,7 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
   const { title, existingAsanaTaskUrl, linearIssueUrl, hubspotStage, objectType } = context.body.inputFields;
 
   const config = getPortalConfig(context.accountId);
+  const asanaProjectGid = config.asanaProjectGid;
   const stageIds = objectType === 'changelog' ? config.changelog.stageIds : config.content.stageIds;
   const stageName = Object.entries(stageIds).find(([, id]) => id === hubspotStage)?.[0];
 
@@ -74,7 +74,7 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
 
     // 2. Fall back to searching by Linear issue URL (only when non-empty)
     if (!taskGid && linearIssueUrl) {
-      taskGid = await findTaskByLinearIssueUrl(asanaApiKey, ASANA_PROJECT_GID, linearIssueUrl);
+      taskGid = await findTaskByLinearIssueUrl(asanaApiKey, asanaProjectGid, linearIssueUrl);
     }
 
     if (taskGid) {
@@ -83,12 +83,12 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
     } else {
       const customFields: Record<string, string> = { [ASANA_PIPELINE_STAGE_FIELD_GID]: asanaStageGid };
       if (linearIssueUrl) customFields[ASANA_LINEAR_ISSUE_URL_FIELD_GID] = linearIssueUrl;
-      const task = await createTask(asanaApiKey, ASANA_PROJECT_GID, title ?? 'Untitled', customFields);
+      const task = await createTask(asanaApiKey, asanaProjectGid, title ?? 'Untitled', customFields);
       taskGid = task.gid;
       console.log(`Created Asana task ${taskGid}`);
     }
 
-    const asanaTaskUrl = `https://app.asana.com/0/${ASANA_PROJECT_GID}/${taskGid}`;
+    const asanaTaskUrl = `https://app.asana.com/0/${asanaProjectGid}/${taskGid}`;
     return {
       statusCode: 200,
       body: JSON.stringify({
