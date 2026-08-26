@@ -1,0 +1,12 @@
+{
+  "uid": "sync_to_asana",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/SyncToAsana.js",
+    "endpoint": {
+      "path": "sync-to-asana",
+      "methods": ["POST"]
+    },
+    "secretKeys": ["SYNC_SHARED_SECRET", "ASANA_API_KEY"]
+  }
+}

@@ -28,8 +28,10 @@ jobs:
       - name: Build functions
         run: npm run build
 
-      - name: Set sync function URL
-        run: sed -i 's|${SYNC_TO_LINEAR_URL}|https://51869787.hs-sites.com/hs/serverless/sync-to-linear|g' src/app/workflow-actions/sync-to-linear-hsmeta.json
+      - name: Set sync function URLs
+        run: |
+          sed -i 's|${SYNC_TO_LINEAR_URL}|https://51869787.hs-sites.com/hs/serverless/sync-to-linear|g' src/app/workflow-actions/sync-to-linear-hsmeta.json
+          sed -i 's|${SYNC_TO_ASANA_URL}|https://51869787.hs-sites.com/hs/serverless/sync-to-asana|g' src/app/workflow-actions/sync-to-asana-hsmeta.json
 
       - name: Install HubSpot CLI
         uses: HubSpot/hubspot-project-actions/install-hubspot-cli@v1.1.0
