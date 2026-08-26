@@ -23,7 +23,7 @@
           "fieldType": "text"
         },
         "supportedValueTypes": ["OBJECT_PROPERTY"],
-        "isRequired": true
+        "isRequired": false
       },
       {
         "typeDefinition": {

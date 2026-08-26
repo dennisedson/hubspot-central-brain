@@ -14,7 +14,7 @@ interface SyncToAsanaBody {
   hs_object_id: string;
   inputFields: {
     sharedSecret: string;
-    title: string;
+    title?: string;
     linearIssueUrl: string;
     hubspotStage: string;
     objectType: 'content' | 'changelog';
@@ -69,7 +69,7 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
       await updateTaskPipelineStage(asanaApiKey, taskGid, asanaStageGid);
       console.log(`Updated Asana task ${taskGid} → stage ${asanaStageGid} for ${linearIssueUrl}`);
     } else {
-      const task = await createTask(asanaApiKey, ASANA_PROJECT_GID, title, {
+      const task = await createTask(asanaApiKey, ASANA_PROJECT_GID, title ?? 'Untitled', {
         [ASANA_LINEAR_ISSUE_URL_FIELD_GID]: linearIssueUrl,
         [ASANA_PIPELINE_STAGE_FIELD_GID]: asanaStageGid,
       });
