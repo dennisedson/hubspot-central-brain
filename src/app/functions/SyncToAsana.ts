@@ -1,6 +1,8 @@
-import { findTaskByLinearIssueUrl, updateTaskPipelineStage } from '../lib/asana-client';
+import { findTaskByLinearIssueUrl, updateTaskPipelineStage, createTask } from '../lib/asana-client';
 import {
   ASANA_PROJECT_GID,
+  ASANA_PIPELINE_STAGE_FIELD_GID,
+  ASANA_LINEAR_ISSUE_URL_FIELD_GID,
   CONTENT_STAGE_TO_ASANA_STAGE,
   CHANGELOG_STAGE_TO_ASANA_STAGE,
 } from '../lib/mapping';
@@ -12,6 +14,7 @@ interface SyncToAsanaBody {
   hs_object_id: string;
   inputFields: {
     sharedSecret: string;
+    title: string;
     linearIssueUrl: string;
     hubspotStage: string;
     objectType: 'content' | 'changelog';
@@ -43,7 +46,7 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
     return { statusCode: 500, body: JSON.stringify({ error: 'Server misconfiguration' }) };
   }
 
-  const { linearIssueUrl, hubspotStage, objectType } = context.body.inputFields;
+  const { title, linearIssueUrl, hubspotStage, objectType } = context.body.inputFields;
 
   const config = getPortalConfig(context.accountId);
   const stageIds = objectType === 'changelog' ? config.changelog.stageIds : config.content.stageIds;
@@ -60,20 +63,26 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
   }
 
   try {
-    const taskGid = await findTaskByLinearIssueUrl(asanaApiKey, ASANA_PROJECT_GID, linearIssueUrl);
-    if (!taskGid) {
-      console.log(`No Asana task found for Linear issue ${linearIssueUrl} — skipping`);
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ outputFields: { syncStatus: 'skipped', reason: 'no Asana task found' } }),
-      };
+    let taskGid = await findTaskByLinearIssueUrl(asanaApiKey, ASANA_PROJECT_GID, linearIssueUrl);
+
+    if (taskGid) {
+      await updateTaskPipelineStage(asanaApiKey, taskGid, asanaStageGid);
+      console.log(`Updated Asana task ${taskGid} → stage ${asanaStageGid} for ${linearIssueUrl}`);
+    } else {
+      const task = await createTask(asanaApiKey, ASANA_PROJECT_GID, title, {
+        [ASANA_LINEAR_ISSUE_URL_FIELD_GID]: linearIssueUrl,
+        [ASANA_PIPELINE_STAGE_FIELD_GID]: asanaStageGid,
+      });
+      taskGid = task.gid;
+      console.log(`Created Asana task ${taskGid} for ${linearIssueUrl}`);
     }
 
-    await updateTaskPipelineStage(asanaApiKey, taskGid, asanaStageGid);
-    console.log(`Synced Asana task ${taskGid} → stage ${asanaStageGid} for ${linearIssueUrl}`);
+    const asanaTaskUrl = `https://app.asana.com/0/${ASANA_PROJECT_GID}/${taskGid}`;
     return {
       statusCode: 200,
-      body: JSON.stringify({ outputFields: { syncStatus: 'success', asanaTaskGid: taskGid } }),
+      body: JSON.stringify({
+        outputFields: { syncStatus: 'success', asanaTaskGid: taskGid, asanaTaskUrl },
+      }),
     };
   } catch (err) {
     console.error('Asana sync failed:', err);

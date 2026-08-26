@@ -18,6 +18,15 @@
       },
       {
         "typeDefinition": {
+          "name": "title",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "isRequired": true
+      },
+      {
+        "typeDefinition": {
           "name": "linearIssueUrl",
           "type": "string",
           "fieldType": "text"
@@ -54,6 +63,9 @@
       },
       {
         "typeDefinition": { "name": "asanaTaskGid", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "asanaTaskUrl", "type": "string", "fieldType": "text" }
       }
     ],
     "labels": {
@@ -64,19 +76,22 @@
         "actionCardContent": "Sync to Asana → {{objectType}}",
         "inputFieldLabels": {
           "sharedSecret": "Shared Secret",
+          "title": "Content Title",
           "linearIssueUrl": "Linear Issue URL",
           "hubspotStage": "HubSpot Pipeline Stage",
           "objectType": "Object Type"
         },
         "inputFieldDescriptions": {
           "sharedSecret": "Shared secret that authenticates this request; must match the SYNC_SHARED_SECRET function secret",
-          "linearIssueUrl": "The linear_issue_url property from the HubSpot record — used to look up the linked Asana task",
+          "title": "The title property from the HubSpot record — used as the Asana task name when creating a new task",
+          "linearIssueUrl": "The linear_issue_url property from the HubSpot record — used to look up or link the Asana task",
           "hubspotStage": "The hs_pipeline_stage property from the HubSpot record",
           "objectType": "Whether this is a Content or Changelog Entry record"
         },
         "outputFieldLabels": {
           "syncStatus": "Sync Status",
-          "asanaTaskGid": "Asana Task GID"
+          "asanaTaskGid": "Asana Task GID",
+          "asanaTaskUrl": "Asana Task URL"
         }
       }
     }

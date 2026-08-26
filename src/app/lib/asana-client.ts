@@ -32,6 +32,21 @@ export async function updateTaskPipelineStage(
   });
 }
 
+export async function createTask(
+  apiKey: string,
+  projectGid: string,
+  name: string,
+  customFields: Record<string, string>,
+): Promise<{ gid: string }> {
+  return request<{ gid: string }>(apiKey, 'POST', '/tasks', {
+    data: {
+      name,
+      projects: [projectGid],
+      custom_fields: customFields,
+    },
+  });
+}
+
 export async function findTaskByLinearIssueUrl(
   apiKey: string,
   projectGid: string,
