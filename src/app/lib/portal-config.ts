@@ -87,7 +87,7 @@ const CONFIGS: Record<number, PortalConfig> = {
   },
   // staging
   51869787: {
-    appConfig: { objectTypeId: '' },
+    appConfig: { objectTypeId: '2-68180080' },
     content: {
       objectTypeId: '2-67508770',
       pipelineId: '926239377',
@@ -123,7 +123,7 @@ const CONFIGS: Record<number, PortalConfig> = {
   },
   // prod
   22047910: {
-    appConfig: { objectTypeId: '' },
+    appConfig: { objectTypeId: '2-68180129' },
     content: {
       objectTypeId: '2-67508928',
       pipelineId: '926239383',

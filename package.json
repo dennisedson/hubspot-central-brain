@@ -12,6 +12,7 @@
     "test:coverage": "vitest run --coverage",
     "validate": "npm run lint && npm run typecheck && npm run test",
     "provision": "tsx src/scripts/provision-objects.ts",
+    "provision:app-settings": "tsx src/scripts/provision-app-settings.ts",
     "build": "esbuild src/app/functions/LinearWebhook.ts src/app/functions/SyncToLinear.ts src/app/functions/AppSettingsApi.ts --bundle --platform=node --target=node18 --outdir=src/app/functions",
     "dev": "hs project dev",
     "upload": "npm run build && hs project upload",
