@@ -147,6 +147,7 @@ async function provisionChangelog(): Promise<void> {
         },
         { name: 'linear_issue_url', label: 'Linear Issue URL', type: 'string', fieldType: 'text', groupName: 'changelog_entryinformation' },
         { name: 'linear_issue_id', label: 'Linear Issue ID', type: 'string', fieldType: 'text', groupName: 'changelog_entryinformation' },
+        { name: 'asana_task_url', label: 'Asana Task URL', type: 'string', fieldType: 'text', groupName: 'changelog_entryinformation' },
         { name: 'published_url', label: 'Published URL', type: 'string', fieldType: 'text', groupName: 'changelog_entryinformation' },
         { name: 'release_date', label: 'Release Date', type: 'date', fieldType: 'date', groupName: 'changelog_entryinformation' },
         { name: 'publish_date', label: 'Publish Date', type: 'date', fieldType: 'date', groupName: 'changelog_entryinformation' },
