@@ -13,9 +13,10 @@ import { Client } from '@hubspot/api-client';
 async function addPropertyIfMissing(
   client: Client,
   objectTypeId: string,
+  schemaName: string,
   objectLabel: string,
 ): Promise<void> {
-  const groupName = `${objectTypeId.replace('-', '_')}information`;
+  const groupName = `${schemaName}information`;
 
   try {
     await (client.crm.properties.coreApi as any).create(objectTypeId, {
@@ -65,8 +66,8 @@ async function main() {
   console.log(`Found changelog_entry: ${changelog.objectTypeId}`);
   console.log('');
 
-  await addPropertyIfMissing(client, content.objectTypeId, 'Content Piece');
-  await addPropertyIfMissing(client, changelog.objectTypeId, 'Changelog Entry');
+  await addPropertyIfMissing(client, content.objectTypeId, content.name, 'Content Piece');
+  await addPropertyIfMissing(client, changelog.objectTypeId, changelog.name, 'Changelog Entry');
 
   console.log('\nDone.');
 }
