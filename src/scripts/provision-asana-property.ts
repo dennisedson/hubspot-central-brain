@@ -9,6 +9,7 @@
  */
 
 import { Client } from '@hubspot/api-client';
+import { loadEnv } from './script-env';
 
 async function addPropertyIfMissing(
   client: Client,
@@ -38,14 +39,8 @@ async function addPropertyIfMissing(
 }
 
 async function main() {
-  const pak = process.env.HUBSPOT_PERSONAL_ACCESS_KEY;
-  if (!pak) {
-    console.error('Error: HUBSPOT_PERSONAL_ACCESS_KEY is not set.');
-    console.error('Export it first: export HUBSPOT_PERSONAL_ACCESS_KEY=your-pak-here');
-    process.exit(1);
-  }
-
-  const client = new Client({ accessToken: pak });
+  const { personalKey } = loadEnv();
+  const client = new Client({ accessToken: personalKey });
 
   console.log('Looking up custom object schemas...');
   const schemas = await (client.crm.schemas.coreApi as any).getAll(false);

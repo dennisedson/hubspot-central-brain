@@ -1,6 +1,8 @@
 import { Client } from '@hubspot/api-client';
+import { loadEnv } from './script-env';
 
-const client = new Client({ accessToken: process.env.HUBSPOT_ACCESS_KEY });
+const { token } = loadEnv();
+const client = new Client({ accessToken: token });
 
 async function listAllSchemas(): Promise<void> {
   const response = await (client.crm.schemas.coreApi as any).getAll(false); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -214,12 +216,6 @@ async function provisionVideo(): Promise<void> {
 }
 
 async function main() {
-  if (!process.env.HUBSPOT_ACCESS_KEY) {
-    console.error('Error: HUBSPOT_ACCESS_KEY environment variable is not set.');
-    console.error('Export it first: export HUBSPOT_ACCESS_KEY=your-service-key-here');
-    process.exit(1);
-  }
-
   try {
     await listAllSchemas();
     await provisionContent();

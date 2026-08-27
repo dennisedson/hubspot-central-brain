@@ -3,10 +3,12 @@
  * Also restores `linear_issue_id` (non-unique) if it was deleted by a previous run.
  *
  * Usage:
- *   HUBSPOT_ACCESS_KEY=your-key npm run patch:unique-property
- *   HUBSPOT_ACCESS_KEY=your-key PORTAL=staging npm run patch:unique-property
- *   HUBSPOT_ACCESS_KEY=your-key PORTAL=prod npm run patch:unique-property
+ *   npm run patch:unique-property
+ *   PORTAL=staging npm run patch:unique-property
+ *   PORTAL=prod npm run patch:unique-property
  */
+
+import { loadEnv } from './script-env';
 
 const OBJECT_TYPE_IDS: Record<string, string> = {
   dev:     '2-67505887',
@@ -56,19 +58,13 @@ async function ensureProperty(
 }
 
 async function main() {
-  const token = process.env.HUBSPOT_ACCESS_KEY;
-  if (!token) { console.error('HUBSPOT_ACCESS_KEY is not set.'); process.exit(1); }
-
-  const portal = process.env.PORTAL ?? 'dev';
+  const { token, portal } = loadEnv();
   const objectTypeId = OBJECT_TYPE_IDS[portal];
   if (!objectTypeId) { console.error(`Unknown portal "${portal}". Use PORTAL=dev|staging|prod`); process.exit(1); }
 
   console.log(`[${portal}] Ensuring unique linear_id property on ${objectTypeId}`);
 
-  // Restore linear_issue_id (non-unique) if missing
   await ensureProperty(token, objectTypeId, 'linear_issue_id', 'Linear Issue ID', false);
-
-  // Create linear_id (unique) — the atomic upsert key
   await ensureProperty(token, objectTypeId, 'linear_id', 'Linear ID (unique)', true);
 
   console.log('\nDone.');

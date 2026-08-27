@@ -9,18 +9,13 @@
 
 import { Client } from '@hubspot/api-client';
 import { ObjectTypePropertyCreateTypeEnum } from '@hubspot/api-client/lib/codegen/crm/schemas/models/ObjectTypePropertyCreate';
+import { loadEnv } from './script-env';
 
 async function main() {
-  const pak = process.env.HUBSPOT_PERSONAL_ACCESS_KEY;
-  if (!pak) {
-    console.error('Error: HUBSPOT_PERSONAL_ACCESS_KEY is not set.');
-    console.error('Export it first: export HUBSPOT_PERSONAL_ACCESS_KEY=your-pak-here');
-    process.exit(1);
-  }
+  const { personalKey, portal } = loadEnv();
+  const client = new Client({ accessToken: personalKey });
+  console.log(`[${portal}] Creating App Settings custom object...`);
 
-  const client = new Client({ accessToken: pak });
-
-  console.log('Creating App Settings custom object...');
 
   let objectTypeId: string;
 

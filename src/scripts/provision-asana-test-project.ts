@@ -6,6 +6,8 @@
  *   ASANA_API_KEY=your-pat npm run provision:asana-test-project
  */
 
+import { loadEnv } from './script-env';
+
 const TEST_PROJECT_GID = '1217881318437204';
 
 const SECTIONS_TO_CREATE = [
@@ -46,11 +48,7 @@ async function asana(apiKey: string, method: string, path: string, body?: unknow
 }
 
 async function main() {
-  const apiKey = process.env.ASANA_API_KEY;
-  if (!apiKey) {
-    console.error('Error: ASANA_API_KEY is not set.');
-    process.exit(1);
-  }
+  const { asanaApiKey: apiKey } = loadEnv();
 
   // 1. Get existing sections so we don't duplicate
   console.log('Fetching existing sections...');
