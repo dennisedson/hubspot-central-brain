@@ -27,15 +27,34 @@ async function hsSearch(
   return res.json() as Promise<{ results: Array<{ id: string; properties: Record<string, string | null> }> }>;
 }
 
-async function hsCreate(objectTypeId: string, properties: Record<string, string>): Promise<{ id: string }> {
+async function hsUpsertByUniqueProperty(
+  objectTypeId: string,
+  idProperty: string,
+  idValue: string,
+  properties: Record<string, string>,
+): Promise<{ id: string; action: 'created' | 'updated' }> {
   const token = getToken();
-  const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ properties, associations: [] }),
-  });
-  if (!res.ok) throw new Error(`HubSpot create failed ${res.status}: ${await res.text()}`);
-  return res.json() as Promise<{ id: string }>;
+  const res = await fetch(
+    `${HS_BASE}/crm/v3/objects/${objectTypeId}/${idValue}?idProperty=${idProperty}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ properties }),
+    },
+  );
+  if (res.status === 404) {
+    const createRes = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ properties, associations: [] }),
+    });
+    if (!createRes.ok) throw new Error(`HubSpot create failed ${createRes.status}: ${await createRes.text()}`);
+    const created = await createRes.json() as { id: string };
+    return { id: created.id, action: 'created' };
+  }
+  if (!res.ok) throw new Error(`HubSpot upsert failed ${res.status}: ${await res.text()}`);
+  const updated = await res.json() as { id: string };
+  return { id: updated.id, action: 'updated' };
 }
 
 async function hsUpdate(objectTypeId: string, objectId: string, properties: Record<string, string>): Promise<void> {
@@ -113,14 +132,7 @@ export async function upsertContent(
   // remove content_type if empty to avoid overwriting user-set value
   if (!properties.content_type) delete properties.content_type;
 
-  const existingId = await findByLinearId(objectTypeId, data.id);
-  if (existingId) {
-    await hsUpdate(objectTypeId, existingId, properties);
-    return { id: existingId, action: 'updated' };
-  }
-
-  const created = await hsCreate(objectTypeId, properties);
-  return { id: created.id, action: 'created' };
+  return hsUpsertByUniqueProperty(objectTypeId, 'linear_issue_id', data.id, properties);
 }
 
 export async function readAppSettings(portalId: number): Promise<AppSettings> {

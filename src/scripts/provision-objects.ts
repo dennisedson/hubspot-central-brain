@@ -84,7 +84,7 @@ async function provisionContent(): Promise<void> {
         { name: 'source_url', label: 'Source URL', type: 'string', fieldType: 'text', groupName: 'content_pieceinformation' },
         { name: 'published_url', label: 'Published URL', type: 'string', fieldType: 'text', groupName: 'content_pieceinformation' },
         { name: 'linear_issue_url', label: 'Linear Issue URL', type: 'string', fieldType: 'text', groupName: 'content_pieceinformation' },
-        { name: 'linear_issue_id', label: 'Linear Issue ID', type: 'string', fieldType: 'text', groupName: 'content_pieceinformation' },
+        { name: 'linear_issue_id', label: 'Linear Issue ID', type: 'string', fieldType: 'text', groupName: 'content_pieceinformation', hasUniqueValue: true },
         { name: 'asana_task_url', label: 'Asana Task URL', type: 'string', fieldType: 'text', groupName: 'content_pieceinformation' },
         { name: 'asana_task_id', label: 'Asana Task ID', type: 'string', fieldType: 'text', groupName: 'content_pieceinformation' },
         { name: 'target_date', label: 'Target Date', type: 'date', fieldType: 'date', groupName: 'content_pieceinformation' },
