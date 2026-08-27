@@ -38,6 +38,30 @@ async function hsCreate(objectTypeId: string, properties: Record<string, string>
   return res.json() as Promise<{ id: string }>;
 }
 
+async function hsUpsertByUniqueProperty(
+  objectTypeId: string,
+  idProperty: string,
+  idValue: string,
+  properties: Record<string, string>,
+): Promise<UpsertResult> {
+  const token = getToken();
+  const res = await fetch(
+    `${HS_BASE}/crm/v3/objects/${objectTypeId}/${idValue}?idProperty=${idProperty}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ properties }),
+    },
+  );
+  if (res.status === 404) {
+    const created = await hsCreate(objectTypeId, properties);
+    return { id: created.id, action: 'created' };
+  }
+  if (!res.ok) throw new Error(`HubSpot upsert failed ${res.status}: ${await res.text()}`);
+  const updated = await res.json() as { id: string };
+  return { id: updated.id, action: 'updated' };
+}
+
 async function hsUpdate(objectTypeId: string, objectId: string, properties: Record<string, string>): Promise<void> {
   const token = getToken();
   const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}/${objectId}`, {
@@ -102,7 +126,8 @@ export async function upsertContent(
 
   const properties: Record<string, string> = {
     title: data.title,
-    linear_issue_id: data.id,
+    linear_id: data.id,       // unique property — used as atomic upsert key
+    linear_issue_id: data.id, // non-unique — kept for display and search
     linear_issue_url: data.url,
     hs_pipeline: pipelineConfig.pipelineId,
     hs_pipeline_stage: stageId,
@@ -113,13 +138,7 @@ export async function upsertContent(
   // remove content_type if empty to avoid overwriting user-set value
   if (!properties.content_type) delete properties.content_type;
 
-  const existingId = await findByLinearId(objectTypeId, data.id);
-  if (existingId) {
-    await hsUpdate(objectTypeId, existingId, properties);
-    return { id: existingId, action: 'updated' };
-  }
-  const created = await hsCreate(objectTypeId, properties);
-  return { id: created.id, action: 'created' };
+  return hsUpsertByUniqueProperty(objectTypeId, 'linear_id', data.id, properties);
 }
 
 export async function readAppSettings(portalId: number): Promise<AppSettings> {

@@ -50,6 +50,15 @@ function mockMutationResponse(body: unknown = {}) {
   });
 }
 
+function mock404Response() {
+  mockFetch.mockResolvedValueOnce({
+    ok: false,
+    status: 404,
+    json: async () => ({}),
+    text: async () => 'Not Found',
+  });
+}
+
 
 const baseIssue: LinearWebhookPayload = {
   action: 'create',
@@ -114,15 +123,16 @@ describe('getCurrentStage', () => {
 describe('upsertContent', () => {
   it('creates a new record when no existing match, maps "In Progress" to "drafting"', async () => {
     const { upsertContent } = await import('@lib/hubspot-client');
-    mockSearchResponse([]);
-    mockMutationResponse({ id: 'hs-new-1' });
+    mock404Response();                         // PATCH by linear_id → not found
+    mockMutationResponse({ id: 'hs-new-1' }); // POST create → success
 
     const result = await upsertContent(baseIssue, TEST_PORTAL_ID);
 
-    const createCall = mockFetch.mock.calls[1];
+    const createCall = mockFetch.mock.calls[1]; // [1] = POST create
     const body = JSON.parse(createCall[1].body);
     expect(body.properties).toMatchObject({
       title: 'Add API endpoint docs',
+      linear_id: 'lin-123',
       linear_issue_id: 'lin-123',
       linear_issue_url: 'https://linear.app/team/issue/ENG-1',
       hs_pipeline_stage: 'drafting',
@@ -133,22 +143,22 @@ describe('upsertContent', () => {
   it('maps description to the notes property', async () => {
     const { upsertContent } = await import('@lib/hubspot-client');
     const issueWithDesc = { ...baseIssue, data: { ...baseIssue.data, description: 'Some notes here' } };
-    mockSearchResponse([]);
+    mock404Response();
     mockMutationResponse({ id: 'hs-new-2' });
     await upsertContent(issueWithDesc, TEST_PORTAL_ID);
-    const body = JSON.parse(mockFetch.mock.calls[1][1].body);
+    const body = JSON.parse(mockFetch.mock.calls[1][1].body); // [1] = POST create
     expect(body.properties.notes).toBe('Some notes here');
   });
 
   it('updates when a matching record exists', async () => {
     const { upsertContent } = await import('@lib/hubspot-client');
-    mockSearchResponse([{ id: 'hs-existing' }]);
-    mockMutationResponse();
+    mockMutationResponse({ id: 'hs-existing' }); // PATCH by linear_id → found
 
     const result = await upsertContent(baseIssue, TEST_PORTAL_ID);
 
-    const updateCall = mockFetch.mock.calls[1];
-    expect(updateCall[0]).toContain('hs-existing');
+    const updateCall = mockFetch.mock.calls[0]; // single PATCH call
+    expect(updateCall[0]).toContain('lin-123');
+    expect(updateCall[0]).toContain('idProperty=linear_id');
     expect(updateCall[1].method).toBe('PATCH');
     expect(result).toEqual({ id: 'hs-existing', action: 'updated' });
   });
@@ -161,14 +171,15 @@ describe('upsertContent (changelog pipeline)', () => {
       ...baseIssue,
       data: { ...baseIssue.data, state: { id: 'st-done', name: 'Done', type: 'completed' } },
     };
-    mockSearchResponse([]);
+    mock404Response();
     mockMutationResponse({ id: 'hs-cl-1' });
 
     const result = await upsertContent(doneIssue, TEST_PORTAL_ID, 'changelog');
 
     expect(result.action).toBe('created');
-    const body = JSON.parse(mockFetch.mock.calls[1][1].body);
+    const body = JSON.parse(mockFetch.mock.calls[1][1].body); // [1] = POST create
     expect(body.properties).toMatchObject({
+      linear_id: 'lin-123',
       linear_issue_id: 'lin-123',
       hs_pipeline_stage: 'published',
     });

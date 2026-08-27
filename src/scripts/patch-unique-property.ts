@@ -1,7 +1,6 @@
 /**
- * Recreates linear_issue_id on content_piece with hasUniqueValue: true.
- * Deletes the existing property first (loses stored values on existing records),
- * then recreates it with the unique constraint.
+ * Ensures content_piece has a unique `linear_id` property for atomic upserts.
+ * Also restores `linear_issue_id` (non-unique) if it was deleted by a previous run.
  *
  * Usage:
  *   HUBSPOT_ACCESS_KEY=your-key npm run patch:unique-property
@@ -15,7 +14,6 @@ const OBJECT_TYPE_IDS: Record<string, string> = {
   prod:    '2-67508928',
 };
 
-const PROPERTY_NAME = 'linear_issue_id';
 const API = 'https://api.hubapi.com';
 
 async function hs(token: string, method: string, path: string, body?: unknown) {
@@ -30,6 +28,33 @@ async function hs(token: string, method: string, path: string, body?: unknown) {
   return json;
 }
 
+async function ensureProperty(
+  token: string,
+  objectTypeId: string,
+  name: string,
+  label: string,
+  unique: boolean,
+) {
+  try {
+    const existing = await hs(token, 'GET', `/crm/v3/properties/${objectTypeId}/${name}`);
+    if (existing.hasUniqueValue === unique) {
+      console.log(`  – ${name} already exists (hasUniqueValue=${existing.hasUniqueValue})`);
+    } else {
+      console.log(`  ! ${name} exists but hasUniqueValue=${existing.hasUniqueValue} (wanted ${unique}) — cannot change on existing property`);
+    }
+  } catch {
+    const created = await hs(token, 'POST', `/crm/v3/properties/${objectTypeId}`, {
+      name,
+      label,
+      type: 'string',
+      fieldType: 'text',
+      groupName: 'content_pieceinformation',
+      hasUniqueValue: unique,
+    });
+    console.log(`  ✓ Created ${created.name} (hasUniqueValue=${created.hasUniqueValue})`);
+  }
+}
+
 async function main() {
   const token = process.env.HUBSPOT_ACCESS_KEY;
   if (!token) { console.error('HUBSPOT_ACCESS_KEY is not set.'); process.exit(1); }
@@ -38,60 +63,15 @@ async function main() {
   const objectTypeId = OBJECT_TYPE_IDS[portal];
   if (!objectTypeId) { console.error(`Unknown portal "${portal}". Use PORTAL=dev|staging|prod`); process.exit(1); }
 
-  console.log(`[${portal}] Recreating ${PROPERTY_NAME} on ${objectTypeId} with hasUniqueValue=true`);
+  console.log(`[${portal}] Ensuring unique linear_id property on ${objectTypeId}`);
 
-  // 1. Remove from requiredProperties if present
-  console.log('  Checking schema...');
-  const schema = await hs(token, 'GET', `/crm/v3/schemas/${objectTypeId}`);
-  const required: string[] = schema.requiredProperties ?? [];
-  if (required.includes(PROPERTY_NAME)) {
-    const updated = required.filter((p: string) => p !== PROPERTY_NAME);
-    await hs(token, 'PATCH', `/crm/v3/schemas/${objectTypeId}`, { requiredProperties: updated });
-    console.log(`  ✓ Removed from requiredProperties`);
-  }
+  // Restore linear_issue_id (non-unique) if missing
+  await ensureProperty(token, objectTypeId, 'linear_issue_id', 'Linear Issue ID', false);
 
-  // 2. Remove any OBJECT_REQUIREMENT associations referencing this property
-  console.log('  Checking object associations/requirements...');
-  try {
-    const assocRes = await hs(token, 'GET', `/crm/v3/schemas/${objectTypeId}`);
-    const associations: Array<{ id: string; toObjectTypeId?: string }> = assocRes.associations ?? [];
-    console.log(`  Found ${associations.length} association(s)`);
-  } catch { /* ignore */ }
+  // Create linear_id (unique) — the atomic upsert key
+  await ensureProperty(token, objectTypeId, 'linear_id', 'Linear ID (unique)', true);
 
-  // Try deleting the known requirement ID extracted from the error message
-  const requirementId = '1058241326';
-  console.log(`  Attempting to delete object requirement ${requirementId}...`);
-  try {
-    await hs(token, 'DELETE', `/crm/v3/schemas/${objectTypeId}/requirements/${requirementId}`);
-    console.log(`  ✓ Deleted requirement`);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    // Try alternate endpoint format
-    try {
-      await hs(token, 'DELETE', `/crm/v3/properties/${objectTypeId}/requirements/${requirementId}`);
-      console.log(`  ✓ Deleted requirement (alt endpoint)`);
-    } catch {
-      console.log(`  – Could not delete via API (${msg.slice(0, 80)})`);
-      console.log(`  → In HubSpot UI: Settings → Objects → Content Pieces → remove any required property rules for linear_issue_id`);
-    }
-  }
-
-  // 3. Delete existing property
-  console.log('  Deleting existing property...');
-  await hs(token, 'DELETE', `/crm/v3/properties/${objectTypeId}/${PROPERTY_NAME}`);
-  console.log('  ✓ Deleted');
-
-  // 2. Recreate with hasUniqueValue: true
-  console.log('  Recreating with hasUniqueValue: true...');
-  const created = await hs(token, 'POST', `/crm/v3/properties/${objectTypeId}`, {
-    name: PROPERTY_NAME,
-    label: 'Linear Issue ID',
-    type: 'string',
-    fieldType: 'text',
-    groupName: 'content_pieceinformation',
-    hasUniqueValue: true,
-  });
-  console.log(`  ✓ Created: ${created.name} hasUniqueValue=${created.hasUniqueValue}`);
+  console.log('\nDone. Update portal-config.ts and hubspot-client.ts to use linear_id for upserts.');
 }
 
 main().catch(err => { console.error(err.message); process.exit(1); });
