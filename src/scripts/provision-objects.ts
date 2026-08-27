@@ -32,6 +32,19 @@ function printPipelineBlock(name: string, pipeline: any): void { // eslint-disab
   console.log(`      },`);
 }
 
+function printVideoConfig(objectTypeId: string, pipeline: any): void { // eslint-disable-line @typescript-eslint/no-explicit-any
+  console.log(`\n  Paste this into src/app/lib/portal-config.ts → video:`);
+  console.log(`    video: {`);
+  console.log(`      objectTypeId: '${objectTypeId}',`);
+  console.log(`      pipelineId: '${pipeline.id}',`);
+  console.log(`      stageIds: {`);
+  pipeline.stages.forEach((s: { label: string; id: string }) =>
+    console.log(`        ${s.label.toLowerCase()}: '${s.id}',`),
+  );
+  console.log(`      },`);
+  console.log(`    },`);
+}
+
 function printPortalConfig(objectTypeId: string, contentPipeline: any, changelogPipeline: any): void { // eslint-disable-line @typescript-eslint/no-explicit-any
   console.log(`\n  Paste this into src/app/lib/portal-config.ts → content:`);
   console.log(`    content: {`);
@@ -196,7 +209,7 @@ async function provisionVideo(): Promise<void> {
     console.log('  Created pipeline. pipelineId:', pipeline.id);
   }
 
-  printPortalConfig('video', objectTypeId, pipeline);
+  printVideoConfig(objectTypeId, pipeline);
 }
 
 async function main() {

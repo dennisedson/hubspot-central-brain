@@ -67,8 +67,13 @@ const CONFIGS: Record<number, PortalConfig> = {
           },
         },
         changelog: {
-          pipelineId: '',
-          stageIds: {},
+          pipelineId: '929918080',
+          stageIds: {
+            identified: '1426412984',
+            drafting: '1426412985',
+            reviewing: '1426413056',
+            published: '1426413057',
+          },
         },
       },
     },
