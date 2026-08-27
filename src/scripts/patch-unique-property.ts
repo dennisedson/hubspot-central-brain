@@ -71,7 +71,7 @@ async function main() {
   // Create linear_id (unique) — the atomic upsert key
   await ensureProperty(token, objectTypeId, 'linear_id', 'Linear ID (unique)', true);
 
-  console.log('\nDone. Update portal-config.ts and hubspot-client.ts to use linear_id for upserts.');
+  console.log('\nDone.');
 }
 
 main().catch(err => { console.error(err.message); process.exit(1); });
