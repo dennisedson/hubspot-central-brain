@@ -40,7 +40,19 @@ async function main() {
 
   console.log(`[${portal}] Recreating ${PROPERTY_NAME} on ${objectTypeId} with hasUniqueValue=true`);
 
-  // 1. Delete existing property
+  // 1. Remove from requiredProperties if present
+  console.log('  Checking schema required properties...');
+  const schema = await hs(token, 'GET', `/crm/v3/schemas/${objectTypeId}`);
+  const required: string[] = schema.requiredProperties ?? [];
+  if (required.includes(PROPERTY_NAME)) {
+    const updated = required.filter((p: string) => p !== PROPERTY_NAME);
+    await hs(token, 'PATCH', `/crm/v3/schemas/${objectTypeId}`, { requiredProperties: updated });
+    console.log(`  ✓ Removed from requiredProperties`);
+  } else {
+    console.log(`  – Not in requiredProperties, skipping`);
+  }
+
+  // 2. Delete existing property
   console.log('  Deleting existing property...');
   await hs(token, 'DELETE', `/crm/v3/properties/${objectTypeId}/${PROPERTY_NAME}`);
   console.log('  ✓ Deleted');
