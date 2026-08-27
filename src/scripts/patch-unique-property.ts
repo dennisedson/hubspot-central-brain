@@ -41,18 +41,42 @@ async function main() {
   console.log(`[${portal}] Recreating ${PROPERTY_NAME} on ${objectTypeId} with hasUniqueValue=true`);
 
   // 1. Remove from requiredProperties if present
-  console.log('  Checking schema required properties...');
+  console.log('  Checking schema...');
   const schema = await hs(token, 'GET', `/crm/v3/schemas/${objectTypeId}`);
   const required: string[] = schema.requiredProperties ?? [];
   if (required.includes(PROPERTY_NAME)) {
     const updated = required.filter((p: string) => p !== PROPERTY_NAME);
     await hs(token, 'PATCH', `/crm/v3/schemas/${objectTypeId}`, { requiredProperties: updated });
     console.log(`  ✓ Removed from requiredProperties`);
-  } else {
-    console.log(`  – Not in requiredProperties, skipping`);
   }
 
-  // 2. Delete existing property
+  // 2. Remove any OBJECT_REQUIREMENT associations referencing this property
+  console.log('  Checking object associations/requirements...');
+  try {
+    const assocRes = await hs(token, 'GET', `/crm/v3/schemas/${objectTypeId}`);
+    const associations: Array<{ id: string; toObjectTypeId?: string }> = assocRes.associations ?? [];
+    console.log(`  Found ${associations.length} association(s)`);
+  } catch { /* ignore */ }
+
+  // Try deleting the known requirement ID extracted from the error message
+  const requirementId = '1058241326';
+  console.log(`  Attempting to delete object requirement ${requirementId}...`);
+  try {
+    await hs(token, 'DELETE', `/crm/v3/schemas/${objectTypeId}/requirements/${requirementId}`);
+    console.log(`  ✓ Deleted requirement`);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // Try alternate endpoint format
+    try {
+      await hs(token, 'DELETE', `/crm/v3/properties/${objectTypeId}/requirements/${requirementId}`);
+      console.log(`  ✓ Deleted requirement (alt endpoint)`);
+    } catch {
+      console.log(`  – Could not delete via API (${msg.slice(0, 80)})`);
+      console.log(`  → In HubSpot UI: Settings → Objects → Content Pieces → remove any required property rules for linear_issue_id`);
+    }
+  }
+
+  // 3. Delete existing property
   console.log('  Deleting existing property...');
   await hs(token, 'DELETE', `/crm/v3/properties/${objectTypeId}/${PROPERTY_NAME}`);
   console.log('  ✓ Deleted');
