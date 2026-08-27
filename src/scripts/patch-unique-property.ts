@@ -1,53 +1,61 @@
 /**
- * Marks linear_issue_id as a unique property on content_piece.
- * Run AFTER deleting any duplicate records — HubSpot rejects this if duplicates exist.
+ * Recreates linear_issue_id on content_piece with hasUniqueValue: true.
+ * Deletes the existing property first (loses stored values on existing records),
+ * then recreates it with the unique constraint.
  *
  * Usage:
  *   HUBSPOT_ACCESS_KEY=your-key npm run patch:unique-property
+ *   HUBSPOT_ACCESS_KEY=your-key PORTAL=staging npm run patch:unique-property
+ *   HUBSPOT_ACCESS_KEY=your-key PORTAL=prod npm run patch:unique-property
  */
 
 const OBJECT_TYPE_IDS: Record<string, string> = {
-  dev: '2-67505887',
+  dev:     '2-67505887',
   staging: '2-67508770',
-  prod: '2-67508928',
+  prod:    '2-67508928',
 };
 
-async function patchProperty(token: string, objectTypeId: string, portalName: string) {
-  console.log(`\n[${portalName}] Patching linear_issue_id on ${objectTypeId}...`);
-  const res = await fetch(
-    `https://api.hubapi.com/crm/v3/properties/${objectTypeId}/linear_issue_id`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ hasUniqueValue: true }),
-    },
-  );
-  const json = await res.json() as { name?: string; hasUniqueValue?: boolean; message?: string };
-  if (!res.ok) {
-    console.error(`  ✗ Failed (${res.status}): ${json.message}`);
-    if (res.status === 409 || (json.message ?? '').toLowerCase().includes('duplicate')) {
-      console.error('  → Delete duplicate records first, then re-run.');
-    }
-  } else {
-    console.log(`  ✓ ${json.name} hasUniqueValue=${json.hasUniqueValue}`);
-  }
+const PROPERTY_NAME = 'linear_issue_id';
+const API = 'https://api.hubapi.com';
+
+async function hs(token: string, method: string, path: string, body?: unknown) {
+  const res = await fetch(`${API}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const text = await res.text();
+  const json = text ? JSON.parse(text) : {};
+  if (!res.ok) throw new Error(`${method} ${path} → ${res.status}: ${text}`);
+  return json;
 }
 
 async function main() {
   const token = process.env.HUBSPOT_ACCESS_KEY;
-  if (!token) {
-    console.error('HUBSPOT_ACCESS_KEY is not set.');
-    process.exit(1);
-  }
+  if (!token) { console.error('HUBSPOT_ACCESS_KEY is not set.'); process.exit(1); }
 
   const portal = process.env.PORTAL ?? 'dev';
   const objectTypeId = OBJECT_TYPE_IDS[portal];
-  if (!objectTypeId) {
-    console.error(`Unknown portal "${portal}". Use PORTAL=dev|staging|prod`);
-    process.exit(1);
-  }
+  if (!objectTypeId) { console.error(`Unknown portal "${portal}". Use PORTAL=dev|staging|prod`); process.exit(1); }
 
-  await patchProperty(token, objectTypeId, portal);
+  console.log(`[${portal}] Recreating ${PROPERTY_NAME} on ${objectTypeId} with hasUniqueValue=true`);
+
+  // 1. Delete existing property
+  console.log('  Deleting existing property...');
+  await hs(token, 'DELETE', `/crm/v3/properties/${objectTypeId}/${PROPERTY_NAME}`);
+  console.log('  ✓ Deleted');
+
+  // 2. Recreate with hasUniqueValue: true
+  console.log('  Recreating with hasUniqueValue: true...');
+  const created = await hs(token, 'POST', `/crm/v3/properties/${objectTypeId}`, {
+    name: PROPERTY_NAME,
+    label: 'Linear Issue ID',
+    type: 'string',
+    fieldType: 'text',
+    groupName: 'content_pieceinformation',
+    hasUniqueValue: true,
+  });
+  console.log(`  ✓ Created: ${created.name} hasUniqueValue=${created.hasUniqueValue}`);
 }
 
-main();
+main().catch(err => { console.error(err.message); process.exit(1); });

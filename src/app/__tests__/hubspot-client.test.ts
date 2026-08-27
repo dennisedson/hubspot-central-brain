@@ -50,14 +50,6 @@ function mockMutationResponse(body: unknown = {}) {
   });
 }
 
-function mock404Response() {
-  mockFetch.mockResolvedValueOnce({
-    ok: false,
-    status: 404,
-    json: async () => ({}),
-    text: async () => 'Not Found',
-  });
-}
 
 const baseIssue: LinearWebhookPayload = {
   action: 'create',
