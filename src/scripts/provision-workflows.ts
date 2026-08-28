@@ -284,7 +284,7 @@ async function main() {
   }));
 
   // Step 4: Changelog workflow
-  const changelogName = 'Changelog → Sync to Asana';
+  const changelogName = 'Changelog → Sync to Linear + Asana';
   const changelogPipelineId = config.content.pipelines.changelog.pipelineId;
   if (!changelogPipelineId) {
     console.error('  ✗ Changelog pipeline not provisioned yet — run npm run provision first');
@@ -297,7 +297,7 @@ async function main() {
     appId,
     sharedSecret,
     linearTeamId,
-    steps: { includeLinearSync: false, objectType: 'changelog', syncToAsanaId, syncToLinearId },
+    steps: { includeLinearSync: true, objectType: 'changelog', syncToAsanaId, syncToLinearId },
   }));
 
   console.log('\n✓ Done. New workflows are disabled — enable in HubSpot after verifying. Re-runs update existing workflows in place.');
