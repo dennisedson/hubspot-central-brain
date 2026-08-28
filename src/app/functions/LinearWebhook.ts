@@ -45,7 +45,7 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'hs-sync echo' }) };
   }
 
-  const labels = payload.data.labels?.nodes?.map(l => l.name) ?? [];
+  const labels = payload.data.labels?.map(l => l.name) ?? [];
   const isChangelog = labels.includes(LINEAR_CHANGELOG_LABEL);
 
   try {

@@ -61,7 +61,7 @@ export interface LinearIssue {
   title: string;
   description?: string;
   state: LinearState;
-  labels: { nodes: Array<{ name: string }> };
+  labels: Array<{ id: string; name: string; color?: string }>;
   url: string;
   team: { id: string; name: string };
   assignee?: { id: string; name: string } | null;
