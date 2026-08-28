@@ -54,8 +54,19 @@ async function hsUpsertByUniqueProperty(
     },
   );
   if (res.status === 404) {
-    const created = await hsCreate(objectTypeId, properties);
-    return { id: created.id, action: 'created' };
+    try {
+      const created = await hsCreate(objectTypeId, properties);
+      return { id: created.id, action: 'created' };
+    } catch (createErr) {
+      const msg = createErr instanceof Error ? createErr.message : String(createErr);
+      if (msg.includes('409')) {
+        // A concurrent request already created the record — the first writer won,
+        // and it set the same stage we would have set. Treat this as a no-op.
+        console.log(`HubSpot 409 conflict for ${idProperty}=${idValue}: concurrent create won, treating as skipped`);
+        return { id: idValue, action: 'skipped' as const };
+      }
+      throw createErr;
+    }
   }
   if (!res.ok) throw new Error(`HubSpot upsert failed ${res.status}: ${await res.text()}`);
   const updated = await res.json() as { id: string };

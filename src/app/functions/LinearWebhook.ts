@@ -48,6 +48,18 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
   const labels = payload.data.labels?.map(l => l.name) ?? [];
   const isChangelog = labels.includes(LINEAR_CHANGELOG_LABEL);
 
+  console.log(`LinearWebhook: action=${payload.action} issueId=${payload.data.id} labels=${JSON.stringify(labels)} isChangelog=${isChangelog}`);
+
+  // Linear fires two rapid events when an issue is created with a label:
+  // 1. IssueCreate (action=create)  2. IssueUpdate for the label assignment (action=update)
+  // Both events arrive before either can complete a HubSpot write, causing a race
+  // where two workflow runs fire. Deferring the create to the update event eliminates
+  // this race — the update always carries the same (or more complete) state.
+  if (payload.action === 'create') {
+    console.log(`LinearWebhook: skipping create for ${payload.data.id} — deferred to update event`);
+    return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'create-deferred-to-update' }) };
+  }
+
   try {
     const settings = await readAppSettings(context.accountId);
 
