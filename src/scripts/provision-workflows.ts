@@ -159,9 +159,6 @@ function buildWorkflow(def: WorkflowDef) {
     };
   });
 
-  // TODO: add "Edit record → set asana_task_url from action output" step once we know
-  // the correct actionTypeId for the native SET_PROPERTY action type in the v4 flows API.
-
   return {
     name: def.name,
     type: 'PLATFORM_FLOW',

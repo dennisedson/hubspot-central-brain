@@ -1,4 +1,5 @@
 import { findTaskByLinearIssueUrl, updateTaskPipelineStage, createTask } from '../lib/asana-client';
+import { hsUpdate } from '../lib/hubspot-client';
 import {
   ASANA_PIPELINE_STAGE_FIELD_GID,
   ASANA_LINEAR_ISSUE_URL_FIELD_GID,
@@ -93,6 +94,18 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
     }
 
     const asanaTaskUrl = `https://app.asana.com/0/${asanaProjectGid}/${taskGid}`;
+
+    // Write the task URL back to the HubSpot record so future workflow runs
+    // skip the Asana search and use the stored URL directly.
+    if (!existingAsanaTaskUrl) {
+      try {
+        await hsUpdate(config.content.objectTypeId, context.body.hs_object_id, { asana_task_url: asanaTaskUrl });
+        console.log(`Wrote asana_task_url back to HubSpot record ${context.body.hs_object_id}`);
+      } catch (err) {
+        console.error('Failed to write asana_task_url back to HubSpot:', err);
+      }
+    }
+
     return {
       statusCode: 200,
       body: JSON.stringify({

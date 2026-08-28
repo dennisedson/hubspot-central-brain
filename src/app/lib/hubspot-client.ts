@@ -62,7 +62,7 @@ async function hsUpsertByUniqueProperty(
   return { id: updated.id, action: 'updated' };
 }
 
-async function hsUpdate(objectTypeId: string, objectId: string, properties: Record<string, string>): Promise<void> {
+export async function hsUpdate(objectTypeId: string, objectId: string, properties: Record<string, string>): Promise<void> {
   const token = getToken();
   const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}/${objectId}`, {
     method: 'PATCH',

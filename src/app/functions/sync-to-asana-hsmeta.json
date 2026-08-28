@@ -7,6 +7,6 @@
       "path": "sync-to-asana",
       "methods": ["POST"]
     },
-    "secretKeys": ["SYNC_SHARED_SECRET", "ASANA_API_KEY"]
+    "secretKeys": ["SYNC_SHARED_SECRET", "ASANA_API_KEY", "HS_ACCESS_TOKEN"]
   }
 }
