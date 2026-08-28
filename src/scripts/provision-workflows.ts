@@ -106,17 +106,15 @@ interface WorkflowDef {
   };
 }
 
-  // Builds a fields object for a SINGLE_CONNECTION action.
-  // Static values and object-property references use the unified spec shape.
+  // Builds a fields object for a CWA SINGLE_CONNECTION action.
+  // CWA fields are plain strings: static fields pass the literal value,
+  // property fields pass the HubSpot property name — HubSpot resolves it
+  // at runtime using the supportedValueTypes from the action definition.
   function fieldSpec(
-    mappings: Array<{ name: string; kind: 'static' | 'property'; value: string }>,
-  ): Record<string, unknown> {
-    const result: Record<string, unknown> = {};
-    for (const m of mappings) {
-      result[m.name] = m.kind === 'static'
-        ? { type: 'STATIC_VALUE', staticValue: m.value }
-        : { type: 'OBJECT_PROPERTY', propertyName: m.value };
-    }
+    mappings: Array<{ name: string; value: string }>,
+  ): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const m of mappings) result[m.name] = m.value;
     return result;
   }
 
@@ -127,11 +125,11 @@ function buildWorkflow(def: WorkflowDef) {
     actionSlots.push({
       actionTypeId: def.steps.syncToLinearId,
       fields: fieldSpec([
-        { name: 'sharedSecret', kind: 'static', value: def.sharedSecret },
-        { name: 'objectType', kind: 'static', value: def.steps.objectType },
-        { name: 'linearTeamId', kind: 'static', value: def.linearTeamId },
-        { name: 'hubspotStage', kind: 'property', value: 'hs_pipeline_stage' },
-        { name: 'linearIssueId', kind: 'property', value: 'linear_issue_id' },
+        { name: 'sharedSecret', value: def.sharedSecret },
+        { name: 'objectType', value: def.steps.objectType },
+        { name: 'linearTeamId', value: def.linearTeamId },
+        { name: 'hubspotStage', value: 'hs_pipeline_stage' },
+        { name: 'linearIssueId', value: 'linear_issue_id' },
       ]),
     });
   }
@@ -139,12 +137,12 @@ function buildWorkflow(def: WorkflowDef) {
   actionSlots.push({
     actionTypeId: def.steps.syncToAsanaId,
     fields: fieldSpec([
-      { name: 'sharedSecret', kind: 'static', value: def.sharedSecret },
-      { name: 'objectType', kind: 'static', value: def.steps.objectType },
-      { name: 'hubspotStage', kind: 'property', value: 'hs_pipeline_stage' },
-      { name: 'title', kind: 'property', value: 'title' },
-      { name: 'linearIssueUrl', kind: 'property', value: 'linear_issue_url' },
-      { name: 'existingAsanaTaskUrl', kind: 'property', value: 'asana_task_url' },
+      { name: 'sharedSecret', value: def.sharedSecret },
+      { name: 'objectType', value: def.steps.objectType },
+      { name: 'hubspotStage', value: 'hs_pipeline_stage' },
+      { name: 'title', value: 'title' },
+      { name: 'linearIssueUrl', value: 'linear_issue_url' },
+      { name: 'existingAsanaTaskUrl', value: 'asana_task_url' },
     ]),
   });
 
