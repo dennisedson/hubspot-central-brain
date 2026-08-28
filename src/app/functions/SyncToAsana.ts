@@ -11,9 +11,10 @@ import { verifySharedSecret } from '../lib/shared-secret';
 
 interface SyncToAsanaBody {
   callbackId: string;
-  hs_object_id: string;
+  hs_object_id?: string;
   inputFields: {
     sharedSecret: string;
+    objectId?: string;
     title?: string;
     existingAsanaTaskUrl?: string;
     linearIssueUrl?: string;
@@ -47,7 +48,8 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
     return { statusCode: 500, body: JSON.stringify({ error: 'Server misconfiguration' }) };
   }
 
-  const { title, existingAsanaTaskUrl, linearIssueUrl, hubspotStage, objectType } = context.body.inputFields;
+  const { title, existingAsanaTaskUrl, linearIssueUrl, hubspotStage, objectType, objectId } = context.body.inputFields;
+  const recordId = objectId ?? context.body.hs_object_id;
 
   const config = getPortalConfig(context.accountId);
   const asanaWorkspaceGid = config.asanaWorkspaceGid;
@@ -97,10 +99,10 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
 
     // Write the task URL back to the HubSpot record so future workflow runs
     // skip the Asana search and use the stored URL directly.
-    if (!existingAsanaTaskUrl) {
+    if (!existingAsanaTaskUrl && recordId) {
       try {
-        await hsUpdate(config.content.objectTypeId, context.body.hs_object_id, { asana_task_url: asanaTaskUrl });
-        console.log(`Wrote asana_task_url back to HubSpot record ${context.body.hs_object_id}`);
+        await hsUpdate(config.content.objectTypeId, recordId, { asana_task_url: asanaTaskUrl });
+        console.log(`Wrote asana_task_url back to HubSpot record ${recordId}`);
       } catch (err) {
         console.error('Failed to write asana_task_url back to HubSpot:', err);
       }

@@ -54,6 +54,15 @@
       },
       {
         "typeDefinition": {
+          "name": "objectId",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "isRequired": true
+      },
+      {
+        "typeDefinition": {
           "name": "objectType",
           "type": "enumeration",
           "fieldType": "select",
@@ -85,6 +94,7 @@
         "actionCardContent": "Sync to Asana → {{objectType}}",
         "inputFieldLabels": {
           "sharedSecret": "Shared Secret",
+          "objectId": "HubSpot Record ID",
           "title": "Content Title",
           "existingAsanaTaskUrl": "Existing Asana Task URL",
           "linearIssueUrl": "Linear Issue URL",
@@ -93,6 +103,7 @@
         },
         "inputFieldDescriptions": {
           "sharedSecret": "Shared secret that authenticates this request; must match the SYNC_SHARED_SECRET function secret",
+          "objectId": "The hs_object_id of the enrolled HubSpot record — used to write the Asana task URL back after creation",
           "title": "The title property from the HubSpot record — used as the Asana task name when creating a new task",
           "existingAsanaTaskUrl": "The asana_task_url property from the HubSpot record — if set, the task is updated directly without searching",
           "linearIssueUrl": "The linear_issue_url property from the HubSpot record — used to look up the Asana task if no asana_task_url is stored",

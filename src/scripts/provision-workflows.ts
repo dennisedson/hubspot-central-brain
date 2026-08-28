@@ -139,6 +139,7 @@ function buildWorkflow(def: WorkflowDef) {
     fields: fieldSpec([
       { name: 'sharedSecret', value: def.sharedSecret },
       { name: 'objectType', value: def.steps.objectType },
+      { name: 'objectId', value: 'hs_object_id' },
       { name: 'hubspotStage', value: 'hs_pipeline_stage' },
       { name: 'title', value: 'title' },
       { name: 'linearIssueUrl', value: 'linear_issue_url' },
