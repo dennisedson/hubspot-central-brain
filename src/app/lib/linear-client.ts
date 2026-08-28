@@ -38,7 +38,9 @@ export async function getLinearStates(apiKey: string, teamId: string): Promise<L
   `;
   const data = await gql<{ team: { states: { nodes: LinearState[] } } | null }>(apiKey, query, { teamId });
   if (!data.team) throw new Error(`Linear team not found: ${teamId}`);
-  return data.team.states.nodes;
+  const states = data.team.states.nodes;
+  console.log(`Linear team ${teamId} states: ${states.map(s => s.name).join(', ')}`);
+  return states;
 }
 
 export async function findStateIdByName(

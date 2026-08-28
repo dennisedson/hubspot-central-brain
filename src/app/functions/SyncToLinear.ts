@@ -62,9 +62,10 @@ export async function main(context: SyncToLinearContext): Promise<{ statusCode: 
 
   const stateId = await findStateIdByName(apiKey, linearTeamId, targetStateName);
   if (!stateId) {
+    console.warn(`Linear state "${targetStateName}" not found in team ${linearTeamId} — available states logged above`);
     return {
-      statusCode: 404,
-      body: JSON.stringify({ error: `Linear state "${targetStateName}" not found in team ${linearTeamId}` }),
+      statusCode: 200,
+      body: JSON.stringify({ outputFields: { syncStatus: 'skipped', reason: `state_not_found:${targetStateName}` } }),
     };
   }
 
