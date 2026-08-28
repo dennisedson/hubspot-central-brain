@@ -88,12 +88,18 @@ export async function getCurrentStage(
   objectTypeId: string,
   linearIssueId: string,
 ): Promise<string | null> {
-  const response = await hsSearch(
-    objectTypeId,
-    [{ propertyName: 'linear_issue_id', operator: 'EQ', value: linearIssueId }],
-    ['linear_issue_id', 'hs_pipeline_stage'],
+  // Use GET by unique property (linear_id) instead of POST search — the search index
+  // has replication lag that breaks dedup when two Linear webhook events arrive within
+  // milliseconds of each other (e.g. issue create + label assignment double-fire).
+  const token = getToken();
+  const res = await fetch(
+    `${HS_BASE}/crm/v3/objects/${objectTypeId}/${encodeURIComponent(linearIssueId)}?idProperty=linear_id&properties=hs_pipeline_stage`,
+    { headers: { Authorization: `Bearer ${token}` } },
   );
-  return response.results[0]?.properties?.hs_pipeline_stage ?? null;
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`HubSpot GET failed ${res.status}: ${await res.text()}`);
+  const data = await res.json() as { properties: { hs_pipeline_stage: string | null } };
+  return data.properties.hs_pipeline_stage ?? null;
 }
 
 export async function archiveContentByLinearId(
