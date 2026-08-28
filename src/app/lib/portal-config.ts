@@ -19,6 +19,7 @@ export interface PortalConfig {
   appConfig: {
     objectTypeId: string;
   };
+  asanaWorkspaceGid: string;
   asanaProjectGid: string;
   asanaSections: {
     content: string;
@@ -46,6 +47,7 @@ const CONFIGS: Record<number, PortalConfig> = {
   // dev
   51869810: {
     appConfig: { objectTypeId: '2-68071489' },
+    asanaWorkspaceGid: '8587152060687',  // hubspot.com
     asanaProjectGid: '1217881318437204', // Dennis-Staging (test project)
     asanaSections: {
       content: '1217881758656068',   // Developer Blog
@@ -90,6 +92,7 @@ const CONFIGS: Record<number, PortalConfig> = {
   // staging
   51869787: {
     appConfig: { objectTypeId: '2-68180080' },
+    asanaWorkspaceGid: '8587152060687',  // hubspot.com
     asanaProjectGid: '1202179514576728', // BuildRel | Advocacy Content Factory
     asanaSections: {
       content: '1210601763434613',   // Developer Blog
@@ -129,6 +132,7 @@ const CONFIGS: Record<number, PortalConfig> = {
   // prod
   22047910: {
     appConfig: { objectTypeId: '2-68180129' },
+    asanaWorkspaceGid: '8587152060687',  // hubspot.com
     asanaProjectGid: '1202179514576728', // BuildRel | Advocacy Content Factory
     asanaSections: {
       content: '1210601763434613',   // Developer Blog

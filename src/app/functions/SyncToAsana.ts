@@ -49,6 +49,7 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
   const { title, existingAsanaTaskUrl, linearIssueUrl, hubspotStage, objectType } = context.body.inputFields;
 
   const config = getPortalConfig(context.accountId);
+  const asanaWorkspaceGid = config.asanaWorkspaceGid;
   const asanaProjectGid = config.asanaProjectGid;
   const stageIds = config.content.pipelines[objectType as 'content' | 'changelog'].stageIds;
   const stageName = Object.entries(stageIds).find(([, id]) => id === hubspotStage)?.[0];
@@ -76,7 +77,7 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
 
     // 2. Fall back to searching by Linear issue URL (only when non-empty)
     if (!taskGid && linearIssueUrl) {
-      taskGid = await findTaskByLinearIssueUrl(asanaApiKey, asanaProjectGid, linearIssueUrl);
+      taskGid = await findTaskByLinearIssueUrl(asanaApiKey, asanaWorkspaceGid, asanaProjectGid, linearIssueUrl);
     }
 
     if (taskGid) {

@@ -54,14 +54,15 @@ export async function createTask(
 
 export async function findTaskByLinearIssueUrl(
   apiKey: string,
+  workspaceGid: string,
   projectGid: string,
   linearIssueUrl: string,
 ): Promise<string | null> {
   const params = new URLSearchParams({
-    project: projectGid,
+    'projects.any': projectGid,
     [`custom_fields.${ASANA_LINEAR_ISSUE_URL_FIELD_GID}.value`]: linearIssueUrl,
     opt_fields: 'gid,name',
   });
-  const tasks = await request<Array<{ gid: string }>>(apiKey, 'GET', `/tasks?${params}`);
+  const tasks = await request<Array<{ gid: string }>>(apiKey, 'GET', `/workspaces/${workspaceGid}/tasks/search?${params}`);
   return tasks[0]?.gid ?? null;
 }
