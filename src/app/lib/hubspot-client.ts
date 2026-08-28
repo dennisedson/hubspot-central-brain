@@ -124,6 +124,15 @@ export async function upsertContent(
   const stageId = pipelineConfig.stageIds[stageName] ?? stageName;
   const objectTypeId = config.content.objectTypeId;
 
+  // Skip if the record already has this exact stage — prevents duplicate workflow
+  // triggers when Linear fires two rapid webhook events for the same action
+  // (e.g. issue creation + label assignment arriving near-simultaneously).
+  const currentStageId = await getCurrentStage(objectTypeId, data.id);
+  if (currentStageId === stageId) {
+    console.log(`Skipping upsert for Linear ${data.id}: stage already ${stageId}`);
+    return { id: data.id, action: 'skipped' as const };
+  }
+
   const properties: Record<string, string> = {
     title: data.title,
     linear_id: data.id,       // unique property — used as atomic upsert key

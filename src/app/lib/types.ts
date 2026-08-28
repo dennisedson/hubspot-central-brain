@@ -86,7 +86,7 @@ export interface HubSpotRecord {
 
 export interface UpsertResult {
   id: string;
-  action: 'created' | 'updated';
+  action: 'created' | 'updated' | 'skipped';
 }
 
 export interface SyncToLinearInput {
