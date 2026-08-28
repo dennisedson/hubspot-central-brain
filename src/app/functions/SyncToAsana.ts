@@ -52,6 +52,7 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
   const asanaProjectGid = config.asanaProjectGid;
   const stageIds = config.content.pipelines[objectType as 'content' | 'changelog'].stageIds;
   const stageName = Object.entries(stageIds).find(([, id]) => id === hubspotStage)?.[0];
+  console.log(`SyncToAsana: objectType=${objectType} hubspotStage=${hubspotStage} stageName=${stageName} knownStageIds=${JSON.stringify(stageIds)}`);
 
   const stageMap = objectType === 'changelog' ? CHANGELOG_STAGE_TO_ASANA_STAGE : CONTENT_STAGE_TO_ASANA_STAGE;
   const asanaStageGid = stageName ? (stageMap as Record<string, string>)[stageName] : undefined;
