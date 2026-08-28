@@ -31,15 +31,14 @@ async function gql<T>(apiKey: string, query: string, variables: Record<string, s
 export async function getLinearStates(apiKey: string, teamId: string): Promise<LinearState[]> {
   const query = `
     query GetTeamStates($teamId: String!) {
-      teams(filter: { key: { eq: $teamId } }) {
-        nodes { states { nodes { id name type } } }
+      team(id: $teamId) {
+        states { nodes { id name type } }
       }
     }
   `;
-  const data = await gql<{ teams: { nodes: Array<{ states: { nodes: LinearState[] } }> } }>(apiKey, query, { teamId });
-  const team = data.teams.nodes[0];
-  if (!team) throw new Error(`Linear team not found: ${teamId}`);
-  return team.states.nodes;
+  const data = await gql<{ team: { states: { nodes: LinearState[] } } | null }>(apiKey, query, { teamId });
+  if (!data.team) throw new Error(`Linear team not found: ${teamId}`);
+  return data.team.states.nodes;
 }
 
 export async function findStateIdByName(

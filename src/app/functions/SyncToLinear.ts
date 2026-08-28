@@ -53,9 +53,10 @@ export async function main(context: SyncToLinearContext): Promise<{ statusCode: 
 
   const targetStateName = stageName ? (stageMap as Record<string, string>)[stageName] : undefined;
   if (!targetStateName) {
+    console.log(`Stage "${hubspotStage}" not in ${objectType} pipeline — skipping (cross-pipeline trigger)`);
     return {
-      statusCode: 400,
-      body: JSON.stringify({ error: `Unknown HubSpot stage: "${hubspotStage}" for objectType "${objectType}"` }),
+      statusCode: 200,
+      body: JSON.stringify({ outputFields: { syncStatus: 'skipped' } }),
     };
   }
 

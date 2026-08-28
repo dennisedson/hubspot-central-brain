@@ -57,9 +57,10 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
   const asanaStageGid = stageName ? (stageMap as Record<string, string>)[stageName] : undefined;
 
   if (!asanaStageGid) {
+    console.log(`Stage "${hubspotStage}" not in ${objectType} pipeline — skipping (cross-pipeline trigger)`);
     return {
-      statusCode: 400,
-      body: JSON.stringify({ error: `Unknown HubSpot stage: "${hubspotStage}" for objectType "${objectType}"` }),
+      statusCode: 200,
+      body: JSON.stringify({ outputFields: { syncStatus: 'skipped' } }),
     };
   }
 

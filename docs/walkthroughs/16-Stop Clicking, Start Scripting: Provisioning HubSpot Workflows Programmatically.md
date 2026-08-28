@@ -7,15 +7,15 @@
 
 *   **Hook & Demo (0:00 - 1:00):** "What if every time you spun up a new HubSpot portal, your workflows just… appeared? No clicking through the UI, no forgetting steps, no drift between environments." Show the terminal running `npm run provision:workflows` and then cut to the HubSpot UI where both workflows show up, pre-configured, with all their actions wired in.
 
-*   **The Architecture (1:00 - 3:00):** Walk through what the script does at a high level — three phases: (1) discover the custom action type IDs from the developer API using your developer key, (2) fetch the Linear team ID from the live app settings object in HubSpot's CRM so the workflow always has the right value, (3) POST two workflow definitions to the v4 flows API. Key insight: HubSpot's automation API separates the concept of "what type of action" (`actionTypeId` like `1-271474309`) from "this action's position in the flow" (`actionId` like `"1"`). Custom workflow actions use the `1-{definitionId}` format.
+*   **The Architecture (1:00 - 3:00):** Walk through what the script does at a high level — three phases: (1) discover the custom action type IDs from the developer API using your developer key, (2) fetch the Linear team ID from the live app settings object in HubSpot's CRM so the workflow always has the right value, (3) upsert two workflow definitions via the v4 flows API (POST to create, PUT to update). Key insight: HubSpot's automation API separates the concept of "what type of action" (`actionTypeId` like `1-271474309`) from "this action's position in the flow" (`actionId` like `"1"`). Custom workflow actions use the `1-{definitionId}` format.
 
 *   **Step-by-Step Implementation (3:00 - 8:00):**
     *   **Step 1 — Discovering action IDs (3:00 - 4:30):** Open `src/scripts/provision-workflows.ts`. Show `discoverActionIds()` — how it calls `GET /automation/v4/actions/{appId}?hapikey={devKey}` (needs the developer API key, not the portal service key) and formats the returned IDs as `1-{id}`.
     *   **Step 2 — Building the workflow payload (4:30 - 6:30):** Show `buildWorkflow()`. Walk through the required root fields: `type: 'PLATFORM_FLOW'` (for custom objects — `CONTACT_FLOW` is for contacts), `flowType: 'WORKFLOW'`, `isEnabled: false` (HubSpot applies stricter validation for enabled-on-create), `startActionId`, and `enrollmentCriteria`. Explain the `SINGLE_CONNECTION` action structure with `actionTypeId`, `actionTypeVersion: 0`, `fields`, and `connection.nextActionId` for chaining.
-    *   **Step 3 — Enrollment criteria (6:30 - 7:30):** Show the `EVENT_BASED` enrollment using `eventTypeId: "4-655002"` (property value changed). Explain that pipeline-specific filtering can be added as a `listFilterBranch` in a follow-up, but `EVENT_BASED` with empty filters is a valid starting point.
-    *   **Step 4 — Idempotency (7:30 - 8:00):** Show `findExistingWorkflow()` — it lists all flows and checks by name so re-running the script is always safe.
+    *   **Step 3 — Enrollment criteria (6:30 - 7:30):** Show the `EVENT_BASED` enrollment using `eventTypeId: "4-655002"` (property value changed). The key gotcha: you MUST add two `PROPERTY` filters inside the event filter branch — one on `hs_name` (the event's "which property changed" attribute, matched `IS_EQUAL_TO "hs_pipeline_stage"`) and one on `hs_value` (the event's new value, matched `IS_KNOWN`). Without these, HubSpot shows "Property name and value filter is missing" and the trigger is unconfigured. The event exposes its payload as `hs_name` / `hs_value` event attributes, accessed via `filterType: "PROPERTY"` — this is undocumented and the only way to discover it is to configure the trigger in the UI and then GET the workflow to inspect the JSON.
+    *   **Step 4 — Upsert pattern (7:30 - 8:00):** Show `upsertWorkflow()` — it GETs the workflow list to check by name. If the workflow exists, it PUTs with the existing `revisionId` and `isEnabled` preserved. If not, it POSTs. This makes the script safe to re-run and lets you update enrollment criteria or action fields after the fact.
 
-*   **Testing & Wrap-up (8:00 - 10:00):** Run `npm run provision:workflows` in the terminal, then switch to HubSpot and show both workflows. Re-run the script and show the `[skip]` messages. Wrap up: "Three things to remember — custom actions use `1-{id}` format, workflows must be created disabled and enabled separately, and always use your developer API key (not the portal service key) to discover action IDs."
+*   **Testing & Wrap-up (8:00 - 10:00):** Run `npm run provision:workflows` in the terminal, then switch to HubSpot and show both workflows with a clean trigger (no red warnings). Re-run the script to show it updates in place. Wrap up: "Four things to remember — custom actions use `1-{id}` format, workflows must be created disabled, always use your developer API key to discover action IDs, and property-change triggers require an explicit PROPERTY filter or HubSpot won't let you enable the workflow."
 
 **💻 Screen-Ready Code Snippets:**
 
@@ -32,7 +32,7 @@ return {
 };
 ```
 
-**Workflow payload structure:**
+**Workflow payload structure (with correct enrollment filter):**
 ```typescript
 {
   name: 'Content → Sync to Linear + Asana',
@@ -46,7 +46,30 @@ return {
     type: 'EVENT_BASED',
     eventFilterBranches: [{
       filterBranches: [],
-      filters: [],
+      // 4-655002 exposes its payload as hs_name / hs_value event attributes.
+      // hs_name = which property changed; hs_value = the new value.
+      // Undocumented — discovered by configuring in the UI and reading back via GET.
+      filters: [
+        {
+          filterType: 'PROPERTY',
+          property: 'hs_name',
+          operation: {
+            operator: 'IS_EQUAL_TO',
+            includeObjectsWithNoValueSet: false,
+            value: 'hs_pipeline_stage',
+            operationType: 'STRING',
+          },
+        },
+        {
+          filterType: 'PROPERTY',
+          property: 'hs_value',
+          operation: {
+            operator: 'IS_KNOWN',
+            includeObjectsWithNoValueSet: false,
+            operationType: 'ALL_PROPERTY',
+          },
+        },
+      ],
       eventTypeId: '4-655002',    // property value changed
       operator: 'HAS_COMPLETED',
       filterBranchType: 'UNIFIED_EVENTS',
@@ -60,19 +83,28 @@ return {
     actionTypeId: '1-271474309',  // 1-{definitionId} from your custom action
     actionTypeVersion: 0,
     fields: {
-      sharedSecret: { type: 'STATIC_VALUE', staticValue: '...' },
-      hubspotStage: { type: 'OBJECT_PROPERTY', propertyName: 'hs_pipeline_stage' },
+      sharedSecret: 'your-secret',          // plain strings for static values
+      hubspotStage: 'hs_pipeline_stage',    // plain property name for object properties
     },
     connection: { edgeType: 'STANDARD', nextActionId: '2' },
   }],
 }
 ```
 
-**Idempotency check:**
+**Upsert workflow (create or update in place):**
 ```typescript
-async function findExistingWorkflow(token: string, name: string): Promise<string | null> {
-  const res = await hs(token, 'GET', '/automation/v4/flows?limit=100');
-  const existing = (res.results ?? []).find((w: any) => w.name === name);
-  return existing?.id ?? null;
+async function upsertWorkflow(name: string, payload: Record<string, unknown>) {
+  const existing = await findExistingWorkflow(token, name);
+  if (existing) {
+    const result = await hs(token, 'PUT', `/automation/v4/flows/${existing.id}`, {
+      ...payload,
+      revisionId: existing.revisionId,  // required for PUT
+      isEnabled: existing.isEnabled,    // preserve enabled state across updates
+    });
+    console.log(`Updated id=${result.id}`);
+  } else {
+    const result = await hs(token, 'POST', '/automation/v4/flows', payload);
+    console.log(`Created id=${result.id}`);
+  }
 }
 ```

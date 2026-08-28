@@ -83,12 +83,12 @@ async function fetchLinearTeamId(token: string, appConfigObjectTypeId: string): 
   return teamId;
 }
 
-// Check if a workflow with this name already exists
-async function findExistingWorkflow(token: string, name: string): Promise<string | null> {
+// Returns the full existing workflow object (id + revisionId + isEnabled) or null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function findExistingWorkflow(token: string, name: string): Promise<any | null> {
   const res = await hs(token, 'GET', '/automation/v4/flows?limit=100');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const existing = (res.results ?? []).find((w: any) => w.name === name);
-  return existing?.id ?? null;
+  return (res.results ?? []).find((w: any) => w.name === name) ?? null;
 }
 
 interface WorkflowDef {
@@ -174,13 +174,58 @@ function buildWorkflow(def: WorkflowDef) {
       type: 'EVENT_BASED',
       eventFilterBranches: [{
         filterBranches: [],
-        filters: [],
+        // 4-655002 (property value changed) exposes its payload as hs_name / hs_value.
+        // hs_name = which property changed; hs_value = the new value.
+        // Both filters together = "hs_pipeline_stage changed to any known value."
+        filters: [
+          {
+            filterType: 'PROPERTY',
+            property: 'hs_name',
+            operation: {
+              operator: 'IS_EQUAL_TO',
+              includeObjectsWithNoValueSet: false,
+              value: 'hs_pipeline_stage',
+              operationType: 'STRING',
+            },
+          },
+          {
+            filterType: 'PROPERTY',
+            property: 'hs_value',
+            operation: {
+              operator: 'IS_KNOWN',
+              includeObjectsWithNoValueSet: false,
+              operationType: 'ALL_PROPERTY',
+            },
+          },
+        ],
         eventTypeId: '4-655002',
         operator: 'HAS_COMPLETED',
         filterBranchType: 'UNIFIED_EVENTS',
         filterBranchOperator: 'AND',
       }],
       listMembershipFilterBranches: [],
+      // Scope to the specific pipeline so the Changelog workflow doesn't fire on
+      // Content records and vice versa (both share the same content_piece object type).
+      listFilterBranch: {
+        filterBranches: [{
+          filterBranches: [],
+          filters: [{
+            filterType: 'PROPERTY',
+            property: 'hs_pipeline',
+            operation: {
+              operator: 'IS_EQUAL_TO',
+              includeObjectsWithNoValueSet: false,
+              values: [def.pipelineId],
+              operationType: 'MULTISTRING',
+            },
+          }],
+          filterBranchType: 'AND',
+          filterBranchOperator: 'AND',
+        }],
+        filters: [],
+        filterBranchType: 'OR',
+        filterBranchOperator: 'OR',
+      },
     },
     actions,
   };
@@ -204,53 +249,58 @@ async function main() {
 
   const objectTypeId = config.content.objectTypeId;
 
+  // Upsert helper: creates via POST or updates via PUT.
+  // The list endpoint omits revisionId, so we do a second GET by ID to get it.
+  // Updates always send isEnabled:false — HubSpot rejects updates to enabled workflows.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function upsertWorkflow(name: string, payload: Record<string, unknown>): Promise<void> {
+    const summary = await findExistingWorkflow(token, name);
+    if (summary) {
+      console.log(`\nUpdating "${name}" (id=${summary.id})...`);
+      const full = await hs(token, 'GET', `/automation/v4/flows/${summary.id}`);
+      const result = await hs(token, 'PUT', `/automation/v4/flows/${full.id}`, {
+        ...payload,
+        revisionId: full.revisionId,
+        isEnabled: false,
+      });
+      console.log(`  ✓ Updated id=${result.id}${full.isEnabled ? ' (was enabled — re-enable in HubSpot)' : ''}`);
+    } else {
+      console.log(`\nCreating "${name}"...`);
+      const result = await hs(token, 'POST', '/automation/v4/flows', payload);
+      console.log(`  ✓ Created id=${result.id}`);
+    }
+  }
+
   // Step 3: Content workflow
   const contentName = 'Content → Sync to Linear + Asana';
-  let existingId = await findExistingWorkflow(token, contentName);
-  if (existingId) {
-    console.log(`\n[skip] "${contentName}" already exists (id=${existingId})`);
-  } else {
-    console.log(`\nCreating "${contentName}"...`);
-    const workflow = buildWorkflow({
-      name: contentName,
-      objectTypeId,
-      pipelineId: config.content.pipelines.content.pipelineId,
-      appId,
-      sharedSecret,
-      linearTeamId,
-      steps: { includeLinearSync: true, objectType: 'content', syncToAsanaId, syncToLinearId },
-    });
-    console.log('\nPayload:', JSON.stringify(workflow));
-    const created = await hs(token, 'POST', '/automation/v4/flows', workflow);
-    console.log(`  ✓ Created id=${created.id}`);
-  }
+  await upsertWorkflow(contentName, buildWorkflow({
+    name: contentName,
+    objectTypeId,
+    pipelineId: config.content.pipelines.content.pipelineId,
+    appId,
+    sharedSecret,
+    linearTeamId,
+    steps: { includeLinearSync: true, objectType: 'content', syncToAsanaId, syncToLinearId },
+  }));
 
   // Step 4: Changelog workflow
   const changelogName = 'Changelog → Sync to Asana';
-  existingId = await findExistingWorkflow(token, changelogName);
-  if (existingId) {
-    console.log(`\n[skip] "${changelogName}" already exists (id=${existingId})`);
-  } else {
-    console.log(`\nCreating "${changelogName}"...`);
-    const changelogPipelineId = config.content.pipelines.changelog.pipelineId;
-    if (!changelogPipelineId) {
-      console.error('  ✗ Changelog pipeline not provisioned yet — run npm run provision first');
-      process.exit(1);
-    }
-    const workflow = buildWorkflow({
-      name: changelogName,
-      objectTypeId,
-      pipelineId: changelogPipelineId,
-      appId,
-      sharedSecret,
-      linearTeamId,
-      steps: { includeLinearSync: false, objectType: 'changelog', syncToAsanaId, syncToLinearId },
-    });
-    const created = await hs(token, 'POST', '/automation/v4/flows', workflow);
-    console.log(`  ✓ Created id=${created.id}`);
+  const changelogPipelineId = config.content.pipelines.changelog.pipelineId;
+  if (!changelogPipelineId) {
+    console.error('  ✗ Changelog pipeline not provisioned yet — run npm run provision first');
+    process.exit(1);
   }
+  await upsertWorkflow(changelogName, buildWorkflow({
+    name: changelogName,
+    objectTypeId,
+    pipelineId: changelogPipelineId,
+    appId,
+    sharedSecret,
+    linearTeamId,
+    steps: { includeLinearSync: false, objectType: 'changelog', syncToAsanaId, syncToLinearId },
+  }));
 
-  console.log('\n✓ Done. Workflows created in disabled state — enable them in HubSpot after verifying the configuration.');
+  console.log('\n✓ Done. New workflows are disabled — enable in HubSpot after verifying. Re-runs update existing workflows in place.');
 }
 
 main().catch(err => { console.error('\nFailed:', err.message); process.exit(1); });

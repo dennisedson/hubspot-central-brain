@@ -1,4 +1,7 @@
 {
   "accountId": 22047910,
-  "variables": {"SYNC_TO_LINEAR_URL": "https://22047910.hs-sites.com/hs/serverless/sync-to-linear"}
+  "variables": {
+    "SYNC_TO_LINEAR_URL": "https://22047910.hs-sites.com/hs/serverless/sync-to-linear",
+    "SYNC_TO_ASANA_URL": "https://22047910.hs-sites.com/hs/serverless/sync-to-asana"
+  }
 }

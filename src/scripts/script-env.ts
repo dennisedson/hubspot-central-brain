@@ -18,7 +18,7 @@ export interface ScriptEnv {
   appId: number;           // numeric project app ID (distribution: private)
   token: string;           // HUBSPOT_*_SERVICE_KEY (private app token for API scripts)
   personalKey: string;     // HUBSPOT_*_PERSONAL_ACCESS_KEY (for hs CLI / SDK client init)
-  sharedSecret: string;    // SYNC_SHARED_SECRET
+  sharedSecret: string;    // HUBSPOT_*_SYNC_SECRET
   asanaApiKey: string;     // ASANA_API_KEY
   developerApiKey: string; // HUBSPOT_*_DEVELOPER_KEY (per-portal developer key)
 }
@@ -75,7 +75,7 @@ export function loadEnv(): ScriptEnv {
     appId:           APP_IDS[portal],
     token:           requireVar(vars, `HUBSPOT_${prefix}_SERVICE_KEY`),
     personalKey:     requireVar(vars, `HUBSPOT_${prefix}_PERSONAL_ACCESS_KEY`),
-    sharedSecret:    requireVar(vars, 'SYNC_SHARED_SECRET'),
+    sharedSecret:    requireVar(vars, `HUBSPOT_${prefix}_SYNC_SECRET`),
     asanaApiKey:     requireVar(vars, 'ASANA_API_KEY'),
     developerApiKey: requireVar(vars, `HUBSPOT_${prefix}_DEVELOPER_KEY`),
   };
