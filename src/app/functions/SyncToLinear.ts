@@ -42,6 +42,7 @@ export async function main(context: SyncToLinearContext): Promise<{ statusCode: 
   }
 
   const { linearIssueId, hubspotStage, objectType, linearTeamId } = context.body.inputFields;
+  console.log(`SyncToLinear input: objectType=${objectType} hubspotStage=${hubspotStage} linearIssueId=${linearIssueId} linearTeamId=${linearTeamId}`);
 
   const config = getPortalConfig(context.accountId);
   const stageIds = config.content.pipelines[objectType as 'content' | 'changelog'].stageIds;
@@ -69,7 +70,15 @@ export async function main(context: SyncToLinearContext): Promise<{ statusCode: 
     };
   }
 
-  await updateLinearIssueState(apiKey, linearIssueId, stateId);
+  try {
+    await updateLinearIssueState(apiKey, linearIssueId, stateId);
+  } catch (err) {
+    console.error(`Linear issueUpdate failed for issue ${linearIssueId}:`, err);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ outputFields: { syncStatus: 'skipped', reason: 'linear_update_failed' } }),
+    };
+  }
 
   console.log(`Synced Linear issue ${linearIssueId} → "${targetStateName}" (${stateId})`);
   return {

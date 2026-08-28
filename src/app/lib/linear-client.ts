@@ -49,7 +49,8 @@ export async function findStateIdByName(
   stateName: string,
 ): Promise<string | null> {
   const states = await getLinearStates(apiKey, teamId);
-  return states.find(s => s.name === stateName)?.id ?? null;
+  const lower = stateName.toLowerCase();
+  return states.find(s => s.name.toLowerCase() === lower)?.id ?? null;
 }
 
 export async function updateLinearIssueState(
