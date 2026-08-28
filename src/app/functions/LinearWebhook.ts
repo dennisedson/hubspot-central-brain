@@ -50,16 +50,6 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
 
   console.log(`LinearWebhook: action=${payload.action} issueId=${payload.data.id} labels=${JSON.stringify(labels)} isChangelog=${isChangelog}`);
 
-  // Linear fires two rapid events when an issue is created with a label:
-  // 1. IssueCreate (action=create)  2. IssueUpdate for the label assignment (action=update)
-  // Both events arrive before either can complete a HubSpot write, causing a race
-  // where two workflow runs fire. Deferring the create to the update event eliminates
-  // this race — the update always carries the same (or more complete) state.
-  if (payload.action === 'create') {
-    console.log(`LinearWebhook: skipping create for ${payload.data.id} — deferred to update event`);
-    return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'create-deferred-to-update' }) };
-  }
-
   try {
     const settings = await readAppSettings(context.accountId);
 
@@ -103,10 +93,13 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     const pipelineConfig = portalConfig.content.pipelines[pipelineKey];
     const forwardMap = isChangelog ? CHANGELOG_STAGE_TO_LINEAR_STATE : CONTENT_STAGE_TO_LINEAR_STATE;
     const currentStageId = await getCurrentStage(portalConfig.content.objectTypeId, payload.data.id);
+    console.log(`LinearWebhook: getCurrentStage=${currentStageId} incomingState=${payload.data.state.name} issueId=${payload.data.id}`);
     if (currentStageId) {
       const stageIds = pipelineConfig.stageIds;
       const currentStageName = Object.keys(stageIds).find(name => stageIds[name] === currentStageId);
-      if (currentStageName && (forwardMap as Record<string, string>)[currentStageName] === payload.data.state.name) {
+      const mappedLinearState = currentStageName ? (forwardMap as Record<string, string>)[currentStageName] : null;
+      console.log(`LinearWebhook: currentStageName=${currentStageName} mappedLinearState=${mappedLinearState}`);
+      if (currentStageName && mappedLinearState === payload.data.state.name) {
         console.log(`Skipping echo for Linear ${payload.data.id}: stage already matches`);
         return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'stage already matches' }) };
       }
