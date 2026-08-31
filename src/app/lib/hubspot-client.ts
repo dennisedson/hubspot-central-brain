@@ -167,6 +167,24 @@ export async function upsertContent(
   return hsUpsertByUniqueProperty(objectTypeId, 'linear_id', data.id, properties);
 }
 
+export async function findContentByAsanaTaskUrl(
+  objectTypeId: string,
+  asanaTaskUrl: string,
+): Promise<{ id: string; pipelineStage: string | null; pipeline: string | null } | null> {
+  const response = await hsSearch(
+    objectTypeId,
+    [{ propertyName: 'asana_task_url', operator: 'EQ', value: asanaTaskUrl }],
+    ['asana_task_url', 'hs_pipeline_stage', 'hs_pipeline'],
+  );
+  const record = response.results[0];
+  if (!record) return null;
+  return {
+    id: record.id,
+    pipelineStage: record.properties.hs_pipeline_stage ?? null,
+    pipeline: record.properties.hs_pipeline ?? null,
+  };
+}
+
 export async function readAppSettings(portalId: number): Promise<AppSettings> {
   const config = getPortalConfig(portalId);
   const objectTypeId = config.appConfig.objectTypeId;

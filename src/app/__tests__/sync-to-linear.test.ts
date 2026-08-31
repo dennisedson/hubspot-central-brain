@@ -76,20 +76,22 @@ describe('SyncToLinear.main', () => {
     expect(updateLinearIssueState).toHaveBeenCalledWith('lin_test_key', 'lin-123', 'st-done');
   });
 
-  it('returns 400 for an unknown HubSpot stage', async () => {
+  it('returns 200 with syncStatus "skipped" for an unknown HubSpot stage', async () => {
     const ctx = {
       ...baseCtx,
       body: { ...baseCtx.body, inputFields: { ...baseCtx.body.inputFields, hubspotStage: 'unknown_stage' } },
     };
     const result = await main(ctx);
-    expect(result.statusCode).toBe(400);
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).outputFields.syncStatus).toBe('skipped');
   });
 
-  it('returns 404 when the Linear state name is not found in the team', async () => {
+  it('returns 200 with syncStatus "skipped" when the Linear state name is not found in the team', async () => {
     const { findStateIdByName } = await import('@lib/linear-client');
     vi.mocked(findStateIdByName).mockResolvedValue(null);
     const result = await main(baseCtx);
-    expect(result.statusCode).toBe(404);
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).outputFields.syncStatus).toBe('skipped');
   });
 
   it('returns 500 when LINEAR_API_KEY is missing', async () => {

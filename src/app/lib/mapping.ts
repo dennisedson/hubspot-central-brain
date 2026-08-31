@@ -70,3 +70,22 @@ export const CHANGELOG_STAGE_TO_ASANA_STAGE: Record<ChangelogStage, string> = {
   reviewing: '1202184607668470',  // Peer Review
   published: '1202212684793528',  // Published
 };
+
+// Asana Pipeline Stage enum option GIDs → HubSpot Content stage names
+// Note: both 'drafting' and 'editing' forward-map to In Progress; reverse uses 'drafting' as canonical
+export const ASANA_STAGE_TO_CONTENT_STAGE: Record<string, ContentStage> = {
+  '1212751789107073': 'idea',      // New Idea
+  '1213736254001623': 'outline',   // Assigned
+  '1202184607667441': 'drafting',  // In Progress
+  '1202184607668470': 'review',    // Peer Review
+  '1202212684793528': 'published', // Published
+  '1202184607671632': 'archived',  // Canceled
+};
+
+// Asana Pipeline Stage enum option GIDs → HubSpot Changelog stage names
+export const ASANA_STAGE_TO_CHANGELOG_STAGE: Record<string, ChangelogStage> = {
+  '1212751789107073': 'identified', // New Idea
+  '1202184607667441': 'drafting',   // In Progress
+  '1202184607668470': 'reviewing',  // Peer Review
+  '1202212684793528': 'published',  // Published
+};

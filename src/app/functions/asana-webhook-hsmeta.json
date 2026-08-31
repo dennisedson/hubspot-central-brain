@@ -1,0 +1,12 @@
+{
+  "uid": "asana_webhook",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/AsanaWebhook.js",
+    "endpoint": {
+      "path": "asana-webhook",
+      "methods": ["POST"]
+    },
+    "secretKeys": ["ASANA_API_KEY", "HS_ACCESS_TOKEN"]
+  }
+}

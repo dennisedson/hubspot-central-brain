@@ -57,7 +57,7 @@ const baseCtx = {
       identifier: 'ENG-1',
       title: 'Improve docs',
       state: { id: 'st-1', name: 'Backlog', type: 'backlog' },
-      labels: { nodes: [] },
+      labels: [],
       url: 'https://linear.app/issue/ENG-1',
       team: { id: 't-1', name: 'Eng' },
     },
@@ -84,7 +84,7 @@ describe('LinearWebhook.main', () => {
       ...baseCtx,
       body: {
         ...baseCtx.body,
-        data: { ...baseCtx.body.data, labels: { nodes: [{ name: 'changelog' }] } },
+        data: { ...baseCtx.body.data, labels: [{ id: 'lbl-1', name: 'changelog' }] },
       },
     };
     await main(ctx);
@@ -152,7 +152,7 @@ describe('LinearWebhook.main', () => {
       body: {
         ...baseCtx.body,
         action: 'remove',
-        data: { ...baseCtx.body.data, labels: { nodes: [{ name: 'changelog' }] } },
+        data: { ...baseCtx.body.data, labels: [{ id: 'lbl-1', name: 'changelog' }] },
       },
     };
     const result = await main(ctx);

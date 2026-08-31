@@ -144,12 +144,14 @@ describe('SyncToAsana.main — error cases', () => {
     expect(updateTaskPipelineStage).toHaveBeenCalledWith('asana-pat-test', 'asana-task-42', '1202184607668470');
   });
 
-  it('returns 400 when hubspotStage does not map to a known stage name', async () => {
+  it('returns 200 with syncStatus "skipped" when hubspotStage does not map to a known stage name', async () => {
     const ctx = {
       ...baseCtx,
       body: { ...baseCtx.body, inputFields: { ...baseCtx.body.inputFields, hubspotStage: 'unknown-id' } },
     };
-    expect((await main(ctx)).statusCode).toBe(400);
+    const result = await main(ctx);
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).outputFields.syncStatus).toBe('skipped');
   });
 
   it('returns 401 when shared secret does not match', async () => {
