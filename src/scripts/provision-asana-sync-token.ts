@@ -5,45 +5,57 @@
  * This property stores the Asana Events API sync token between hourly poll runs.
  *
  * Usage:
- *   export HUBSPOT_PERSONAL_ACCESS_KEY=your-pak-here
  *   npm run provision:asana-sync-token
  *   PORTAL=staging npm run provision:asana-sync-token
  *   PORTAL=prod npm run provision:asana-sync-token
  */
 
-import { Client } from '@hubspot/api-client';
 import { loadEnv } from './script-env';
 
+const API = 'https://api.hubapi.com';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function hs(token: string, method: string, path: string, body?: unknown): Promise<any> {
+  const res = await fetch(`${API}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const text = await res.text();
+  const json = text ? JSON.parse(text) : {};
+  if (!res.ok) throw new Error(`${method} ${path} → ${res.status}: ${text}`);
+  return json;
+}
+
 async function main() {
-  const { personalKey, portal } = loadEnv();
-  const client = new Client({ accessToken: personalKey });
+  const { token, portal } = loadEnv();
 
   console.log(`[${portal}] Adding asana_sync_token to App Settings...`);
 
-  const schemas = await (client.crm.schemas.coreApi as any).getAll(false);
-  const appSettings = schemas.results?.find((s: any) => s.name === 'app_settings');
+  const schemas = await hs(token, 'GET', '/crm/v3/schemas?limit=100');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const appSettings = (schemas.results ?? []).find((s: any) => s.name === 'app_configs' || s.name === 'app_settings');
 
   if (!appSettings) {
-    console.error('Could not find app_settings object — has this portal been provisioned? Run npm run provision:app-settings first.');
+    console.error('Could not find app_configs/app_settings object — has this portal been provisioned? Run npm run provision:app-settings first.');
     process.exit(1);
   }
 
-  console.log(`Found app_settings: ${appSettings.objectTypeId}`);
-
-  const groupName = 'app_settingsinformation';
+  const objectTypeId = appSettings.objectTypeId;
+  console.log(`Found app_settings: ${objectTypeId}`);
 
   try {
-    await (client.crm.properties.coreApi as any).create(appSettings.objectTypeId, {
+    await hs(token, 'POST', `/crm/v3/properties/${objectTypeId}`, {
       name: 'asana_sync_token',
       label: 'Asana Sync Token',
       type: 'string',
       fieldType: 'text',
-      groupName,
+      groupName: `${appSettings.name}_information`,
     });
     console.log('  ✓ Added asana_sync_token');
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('already exists') || msg.includes('PROPERTY_EXISTS') || msg.includes('conflict')) {
+    if (msg.includes('already exists') || msg.includes('PROPERTY_EXISTS') || msg.includes('409')) {
       console.log('  – asana_sync_token already exists, skipping');
     } else {
       console.error('Failed to add property:', msg);
@@ -54,4 +66,4 @@ async function main() {
   console.log('\nDone. The AsanaPoll workflow action will read and write this property hourly.');
 }
 
-main();
+main().catch(err => { console.error('\nFailed:', err.message); process.exit(1); });

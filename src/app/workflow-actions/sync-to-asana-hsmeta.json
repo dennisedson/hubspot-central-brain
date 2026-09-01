@@ -2,7 +2,7 @@
   "uid": "sync_to_asana_v1",
   "type": "workflow-action",
   "config": {
-    "actionUrl": "${SYNC_TO_ASANA_URL}",
+    "actionUrl": "https://51869810.hs-sites.com/hs/serverless/sync-to-asana",
     "isPublished": true,
     "supportedClients": [{ "client": "WORKFLOWS" }],
     "objectTypes": [],

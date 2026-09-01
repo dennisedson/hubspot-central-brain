@@ -2,7 +2,7 @@
   "uid": "sync_to_linear_v2",
   "type": "workflow-action",
   "config": {
-    "actionUrl": "${SYNC_TO_LINEAR_URL}",
+    "actionUrl": "https://51869810.hs-sites.com/hs/serverless/sync-to-linear",
     "isPublished": true,
     "supportedClients": [{ "client": "WORKFLOWS" }],
     "objectTypes": [],

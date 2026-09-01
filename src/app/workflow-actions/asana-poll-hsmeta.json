@@ -2,7 +2,7 @@
   "uid": "asana_poll_v1",
   "type": "workflow-action",
   "config": {
-    "actionUrl": "${ASANA_POLL_URL}",
+    "actionUrl": "https://51869810.hs-sites.com/hs/serverless/asana-poll",
     "isPublished": true,
     "supportedClients": [{ "client": "WORKFLOWS" }],
     "objectTypes": [],

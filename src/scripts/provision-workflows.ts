@@ -47,10 +47,13 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
   actions.forEach((a: any) => console.log(`    – [${a.id}] uid=${a.uid ?? '?'}`));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const asanaSyncAction = actions.find((a: any) =>
-    (a.uid ?? '') === 'sync_to_asana_v1' ||
-    ((a.uid ?? '').includes('asana') && !(a.uid ?? '').includes('poll') && (a.labels?.en?.actionName ?? '').toLowerCase().includes('sync')),
-  );
+  const asanaSyncAction = actions.find((a: any) => {
+    const uid = (a.uid ?? '').toLowerCase();
+    const name = (a.labels?.en?.actionName ?? '').toLowerCase();
+    return uid === 'sync_to_asana_v1' ||
+      (uid.includes('asana') && !uid.includes('poll')) ||
+      (name.includes('asana') && !name.includes('poll'));
+  });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const linearAction = actions.find((a: any) =>
     (a.uid ?? '').includes('linear') || (a.labels?.en?.actionName ?? '').toLowerCase().includes('linear'),
@@ -243,6 +246,9 @@ function buildWorkflow(def: WorkflowDef) {
 }
 
 function buildPollWorkflow(name: string, appConfigObjectTypeId: string, asanaPollId: string) {
+  // MANUAL enrollment: the workflow runs when manually triggered or when records
+  // are enrolled programmatically. After creation, open the workflow in HubSpot
+  // and configure a recurring schedule (Edit → Enrollment triggers → "On a schedule").
   return {
     name,
     type: 'PLATFORM_FLOW',
@@ -252,12 +258,7 @@ function buildPollWorkflow(name: string, appConfigObjectTypeId: string, asanaPol
     startActionId: '1',
     enrollmentCriteria: {
       shouldReEnroll: true,
-      type: 'SCHEDULED',
-      schedule: {
-        frequencyType: 'HOURLY',
-        startHour: 0,
-        startMinutes: 0,
-      },
+      type: 'MANUAL',
       listMembershipFilterBranches: [],
       eventFilterBranches: [],
     },
