@@ -1,0 +1,33 @@
+{
+  "uid": "asana_poll_v1",
+  "type": "workflow-action",
+  "config": {
+    "actionUrl": "${ASANA_POLL_URL}",
+    "isPublished": true,
+    "supportedClients": [{ "client": "WORKFLOWS" }],
+    "objectTypes": [],
+    "inputFields": [],
+    "outputFields": [
+      {
+        "typeDefinition": { "name": "syncStatus", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "processed", "type": "string", "fieldType": "text" }
+      }
+    ],
+    "labels": {
+      "en": {
+        "actionName": "Poll Asana for Stage Changes",
+        "appDisplayName": "Central Brain",
+        "actionDescription": "Polls Asana Events API for stage changes and syncs them back to HubSpot records",
+        "actionCardContent": "Poll Asana → sync to HubSpot",
+        "inputFieldLabels": {},
+        "inputFieldDescriptions": {},
+        "outputFieldLabels": {
+          "syncStatus": "Sync Status",
+          "processed": "Events Processed"
+        }
+      }
+    }
+  }
+}

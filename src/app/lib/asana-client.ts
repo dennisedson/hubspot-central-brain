@@ -2,6 +2,34 @@ import { ASANA_PIPELINE_STAGE_FIELD_GID, ASANA_LINEAR_ISSUE_URL_FIELD_GID } from
 
 const ASANA_API = 'https://app.asana.com/api/1.0';
 
+export interface AsanaEvent {
+  action: string;
+  resource: { gid: string; resource_type: string };
+  change?: { field: string; action: string };
+}
+
+export async function pollAsanaEvents(
+  apiKey: string,
+  projectGid: string,
+  syncToken: string | null,
+): Promise<{ events: AsanaEvent[]; syncToken: string }> {
+  const url = syncToken
+    ? `${ASANA_API}/events?resource=${projectGid}&sync=${syncToken}`
+    : `${ASANA_API}/events?resource=${projectGid}`;
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+
+  if (res.status === 412) {
+    // Sync token expired — Asana returns a fresh one in the response body
+    const json = await res.json() as { sync: string };
+    return { events: [], syncToken: json.sync };
+  }
+
+  if (!res.ok) throw new Error(`Asana events poll failed ${res.status}: ${await res.text()}`);
+  const json = await res.json() as { data: AsanaEvent[]; sync: string };
+  return { events: json.data ?? [], syncToken: json.sync };
+}
+
 export async function getTaskPipelineStage(apiKey: string, taskGid: string): Promise<string | null> {
   const res = await fetch(
     `${ASANA_API}/tasks/${taskGid}?opt_fields=custom_fields.gid,custom_fields.enum_value.gid`,

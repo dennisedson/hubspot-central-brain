@@ -185,6 +185,28 @@ export async function findContentByAsanaTaskUrl(
   };
 }
 
+export async function getAsanaSyncToken(
+  objectTypeId: string,
+  recordId: string,
+): Promise<string | null> {
+  const token = getToken();
+  const res = await fetch(
+    `${HS_BASE}/crm/v3/objects/${objectTypeId}/${recordId}?properties=asana_sync_token`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error(`HubSpot GET failed ${res.status}: ${await res.text()}`);
+  const data = await res.json() as { properties: { asana_sync_token: string | null } };
+  return data.properties.asana_sync_token ?? null;
+}
+
+export async function setAsanaSyncToken(
+  objectTypeId: string,
+  recordId: string,
+  syncToken: string,
+): Promise<void> {
+  await hsUpdate(objectTypeId, recordId, { asana_sync_token: syncToken });
+}
+
 export async function readAppSettings(portalId: number): Promise<AppSettings> {
   const config = getPortalConfig(portalId);
   const objectTypeId = config.appConfig.objectTypeId;

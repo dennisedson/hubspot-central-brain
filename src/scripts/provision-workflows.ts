@@ -31,6 +31,7 @@ async function hs(token: string, method: string, path: string, body?: unknown): 
 async function discoverActionIds(devKey: string, appId: number): Promise<{
   syncToAsanaId: string;
   syncToLinearId: string;
+  asanaPollId: string;
 }> {
   const res = await fetch(
     `${API}/automation/v4/actions/${appId}?hapikey=${devKey}&limit=100`,
@@ -46,23 +47,35 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
   actions.forEach((a: any) => console.log(`    – [${a.id}] uid=${a.uid ?? '?'}`));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const asanaAction = actions.find((a: any) =>
-    (a.uid ?? '').includes('asana') || (a.labels?.en?.actionName ?? '').toLowerCase().includes('asana'),
+  const asanaSyncAction = actions.find((a: any) =>
+    (a.uid ?? '') === 'sync_to_asana_v1' ||
+    ((a.uid ?? '').includes('asana') && !(a.uid ?? '').includes('poll') && (a.labels?.en?.actionName ?? '').toLowerCase().includes('sync')),
   );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const linearAction = actions.find((a: any) =>
     (a.uid ?? '').includes('linear') || (a.labels?.en?.actionName ?? '').toLowerCase().includes('linear'),
   );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pollAction = actions.find((a: any) =>
+    (a.uid ?? '').includes('poll') || (a.labels?.en?.actionName ?? '').toLowerCase().includes('poll'),
+  );
 
-  if (!asanaAction || !linearAction) {
+  if (!asanaSyncAction || !linearAction) {
     throw new Error(
       `Could not find action IDs. Found UIDs: ${actions.map((a: any) => a.uid ?? a.id).join(', ')}`,
     );
   }
 
+  if (!pollAction) {
+    throw new Error(
+      `Could not find AsanaPoll action. Make sure you have deployed the project (npm run build && hs project upload) before running this script. Found UIDs: ${actions.map((a: any) => a.uid ?? a.id).join(', ')}`,
+    );
+  }
+
   return {
-    syncToAsanaId: `1-${asanaAction.id}`,
+    syncToAsanaId: `1-${asanaSyncAction.id}`,
     syncToLinearId: `1-${linearAction.id}`,
+    asanaPollId: `1-${pollAction.id}`,
   };
 }
 
@@ -229,6 +242,35 @@ function buildWorkflow(def: WorkflowDef) {
   };
 }
 
+function buildPollWorkflow(name: string, appConfigObjectTypeId: string, asanaPollId: string) {
+  return {
+    name,
+    type: 'PLATFORM_FLOW',
+    flowType: 'WORKFLOW',
+    isEnabled: false,
+    objectTypeId: appConfigObjectTypeId,
+    startActionId: '1',
+    enrollmentCriteria: {
+      shouldReEnroll: true,
+      type: 'SCHEDULED',
+      schedule: {
+        frequencyType: 'HOURLY',
+        startHour: 0,
+        startMinutes: 0,
+      },
+      listMembershipFilterBranches: [],
+      eventFilterBranches: [],
+    },
+    actions: [{
+      type: 'SINGLE_CONNECTION',
+      actionId: '1',
+      actionTypeId: asanaPollId,
+      actionTypeVersion: 0,
+      fields: {},
+    }],
+  };
+}
+
 async function main() {
   const { token, sharedSecret, portalId, portal, appId, developerApiKey } = loadEnv();
 
@@ -237,8 +279,8 @@ async function main() {
 
   // Step 1: Discover action definition IDs for our custom workflow actions
   console.log('\nDiscovering custom action IDs...');
-  const { syncToAsanaId, syncToLinearId } = await discoverActionIds(developerApiKey, appId);
-  console.log(`  appId=${appId}  syncToAsanaId=${syncToAsanaId}  syncToLinearId=${syncToLinearId}`);
+  const { syncToAsanaId, syncToLinearId, asanaPollId } = await discoverActionIds(developerApiKey, appId);
+  console.log(`  appId=${appId}  syncToAsanaId=${syncToAsanaId}  syncToLinearId=${syncToLinearId}  asanaPollId=${asanaPollId}`);
 
   // Step 2: Fetch linearTeamId from app settings CRM object
   console.log('\nFetching Linear team ID from app settings...');
@@ -297,6 +339,14 @@ async function main() {
     linearTeamId,
     steps: { includeLinearSync: true, objectType: 'changelog', syncToAsanaId, syncToLinearId },
   }));
+
+  // Step 5: App Config hourly poll workflow (Asana → HubSpot)
+  const pollWorkflowName = 'Asana → Poll for Stage Changes (Hourly)';
+  await upsertWorkflow(pollWorkflowName, buildPollWorkflow(
+    pollWorkflowName,
+    config.appConfig.objectTypeId,
+    asanaPollId,
+  ));
 
   console.log('\n✓ Done. New workflows are disabled — enable in HubSpot after verifying. Re-runs update existing workflows in place.');
 }
