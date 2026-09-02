@@ -303,8 +303,8 @@ async function main() {
   const objectTypeId = config.content.objectTypeId;
 
   // Upsert helper: creates via POST or updates via PUT.
-  // The list endpoint omits revisionId, so we do a second GET by ID to get it.
-  // Updates always send isEnabled:false — HubSpot rejects updates to enabled workflows.
+  // On update: only replaces actions — preserves isEnabled, enrollmentCriteria (schedules),
+  // and all other live operational state so re-running never disrupts enabled workflows.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function upsertWorkflow(name: string, payload: Record<string, unknown>): Promise<void> {
     const summary = await findExistingWorkflow(token, name);
@@ -312,11 +312,11 @@ async function main() {
       console.log(`\nUpdating "${name}" (id=${summary.id})...`);
       const full = await hs(token, 'GET', `/automation/v4/flows/${summary.id}`);
       const result = await hs(token, 'PUT', `/automation/v4/flows/${full.id}`, {
-        ...payload,
+        ...full,
+        actions: (payload as Record<string, unknown>).actions,
         revisionId: full.revisionId,
-        isEnabled: false,
       });
-      console.log(`  ✓ Updated id=${result.id}${full.isEnabled ? ' (was enabled — re-enable in HubSpot)' : ''}`);
+      console.log(`  ✓ Updated id=${result.id} (isEnabled=${full.isEnabled} preserved)`);
     } else {
       console.log(`\nCreating "${name}"...`);
       const result = await hs(token, 'POST', '/automation/v4/flows', payload);

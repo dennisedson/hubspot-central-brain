@@ -2,6 +2,6 @@
   "uid": "content-command-center",
   "type": "page",
   "config": {
-    "entrypoint": "/app/command-center/ContentCommandCenter.tsx"
+    "entrypoint": "/app/pages/ContentCommandCenter.tsx"
   }
 }
