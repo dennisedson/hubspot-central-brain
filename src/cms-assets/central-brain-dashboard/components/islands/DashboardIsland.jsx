@@ -1,37 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-
-const styles = {
-  root: { fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", background: '#f7f8fa', minHeight: '100vh', color: '#1a1a2e' },
-  header: { background: 'linear-gradient(135deg, #ff7a59 0%, #f25c2a 100%)', padding: '28px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
-  headerLeft: { display: 'flex', alignItems: 'center', gap: '12px' },
-  logo: { width: '36px', height: '36px', background: 'rgba(255,255,255,0.2)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' },
-  title: { color: '#fff', fontSize: '22px', fontWeight: '700', margin: '0', letterSpacing: '-0.3px' },
-  subtitle: { color: 'rgba(255,255,255,0.75)', fontSize: '13px', margin: '2px 0 0' },
-  refreshBtn: { background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
-  body: { padding: '32px 40px', maxWidth: '1200px', margin: '0 auto' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '28px' },
-  card: { background: '#fff', borderRadius: '12px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
-  cardTitle: { fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#8c8ca1', margin: '0 0 16px' },
-  bigStat: { fontSize: '36px', fontWeight: '700', color: '#ff7a59', lineHeight: '1', margin: '0 0 4px' },
-  bigStatLabel: { fontSize: '13px', color: '#8c8ca1' },
-  statRow: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' },
-  dot: { width: '8px', height: '8px', borderRadius: '50%', flexShrink: '0' },
-  dotGreen: { background: '#00bda5' },
-  dotGrey: { background: '#c5c5d2' },
-  statLabel: { fontSize: '13px', color: '#516f90', flex: '1' },
-  statValue: { fontSize: '13px', fontWeight: '600', color: '#1a1a2e' },
-  settingsRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f1f5' },
-  badge: { background: '#eaf4fb', color: '#0091ae', fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '20px' },
-  badgeMine: { background: '#fff4e5', color: '#f5a623', fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '20px' },
-  pipeline: { background: '#fff', borderRadius: '12px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: '28px' },
-  stageGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', marginTop: '16px' },
-  stageCard: { background: '#f7f8fa', borderRadius: '8px', padding: '14px 16px', borderLeft: '3px solid #e5e8ef' },
-  stageCardActive: { background: '#f7f8fa', borderRadius: '8px', padding: '14px 16px', borderLeft: '3px solid #ff7a59' },
-  stageName: { fontSize: '12px', color: '#516f90', margin: '0 0 6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
-  stageCount: { fontSize: '24px', fontWeight: '700', color: '#1a1a2e', lineHeight: '1' },
-  loading: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px', color: '#8c8ca1', fontSize: '14px', gap: '10px' },
-  error: { background: '#fff3f3', border: '1px solid #fcd9da', borderRadius: '8px', padding: '16px 20px', color: '#c87872', fontSize: '14px' },
-};
+import css from '../../styles/dashboard.module.css';
 
 function getBase() {
   const portalId = typeof window !== 'undefined' && window.hsVars?.portal_id;
@@ -108,84 +76,84 @@ export default function DashboardIsland({ title }) {
   ];
 
   return (
-    <div style={styles.root}>
-      <div style={styles.header}>
-        <div style={styles.headerLeft}>
-          <div style={styles.logo}>🧠</div>
+    <div className={css.root}>
+      <div className={css.header}>
+        <div className={css.headerLeft}>
+          <div className={css.logo}>🧠</div>
           <div>
-            <h1 style={styles.title}>{title}</h1>
-            <p style={styles.subtitle}>{lastRefresh ? `Updated ${formatTime(lastRefresh)}` : 'Loading…'}</p>
+            <h1 className={css.title}>{title}</h1>
+            <p className={css.subtitle}>{lastRefresh ? `Updated ${formatTime(lastRefresh)}` : 'Loading…'}</p>
           </div>
         </div>
-        <button style={styles.refreshBtn} onClick={load} disabled={loading}>
+        <button className={css.refreshBtn} onClick={load} disabled={loading}>
           {loading ? 'Refreshing…' : '↻ Refresh'}
         </button>
       </div>
 
-      <div style={styles.body}>
-        {error && <div style={styles.error}>{error}</div>}
+      <div className={css.body}>
+        {error && <div className={css.error}>{error}</div>}
 
         {loading && !pipeline && (
-          <div style={styles.loading}>Loading dashboard data…</div>
+          <div className={css.loading}>Loading dashboard data…</div>
         )}
 
         {!loading && (
           <>
-            <div style={styles.grid}>
-              <div style={styles.card}>
-                <p style={styles.cardTitle}>Content Pipeline</p>
-                <div style={styles.bigStat}>{totalActive}</div>
-                <div style={styles.bigStatLabel}>active records</div>
+            <div className={css.grid}>
+              <div className={css.card}>
+                <p className={css.cardTitle}>Content Pipeline</p>
+                <div className={css.bigStat}>{totalActive}</div>
+                <div className={css.bigStatLabel}>active records</div>
               </div>
 
-              <div style={styles.card}>
-                <p style={styles.cardTitle}>Sync Health</p>
+              <div className={css.card}>
+                <p className={css.cardTitle}>Sync Health</p>
                 {syncStatus.map(s => (
-                  <div key={s.label} style={styles.statRow}>
-                    <div style={{ ...styles.dot, ...(s.ok ? styles.dotGreen : styles.dotGrey) }} />
-                    <span style={styles.statLabel}>{s.label}</span>
-                    <span style={styles.statValue}>{s.value}</span>
+                  <div key={s.label} className={css.statRow}>
+                    <div className={`${css.dot} ${s.ok ? css.dotGreen : css.dotGrey}`} />
+                    <span className={css.statLabel}>{s.label}</span>
+                    <span className={css.statValue}>{s.value}</span>
                   </div>
                 ))}
               </div>
 
-              <div style={styles.card}>
-                <p style={styles.cardTitle}>Linear Settings</p>
+              <div className={css.card}>
+                <p className={css.cardTitle}>Linear Settings</p>
                 {settings ? (
                   <>
-                    <div style={styles.settingsRow}>
-                      <span style={styles.statLabel}>Team</span>
-                      <span style={styles.statValue}>
+                    <div className={css.settingsRow}>
+                      <span className={css.statLabel}>Team</span>
+                      <span className={css.statValue}>
                         {settings.teams?.find(t => t.id === settings.linearTeamId)?.name ?? settings.linearTeamId ?? '—'}
                       </span>
                     </div>
-                    <div style={{ ...styles.settingsRow, borderBottom: 'none' }}>
-                      <span style={styles.statLabel}>Filter</span>
-                      <span style={settings.assigneeFilter === 'mine' ? styles.badgeMine : styles.badge}>
+                    <div className={`${css.settingsRow} ${css.settingsRowLast}`}>
+                      <span className={css.statLabel}>Filter</span>
+                      <span className={settings.assigneeFilter === 'mine' ? `${css.badge} ${css.badgeMine}` : css.badge}>
                         {assigneeLabel(settings.assigneeFilter)}
                       </span>
                     </div>
                   </>
                 ) : (
-                  <span style={styles.statLabel}>—</span>
+                  <span className={css.statLabel}>—</span>
                 )}
               </div>
             </div>
 
-            <div style={styles.pipeline}>
-              <p style={styles.cardTitle}>Pipeline Breakdown</p>
-              <div style={styles.stageGrid}>
+            <div className={css.pipeline}>
+              <p className={css.cardTitle}>Pipeline Breakdown</p>
+              <div className={css.stageGrid}>
                 {activeStages.map(stage => {
                   const count = recordsByStage[stage.id]?.length ?? 0;
                   return (
-                    <div key={stage.id} style={count > 0 ? styles.stageCardActive : styles.stageCard}>
-                      <p style={styles.stageName}>{stage.label}</p>
-                      <div style={styles.stageCount}>{count}</div>
+                    <div key={stage.id} className={`${css.stageCard} ${count > 0 ? css.stageCardActive : ''}`}>
+                      <p className={css.stageName}>{stage.label}</p>
+                      <div className={css.stageCount}>{count}</div>
                     </div>
                   );
                 })}
                 {activeStages.length === 0 && (
-                  <span style={styles.statLabel}>No pipeline data</span>
+                  <span className={css.statLabel}>No pipeline data</span>
                 )}
               </div>
             </div>

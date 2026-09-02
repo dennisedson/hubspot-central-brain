@@ -1,0 +1,223 @@
+.root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f7f8fa;
+  min-height: 100vh;
+  color: #1a1a2e;
+}
+
+.header {
+  background: linear-gradient(135deg, #ff7a59 0%, #f25c2a 100%);
+  padding: 28px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo {
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.title {
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+
+.subtitle {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+  margin: 2px 0 0;
+}
+
+.refreshBtn {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.body {
+  padding: 32px 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.cardTitle {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #8c8ca1;
+  margin: 0 0 16px;
+}
+
+.bigStat {
+  font-size: 36px;
+  font-weight: 700;
+  color: #ff7a59;
+  line-height: 1;
+  margin: 0 0 4px;
+}
+
+.bigStatLabel {
+  font-size: 13px;
+  color: #8c8ca1;
+}
+
+.statRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+/* .dot is the base; .dotGreen / .dotGrey are modifiers applied alongside it. */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dotGreen {
+  background: #00bda5;
+}
+
+.dotGrey {
+  background: #c5c5d2;
+}
+
+.statLabel {
+  font-size: 13px;
+  color: #516f90;
+  flex: 1;
+}
+
+.statValue {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+/* .settingsRowLast must follow .settingsRow — equal specificity, source order wins. */
+.settingsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f1f5;
+}
+
+.settingsRowLast {
+  border-bottom: none;
+}
+
+/* .badgeMine must follow .badge — equal specificity, source order wins. */
+.badge {
+  background: #eaf4fb;
+  color: #0091ae;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+
+.badgeMine {
+  background: #fff4e5;
+  color: #f5a623;
+}
+
+.pipeline {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  margin-bottom: 28px;
+}
+
+.stageGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* .stageCardActive must follow .stageCard — equal specificity, source order wins. */
+.stageCard {
+  background: #f7f8fa;
+  border-radius: 8px;
+  padding: 14px 16px;
+  border-left: 3px solid #e5e8ef;
+}
+
+.stageCardActive {
+  border-left-color: #ff7a59;
+}
+
+.stageName {
+  font-size: 12px;
+  color: #516f90;
+  margin: 0 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stageCount {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a2e;
+  line-height: 1;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+  color: #8c8ca1;
+  font-size: 14px;
+  gap: 10px;
+}
+
+.error {
+  background: #fff3f3;
+  border: 1px solid #fcd9da;
+  border-radius: 8px;
+  padding: 16px 20px;
+  color: #c87872;
+  font-size: 14px;
+}
