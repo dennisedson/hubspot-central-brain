@@ -20,14 +20,14 @@ const SHARED_SECRET = 'top-secret';
 
 // --- the exact URLs this handler must call -------------------------------
 const SOURCE_URL =
-  'https://api.hubapi.com/crm/v3/objects/2-67505887/4201?properties=title,topic_tags,enterpret_theme';
-const SEARCH_URL = 'https://api.hubapi.com/crm/v3/objects/2-67505887/search';
+  'https://api.hubapi.com/crm/objects/2026-03/2-67505887/4201?properties=title,topic_tags,enterpret_theme';
+const SEARCH_URL = 'https://api.hubapi.com/crm/objects/2026-03/2-67505887/search';
 const assocUrl = (toId: string) =>
   `https://api.hubapi.com/crm/v4/objects/2-67505887/4201/associations/default/2-67505887/${toId}`;
 
 const VIDEO_SOURCE_URL =
-  'https://api.hubapi.com/crm/v3/objects/2-67505890/7001?properties=title,tags';
-const VIDEO_SEARCH_URL = 'https://api.hubapi.com/crm/v3/objects/2-67505890/search';
+  'https://api.hubapi.com/crm/objects/2026-03/2-67505890/7001?properties=title,tags';
+const VIDEO_SEARCH_URL = 'https://api.hubapi.com/crm/objects/2026-03/2-67505890/search';
 const VIDEO_ASSOC_URL =
   'https://api.hubapi.com/crm/v4/objects/2-67505890/7001/associations/default/2-67505890/7002';
 

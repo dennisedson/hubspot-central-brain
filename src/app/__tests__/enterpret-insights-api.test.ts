@@ -19,7 +19,7 @@ const OBJECT_ID = '4201';
 
 // --- the exact URLs this handler must call -------------------------------
 const READ_URL =
-  'https://api.hubapi.com/crm/v3/objects/2-67505887/4201' +
+  'https://api.hubapi.com/crm/objects/2026-03/2-67505887/4201' +
   '?properties=enterpret_theme,enterpret_quote_count';
 const ENTERPRET_URL = 'https://api.enterpret.com/external/v2/feedback-records/query';
 

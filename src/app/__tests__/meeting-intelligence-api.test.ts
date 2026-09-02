@@ -19,10 +19,10 @@ const CONTACT_ID = '551';
 // --- the exact URLs this handler must call -------------------------------
 const MEETINGS_ASSOC_URL =
   'https://api.hubapi.com/crm/v4/objects/contacts/551/associations/meetings?limit=100';
-const MEETINGS_BATCH_URL = 'https://api.hubapi.com/crm/v3/objects/meetings/batch/read';
+const MEETINGS_BATCH_URL = 'https://api.hubapi.com/crm/objects/2026-03/meetings/batch/read';
 const CONTENT_ASSOC_URL =
   'https://api.hubapi.com/crm/v4/objects/contacts/551/associations/2-67505887?limit=100';
-const CONTENT_BATCH_URL = 'https://api.hubapi.com/crm/v3/objects/2-67505887/batch/read';
+const CONTENT_BATCH_URL = 'https://api.hubapi.com/crm/objects/2026-03/2-67505887/batch/read';
 
 interface Route {
   ok?: boolean;

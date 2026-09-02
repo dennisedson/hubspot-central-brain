@@ -17,9 +17,9 @@ const OBJECT_ID = '4201';
 
 // --- the exact URLs this handler must call -------------------------------
 const READ_URL =
-  'https://api.hubapi.com/crm/v3/objects/2-67505887/4201' +
+  'https://api.hubapi.com/crm/objects/2026-03/2-67505887/4201' +
   '?properties=title,content_type,published_url,topic_tags,enterpret_theme,social_post_draft';
-const WRITE_URL = 'https://api.hubapi.com/crm/v3/objects/2-67505887/4201';
+const WRITE_URL = 'https://api.hubapi.com/crm/objects/2026-03/2-67505887/4201';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);

@@ -40,16 +40,16 @@ describe('hs-api constants', () => {
 
 describe('objectPath', () => {
   it('builds a collection path when no id is given', () => {
-    expect(objectPath('2-67505887')).toBe('/crm/v3/objects/2-67505887');
+    expect(objectPath('2-67505887')).toBe('/crm/objects/2026-03/2-67505887');
   });
 
   it('builds a single-record path when an id is given', () => {
-    expect(objectPath('2-67505887', '4201')).toBe('/crm/v3/objects/2-67505887/4201');
+    expect(objectPath('2-67505887', '4201')).toBe('/crm/objects/2026-03/2-67505887/4201');
   });
 
   it('accepts a standard object name as the object type', () => {
     expect(objectPath('contacts', 'dennis%40example.com')).toBe(
-      '/crm/v3/objects/contacts/dennis%40example.com',
+      '/crm/objects/2026-03/contacts/dennis%40example.com',
     );
   });
 
@@ -57,19 +57,19 @@ describe('objectPath', () => {
     // Builders never percent-encode. Call sites that need encodeURIComponent
     // apply it to the argument themselves, exactly as they did before the
     // paths were centralised here.
-    expect(objectPath('contacts', 'a b/c')).toBe('/crm/v3/objects/contacts/a b/c');
+    expect(objectPath('contacts', 'a b/c')).toBe('/crm/objects/2026-03/contacts/a b/c');
   });
 });
 
 describe('objectSearchPath', () => {
   it('builds the CRM search path for an object type', () => {
-    expect(objectSearchPath('2-67505887')).toBe('/crm/v3/objects/2-67505887/search');
+    expect(objectSearchPath('2-67505887')).toBe('/crm/objects/2026-03/2-67505887/search');
   });
 });
 
 describe('objectBatchReadPath', () => {
   it('builds the batch read path for an object type', () => {
-    expect(objectBatchReadPath('meetings')).toBe('/crm/v3/objects/meetings/batch/read');
+    expect(objectBatchReadPath('meetings')).toBe('/crm/objects/2026-03/meetings/batch/read');
   });
 });
 
@@ -148,9 +148,6 @@ describe('dated builders (already migrated)', () => {
  */
 describe('migration status (issue #14)', () => {
   const legacyBuilders: Array<[string, string]> = [
-    ['objectPath', objectPath('2-1', '5')],
-    ['objectSearchPath', objectSearchPath('2-1')],
-    ['objectBatchReadPath', objectBatchReadPath('2-1')],
     ['associationListPath', associationListPath('contacts', '5', 'meetings')],
     ['defaultAssociationPath', defaultAssociationPath('2-1', '5', '2-1', '6')],
     ['associationBatchCreatePath', associationBatchCreatePath('projects', 'contacts')],
@@ -160,6 +157,12 @@ describe('migration status (issue #14)', () => {
   ];
 
   const datedBuilders: Array<[string, string]> = [
+    // Migrated 2026-09-02: the objects family moved with a one-line change to
+    // OBJECTS_V3. The 56 failing URL assertions that produced were the audit
+    // trail confirming every call site moved with it.
+    ['objectPath', objectPath('2-1', '5')],
+    ['objectSearchPath', objectSearchPath('2-1')],
+    ['objectBatchReadPath', objectBatchReadPath('2-1')],
     ['datedObjectPath', datedObjectPath('projects', '1')],
     ['datedObjectSearchPath', datedObjectSearchPath('projects')],
   ];
@@ -177,10 +180,10 @@ describe('migration status (issue #14)', () => {
     expect(path).not.toMatch(/\/crm\/v[34]\//);
   });
 
-  it('keeps CRM objects legacy while Fellow projects are dated', () => {
-    // The two shapes side by side. Flipping the objects family means these two
-    // literals become the same shape — and this assertion is where you say so.
-    expect(objectSearchPath('projects')).toBe('/crm/v3/objects/projects/search');
+  it('CRM objects and Fellow projects now share one dated shape', () => {
+    // Before the migration these two produced different shapes. They are now
+    // identical, which is the clearest single statement that objects moved.
+    expect(objectSearchPath('projects')).toBe('/crm/objects/2026-03/projects/search');
     expect(datedObjectSearchPath('projects')).toBe('/crm/objects/2026-03/projects/search');
   });
 });
@@ -200,7 +203,7 @@ describe('association definition builders', () => {
     );
   });
 
-  it('schemaAssociationsPath is still on legacy v3', () => {
+  it('schemaAssociationsPath is on the dated 2026-03 surface', () => {
     expect(schemaAssociationsPath('2-67505887')).toBe(
       '/crm/v3/schemas/2-67505887/associations',
     );

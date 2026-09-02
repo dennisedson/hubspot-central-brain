@@ -23,10 +23,18 @@
  * MIGRATING A FAMILY
  * ------------------
  * Change the family's prefix constant below to the dated shape, update the
- * matching expectation in `src/app/__tests__/hs-api.test.ts`, and every call
- * site moves with it. Moving the whole CRM objects family is exactly:
+ * matching expectations in `src/app/__tests__/hs-api.test.ts`, and every call
+ * site moves with it.
+ *
+ * The CRM objects family was migrated this way on 2026-09-02:
  *
  *     const OBJECTS_V3 = '/crm/v3/objects';  ->  const OBJECTS_V3 = OBJECTS_DATED;
+ *
+ * That one line moved 20 call sites and failed 56 URL assertions, each naming
+ * its old and new string — which is the audit trail you want before deploying.
+ * Still legacy: properties, schemas, pipelines, and both association families.
+ * Their dated paths are NOT yet confirmed from HubSpot docs — read them per
+ * endpoint before flipping, do not infer them from the objects pattern.
  *
  * The test file is the checklist: a builder cannot be flipped without its
  * assertion failing first, which is what makes the blast radius visible.
@@ -69,7 +77,7 @@ const OBJECTS_DATED = `/crm/objects/${HS_API_VERSION}`;
 
 /** To migrate the CRM objects family: change this to `OBJECTS_DATED`. */
 // LEGACY v3 — migrate to dated per issue #14
-const OBJECTS_V3 = '/crm/v3/objects';
+const OBJECTS_V3 = OBJECTS_DATED;
 
 // LEGACY v4 — migrate to dated per issue #14
 const ASSOCIATION_OBJECTS_V4 = '/crm/v4/objects';

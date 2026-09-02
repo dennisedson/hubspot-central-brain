@@ -32,7 +32,7 @@ const ASANA_TASK_ID = '1209876543210';
 
 // --- the exact URLs this handler must call -------------------------------
 const RECORD_URL =
-  'https://api.hubapi.com/crm/v3/objects/2-67505887/4201' +
+  'https://api.hubapi.com/crm/objects/2026-03/2-67505887/4201' +
   '?properties=linear_issue_id,asana_task_id,hs_pipeline,hs_pipeline_stage';
 const LINEAR_URL = 'https://api.linear.app/graphql';
 const ASANA_URL =
