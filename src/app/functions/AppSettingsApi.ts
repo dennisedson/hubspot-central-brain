@@ -1,11 +1,9 @@
 import { getPortalConfig, DEFAULT_APP_SETTINGS } from '../lib/portal-config';
 import type { AppSettings } from '../lib/portal-config';
 
-interface EndpointContext {
-  method: string;
-  body: Record<string, string | undefined>;
-  query?: Record<string, string>;
+interface SettingsContext {
   accountId?: number;
+  body?: Record<string, string | undefined>;
 }
 
 interface LinearTeam {
@@ -82,8 +80,8 @@ async function hsUpdate(objectTypeId: string, objectId: string, properties: Reco
   if (!res.ok) throw new Error(`HubSpot update failed ${res.status}: ${await res.text()}`);
 }
 
-export async function main(context: EndpointContext): Promise<{ statusCode: number; body: string }> {
-  const portalId = context.accountId ?? parseInt(context.query?.portalId ?? '0', 10);
+export async function main(context: SettingsContext): Promise<{ statusCode: number; body: string }> {
+  const portalId = context.accountId ?? 0;
   if (!portalId) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing portalId' }) };
   }
@@ -107,7 +105,9 @@ export async function main(context: EndpointContext): Promise<{ statusCode: numb
     return { statusCode: 500, body: JSON.stringify({ error: 'App config object type not configured' }) };
   }
 
-  if (context.method === 'GET') {
+  const action = context.body?.action ?? 'getSettings';
+
+  if (action === 'getSettings') {
     try {
       const result = await hsSearch(
         objectTypeId,
@@ -137,18 +137,17 @@ export async function main(context: EndpointContext): Promise<{ statusCode: numb
     }
   }
 
-  if (context.method === 'POST') {
-    const body = context.body ?? {};
-
-    if (body.action === 'loadTeamMembers') {
-      if (!body.teamId || !linearApiKey) {
-        return { statusCode: 200, body: JSON.stringify({ teamMembers: [] }) };
-      }
-      const teamMembers = await getLinearTeamMembers(body.teamId, linearApiKey);
-      return { statusCode: 200, body: JSON.stringify({ teamMembers }) };
+  if (action === 'loadTeamMembers') {
+    const teamId = context.body?.teamId;
+    if (!teamId || !linearApiKey) {
+      return { statusCode: 200, body: JSON.stringify({ teamMembers: [] }) };
     }
+    const teamMembers = await getLinearTeamMembers(teamId, linearApiKey);
+    return { statusCode: 200, body: JSON.stringify({ teamMembers }) };
+  }
 
-    const { linearTeamId, assigneeFilter, linearAssigneeId } = body;
+  if (action === 'saveSettings') {
+    const { linearTeamId, assigneeFilter, linearAssigneeId } = context.body ?? {};
     if (!linearTeamId || !assigneeFilter) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields' }) };
     }
@@ -174,5 +173,5 @@ export async function main(context: EndpointContext): Promise<{ statusCode: numb
     }
   }
 
-  return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+  return { statusCode: 400, body: JSON.stringify({ error: `Unknown action: ${action}` }) };
 }

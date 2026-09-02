@@ -27,15 +27,26 @@ interface SettingsResponse extends AppSettings {
   teamMembers: LinearOption[];
 }
 
-const PORTAL_SETTINGS_URLS: Record<number, string> = {
-  51869810: 'https://51869810.hs-sites.com/hs/serverless/settings-api',
-  51869787: 'https://51869787.hs-sites.com/hs/serverless/settings-api',
-  22047910: 'https://22047910.hs-sites.com/hs/serverless/settings-api',
+type ServerlessResult = {
+  status: 'SUCCESS' | 'TIMEOUT' | 'ERROR';
+  response?: { statusCode: number; body: string };
+  message?: string;
 };
+
+async function callApi(action: string, params: Record<string, string> = {}): Promise<{ statusCode: number; body: string }> {
+  const result = await (hubspot.serverless as (uid: string, opts: { parameters: Record<string, string> }) => Promise<ServerlessResult>)(
+    'app_settings_api',
+    { parameters: { action, ...params } },
+  );
+  if (result.status !== 'SUCCESS' || !result.response) {
+    throw new Error(result.message ?? 'Serverless call failed');
+  }
+  return result.response;
+}
 
 hubspot.extend<'settings'>(({ context }) => <SettingsPage portalId={context.portal.id} />);
 
-const SettingsPage = ({ portalId }: { portalId: number }) => {
+const SettingsPage = ({ portalId: _portalId }: { portalId: number }) => {
   const [settings, setSettings] = useState<AppSettings>({
     linearTeamId: '',
     assigneeFilter: 'all',
@@ -49,21 +60,11 @@ const SettingsPage = ({ portalId }: { portalId: number }) => {
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorDetail, setErrorDetail] = useState<string>('');
 
-  const apiUrl = PORTAL_SETTINGS_URLS[portalId];
-
   useEffect(() => {
-    if (!apiUrl) {
-      setErrorDetail(`Portal ${portalId} is not configured`);
-      setStatus('error');
-      setLoading(false);
-      return;
-    }
-
-    hubspot
-      .fetch(apiUrl, { method: 'GET' })
-      .then(async res => {
-        const data = await res.json() as SettingsResponse & { error?: string; detail?: string };
-        if (res.ok) {
+    callApi('getSettings')
+      .then(res => {
+        if (res.statusCode === 200) {
+          const data = JSON.parse(res.body) as SettingsResponse;
           setSettings({
             linearTeamId: data.linearTeamId,
             assigneeFilter: data.assigneeFilter,
@@ -72,7 +73,8 @@ const SettingsPage = ({ portalId }: { portalId: number }) => {
           setTeams(data.teams ?? []);
           setTeamMembers(data.teamMembers ?? []);
         } else {
-          setErrorDetail(`${res.status}: ${data.detail ?? data.error ?? JSON.stringify(data)}`);
+          const data = JSON.parse(res.body) as { error?: string; detail?: string };
+          setErrorDetail(`${res.statusCode}: ${data.detail ?? data.error ?? res.body}`);
           setStatus('error');
         }
       })
@@ -81,48 +83,42 @@ const SettingsPage = ({ portalId }: { portalId: number }) => {
         setStatus('error');
       })
       .finally(() => setLoading(false));
-  }, [apiUrl]);
+  }, []);
 
   const handleTeamChange = useCallback((teamId: string) => {
     setSettings(s => ({ ...s, linearTeamId: teamId, linearAssigneeId: '' }));
     setTeamMembers([]);
-    if (!teamId || !apiUrl) return;
+    if (!teamId) return;
     setLoadingMembers(true);
-    hubspot
-      .fetch(apiUrl, { method: 'POST', body: { action: 'loadTeamMembers', teamId } })
-      .then(async res => {
-        const data = await res.json() as { teamMembers: LinearOption[] };
+    callApi('loadTeamMembers', { teamId })
+      .then(res => {
+        const data = JSON.parse(res.body) as { teamMembers: LinearOption[] };
         setTeamMembers(data.teamMembers ?? []);
       })
       .catch(() => setTeamMembers([]))
       .finally(() => setLoadingMembers(false));
-  }, [apiUrl]);
+  }, []);
 
   const handleSave = useCallback(() => {
-    if (!apiUrl) return;
     setSaving(true);
     setStatus('idle');
-    hubspot
-      .fetch(apiUrl, {
-        method: 'POST',
-        body: {
-          linearTeamId: settings.linearTeamId,
-          assigneeFilter: settings.assigneeFilter,
-          linearAssigneeId: settings.linearAssigneeId,
-        },
-      })
-      .then(async res => {
-        if (res.ok) {
+    callApi('saveSettings', {
+      linearTeamId: settings.linearTeamId,
+      assigneeFilter: settings.assigneeFilter,
+      linearAssigneeId: settings.linearAssigneeId,
+    })
+      .then(res => {
+        if (res.statusCode === 200) {
           setStatus('success');
         } else {
-          const data = await res.json() as { error?: string; detail?: string };
-          setErrorDetail(`${res.status}: ${data.detail ?? data.error ?? ''}`);
+          const data = JSON.parse(res.body) as { error?: string; detail?: string };
+          setErrorDetail(`${res.statusCode}: ${data.detail ?? data.error ?? ''}`);
           setStatus('error');
         }
       })
       .catch(() => setStatus('error'))
       .finally(() => setSaving(false));
-  }, [apiUrl, settings]);
+  }, [settings]);
 
   if (loading) {
     return (
