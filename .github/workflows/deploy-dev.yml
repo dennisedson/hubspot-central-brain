@@ -48,13 +48,13 @@ jobs:
             "$DEFAULT_ACCOUNT_ID" "$DEFAULT_PERSONAL_ACCESS_KEY" > ~/.hscli/config.yml
 
       - name: Upload project
-        run: hs project upload --skip-auto-deploy
+        run: npx hs project upload --skip-auto-deploy
         env:
           DEFAULT_ACCOUNT_ID: ${{ secrets.HUBSPOT_DEV_ACCOUNT_ID }}
           DEFAULT_PERSONAL_ACCESS_KEY: ${{ secrets.HUBSPOT_DEV_PERSONAL_ACCESS_KEY }}
 
       - name: Deploy project
-        run: hs project deploy --deploy-latest-build --force
+        run: npx hs project deploy --deploy-latest-build --force
         env:
           DEFAULT_ACCOUNT_ID: ${{ secrets.HUBSPOT_DEV_ACCOUNT_ID }}
           DEFAULT_PERSONAL_ACCESS_KEY: ${{ secrets.HUBSPOT_DEV_PERSONAL_ACCESS_KEY }}
