@@ -9,8 +9,6 @@ export function Component({ fieldValues }) {
 
 export const meta = {
   label: 'Central Brain Dashboard',
-  host_template_types: ['PAGE'],
-  icon: 'custom',
 };
 
 export const fields = (
