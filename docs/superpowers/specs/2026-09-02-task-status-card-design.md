@@ -73,6 +73,23 @@ This is the subtle requirement and the most likely source of a wrong implementat
 
 The function must read the record's `hs_pipeline`, resolve it against `portal-config` to decide which pipeline the record is on, and select the matching table. Using the content table on a changelog record would report false drift on every changelog record — a bug that looks like a broken sync and would send someone hunting the wrong thing.
 
+### The mappings are many-to-one in both directions
+
+Discovered while planning, and the single most likely source of false drift reports.
+
+`CONTENT_STAGE_TO_LINEAR_STATE` maps **both** `drafting` and `editing` to Linear `In Progress`. `LINEAR_STATE_TO_CHANGELOG_STAGE` maps **both** `Backlog` and `Canceled` to `identified`. So neither comparison direction alone is correct:
+
+- Forward only: an `editing` record with Linear `In Progress` reports drift, because the reverse of `In Progress` is `drafting`. Wrong.
+- Reverse only: an `identified` changelog record with Linear `Canceled` reports drift, because the forward of `identified` is `Backlog`. Also wrong.
+
+The comparison must therefore accept **either** direction matching:
+
+```
+inSync = FORWARD[stage] === externalState || REVERSE[externalState] === stage
+```
+
+Both false positives above resolve to in-sync, while a genuine mismatch (`drafting` vs `Done`) still fails both checks and correctly reports drift. The same rule applies to Asana, whose tables are lossy in the same way (`drafting` and `editing` share one enum GID).
+
 Asana drift is computed symmetrically. The tables already exist, so it costs almost nothing, and showing drift for only one system on a card named "Linear/Asana Status" would be an odd asymmetry.
 
 ## Response contract
