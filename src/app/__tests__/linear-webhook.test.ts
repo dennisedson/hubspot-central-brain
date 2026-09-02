@@ -180,4 +180,74 @@ describe('LinearWebhook.main', () => {
     const result = await main(baseCtx);
     expect(result.statusCode).toBe(500);
   });
+
+  describe('team filter', () => {
+    it('skips when linearTeamId is set and the issue team does not match', async () => {
+      const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: 'team-A', assigneeFilter: 'all', linearAssigneeId: '' });
+      const result = await main(baseCtx); // baseCtx.body.data.team.id = 't-1'
+      expect(result.statusCode).toBe(200);
+      expect(JSON.parse(result.body).reason).toBe('not configured team');
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
+    it('processes the issue when linearTeamId matches', async () => {
+      const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: 't-1', assigneeFilter: 'all', linearAssigneeId: '' });
+      const result = await main(baseCtx);
+      expect(result.statusCode).toBe(200);
+      expect(JSON.parse(result.body).ok).toBe(true);
+      expect(mockUpsert).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('assignee filter', () => {
+    it('skips unassigned issues when filter is "assigned"', async () => {
+      const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'assigned', linearAssigneeId: '' });
+      const result = await main(baseCtx); // baseCtx has no assignee
+      expect(result.statusCode).toBe(200);
+      expect(JSON.parse(result.body).reason).toBe('no assignee');
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
+    it('processes an assigned issue when filter is "assigned"', async () => {
+      const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'assigned', linearAssigneeId: '' });
+      const ctx = {
+        ...baseCtx,
+        body: { ...baseCtx.body, data: { ...baseCtx.body.data, assignee: { id: 'user-1', name: 'Alice' } } },
+      };
+      const result = await main(ctx);
+      expect(result.statusCode).toBe(200);
+      expect(JSON.parse(result.body).ok).toBe(true);
+      expect(mockUpsert).toHaveBeenCalledOnce();
+    });
+
+    it('skips issues assigned to someone else when filter is "mine"', async () => {
+      const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
+      const ctx = {
+        ...baseCtx,
+        body: { ...baseCtx.body, data: { ...baseCtx.body.data, assignee: { id: 'user-other', name: 'Bob' } } },
+      };
+      const result = await main(ctx);
+      expect(result.statusCode).toBe(200);
+      expect(JSON.parse(result.body).reason).toBe('not assigned to configured user');
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
+    it('processes an issue assigned to the configured user when filter is "mine"', async () => {
+      const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
+      const ctx = {
+        ...baseCtx,
+        body: { ...baseCtx.body, data: { ...baseCtx.body.data, assignee: { id: 'user-me', name: 'Me' } } },
+      };
+      const result = await main(ctx);
+      expect(result.statusCode).toBe(200);
+      expect(JSON.parse(result.body).ok).toBe(true);
+      expect(mockUpsert).toHaveBeenCalledOnce();
+    });
+  });
 });

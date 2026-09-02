@@ -32,6 +32,7 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
   syncToAsanaId: string;
   syncToLinearId: string;
   asanaPollId: string;
+  fellowSyncId: string;
 }> {
   const res = await fetch(
     `${API}/automation/v4/actions/${appId}?hapikey=${devKey}&limit=100`,
@@ -62,6 +63,10 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
   const pollAction = actions.find((a: any) =>
     (a.uid ?? '').includes('poll') || (a.labels?.en?.actionName ?? '').toLowerCase().includes('poll'),
   );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fellowAction = actions.find((a: any) =>
+    (a.uid ?? '').includes('fellow') || (a.labels?.en?.actionName ?? '').toLowerCase().includes('fellow'),
+  );
 
   if (!asanaSyncAction || !linearAction) {
     throw new Error(
@@ -75,10 +80,17 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
     );
   }
 
+  if (!fellowAction) {
+    throw new Error(
+      `Could not find FellowSync action. Make sure you have deployed the project before running this script. Found UIDs: ${actions.map((a: any) => a.uid ?? a.id).join(', ')}`,
+    );
+  }
+
   return {
     syncToAsanaId: `1-${asanaSyncAction.id}`,
     syncToLinearId: `1-${linearAction.id}`,
     asanaPollId: `1-${pollAction.id}`,
+    fellowSyncId: `1-${fellowAction.id}`,
   };
 }
 
@@ -280,8 +292,8 @@ async function main() {
 
   // Step 1: Discover action definition IDs for our custom workflow actions
   console.log('\nDiscovering custom action IDs...');
-  const { syncToAsanaId, syncToLinearId, asanaPollId } = await discoverActionIds(developerApiKey, appId);
-  console.log(`  appId=${appId}  syncToAsanaId=${syncToAsanaId}  syncToLinearId=${syncToLinearId}  asanaPollId=${asanaPollId}`);
+  const { syncToAsanaId, syncToLinearId, asanaPollId, fellowSyncId } = await discoverActionIds(developerApiKey, appId);
+  console.log(`  appId=${appId}  syncToAsanaId=${syncToAsanaId}  syncToLinearId=${syncToLinearId}  asanaPollId=${asanaPollId}  fellowSyncId=${fellowSyncId}`);
 
   // Step 2: Fetch linearTeamId from app settings CRM object
   console.log('\nFetching Linear team ID from app settings...');
@@ -341,12 +353,20 @@ async function main() {
     steps: { includeLinearSync: true, objectType: 'changelog', syncToAsanaId, syncToLinearId },
   }));
 
-  // Step 5: App Config hourly poll workflow (Asana → HubSpot)
-  const pollWorkflowName = 'Asana → Poll for Stage Changes (Hourly)';
+  // Step 5: App Config daily poll workflow (Asana → HubSpot)
+  const pollWorkflowName = 'Asana → Poll for Stage Changes (Daily)';
   await upsertWorkflow(pollWorkflowName, buildPollWorkflow(
     pollWorkflowName,
     config.appConfig.objectTypeId,
     asanaPollId,
+  ));
+
+  // Step 6: App Config daily Fellow sync workflow (Fellow → HubSpot Tasks)
+  const fellowWorkflowName = 'Fellow → Sync Action Items to Tasks (Daily)';
+  await upsertWorkflow(fellowWorkflowName, buildPollWorkflow(
+    fellowWorkflowName,
+    config.appConfig.objectTypeId,
+    fellowSyncId,
   ));
 
   console.log('\n✓ Done. New workflows are disabled — enable in HubSpot after verifying. Re-runs update existing workflows in place.');

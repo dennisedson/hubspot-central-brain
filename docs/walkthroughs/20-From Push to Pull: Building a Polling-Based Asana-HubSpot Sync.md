@@ -1,16 +1,16 @@
 ## 🎬 YouTube Episode Guide: From Push to Pull: Building a Polling-Based Asana–HubSpot Sync
 
 **🎯 Core Learning Objective:**
-"By the end of this video, you will know how to build a reliable, fully HubSpot-hosted polling loop that reads Asana's Events API every hour, filters out irrelevant events, prevents echo loops, and writes stage changes back to HubSpot — without any external infrastructure."
+"By the end of this video, you will know how to build a reliable, fully HubSpot-hosted polling loop that reads Asana's Events API every day, filters out irrelevant events, prevents echo loops, and writes stage changes back to HubSpot — without any external infrastructure."
 
 **⏱️ The 10-Minute Script Outline:**
 
-*   **Hook & Demo (0:00 - 1:00):** "We built a bidirectional sync between HubSpot and Asana. The HubSpot→Asana direction worked great. But when someone moves a task in Asana, HubSpot knew nothing about it. We tried a push webhook — but HubSpot's serverless layer strips the secret header Asana needs for its handshake. So we had to flip the model: instead of Asana pushing events to us, we pull them on a schedule. I'll show you the finished system: change a stage in Asana, wait up to an hour, and HubSpot updates automatically."
+*   **Hook & Demo (0:00 - 1:00):** "We built a bidirectional sync between HubSpot and Asana. The HubSpot→Asana direction worked great. But when someone moves a task in Asana, HubSpot knew nothing about it. We tried a push webhook — but HubSpot's serverless layer strips the secret header Asana needs for its handshake. So we had to flip the model: instead of Asana pushing events to us, we pull them on a schedule. I'll show you the finished system: change a stage in Asana, wait up to a day, and HubSpot updates automatically."
 
 *   **The Architecture (1:00 - 3:00):** Three concepts to understand before the code:
     1. **Asana Events API**: `GET /events?resource={projectGid}&sync={token}` returns all events since your last sync token. On the first call, you get a token but no events. On every subsequent call, you get events + a new token. Tokens expire after ~24 hours of inactivity — Asana returns a 412 with a fresh one.
-    2. **Sync token storage**: We need to persist the sync token between hourly runs. We store it as a property (`asana_sync_token`) on the App Config custom object — the single record that already holds portal-level settings.
-    3. **HubSpot Scheduled Workflow**: A workflow scoped to the App Config object type, with hourly re-enrollment, calls our `AsanaPoll` custom action once per hour per portal. The enrolled record's `hs_object_id` is the App Config record ID, which the function uses to read and write the sync token.
+    2. **Sync token storage**: We need to persist the sync token between daily runs. We store it as a property (`asana_sync_token`) on the App Config custom object — the single record that already holds portal-level settings.
+    3. **HubSpot Scheduled Workflow**: A workflow scoped to the App Config object type, with daily re-enrollment, calls our `AsanaPoll` custom action once per day per portal. The enrolled record's `hs_object_id` is the App Config record ID, which the function uses to read and write the sync token.
 
 *   **Step-by-Step Implementation (3:00 - 8:00):**
 
@@ -24,7 +24,7 @@
     The workflow action entry point. Reads the stored token → polls Asana → saves the new token immediately (before processing so progress isn't lost on partial failure) → filters events for task custom_field changes → skips tasks not linked to a HubSpot record → applies echo prevention → writes the new stage to HubSpot.
 
     **Step 4 — Register as a workflow action + provision** (`src/app/workflow-actions/asana-poll-hsmeta.json`, `src/scripts/provision-asana-sync-token.ts`, `src/scripts/provision-workflows.ts`):
-    The hsmeta registers `AsanaPoll` as a CWA (no input fields needed). The sync-token script adds `asana_sync_token` property to App Config. The workflows script discovers the poll action ID and creates the hourly scheduled workflow on the App Config object type.
+    The hsmeta registers `AsanaPoll` as a CWA (no input fields needed). The sync-token script adds `asana_sync_token` property to App Config. The workflows script discovers the poll action ID and creates the daily scheduled workflow on the App Config object type.
 
 *   **Testing & Wrap-up (8:00 - 10:00):**
     Trigger the workflow action manually in HubSpot (enroll the App Config record once). Watch the logs: first run stores a sync token and returns 0 events. Then move a task in Asana. Trigger again — you should see the event and the HubSpot record updating. Key things to verify: 412 handling (clear the token manually), echo prevention (move HubSpot→Asana first, confirm the bounce-back is ignored), and non-content task filtering (only tasks with a linked `asana_task_url` in HubSpot are processed). What we learned: when a platform strips headers and breaks your webhook handshake, pull-based polling is often the cleanest alternative — and storing the cursor (sync token) on an existing config record keeps the whole thing serverless.
@@ -106,7 +106,7 @@ export async function main(context: AsanaPollContext) {
 ```
 
 ```typescript
-// provision-workflows.ts — scheduled hourly workflow (key excerpt)
+// provision-workflows.ts — scheduled daily workflow (key excerpt)
 function buildPollWorkflow(name: string, appConfigObjectTypeId: string, asanaPollId: string) {
   return {
     name,
@@ -117,7 +117,7 @@ function buildPollWorkflow(name: string, appConfigObjectTypeId: string, asanaPol
     enrollmentCriteria: {
       shouldReEnroll: true,
       type: 'SCHEDULED',
-      schedule: { frequencyType: 'HOURLY', startHour: 0, startMinutes: 0 },
+      schedule: { frequencyType: 'DAILY', startHour: 0, startMinutes: 0 },
     },
     actions: [{
       type: 'SINGLE_CONNECTION',
