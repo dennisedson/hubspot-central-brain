@@ -36,10 +36,7 @@ async function callApi(action: string, params: Record<string, string> = {}): Pro
     'app_settings_api',
     { parameters: { action, ...params } },
   );
-  if (!result.body) {
-    throw new Error(`Serverless call returned no body: ${JSON.stringify(result)}`);
-  }
-  return result.body;
+  throw new Error(`RAW_SHAPE:${JSON.stringify(result).slice(0, 300)}`);
 }
 
 interface SettingsPageProps {
