@@ -2,9 +2,9 @@
   "name": "central-brain-dashboard",
   "version": "1.0.0",
   "dependencies": {
-    "@hubspot/cms-components": "^0.15.0"
+    "@hubspot/cms-components": "latest"
   },
   "devDependencies": {
-    "@hubspot/cms-dev-server": "^0.15.0"
+    "@hubspot/cms-dev-server": "latest"
   }
 }
