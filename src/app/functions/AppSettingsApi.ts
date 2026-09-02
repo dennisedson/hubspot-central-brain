@@ -81,7 +81,7 @@ async function hsUpdate(objectTypeId: string, objectId: string, properties: Reco
 }
 
 export async function main(context: SettingsContext): Promise<{ statusCode: number; body: string }> {
-  const portalId = context.accountId ?? 0;
+  const portalId = context.accountId ?? parseInt(context.body?.portalId ?? '0', 10);
   if (!portalId) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing portalId' }) };
   }

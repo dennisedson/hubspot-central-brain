@@ -46,7 +46,7 @@ async function callApi(action: string, params: Record<string, string> = {}): Pro
 
 hubspot.extend<'settings'>(({ context }) => <SettingsPage portalId={context.portal.id} />);
 
-const SettingsPage = ({ portalId: _portalId }: { portalId: number }) => {
+const SettingsPage = ({ portalId }: { portalId: number }) => {
   const [settings, setSettings] = useState<AppSettings>({
     linearTeamId: '',
     assigneeFilter: 'all',
@@ -61,7 +61,7 @@ const SettingsPage = ({ portalId: _portalId }: { portalId: number }) => {
   const [errorDetail, setErrorDetail] = useState<string>('');
 
   useEffect(() => {
-    callApi('getSettings')
+    callApi('getSettings', { portalId: String(portalId) })
       .then(res => {
         if (res.statusCode === 200) {
           const data = JSON.parse(res.body) as SettingsResponse;
@@ -90,19 +90,20 @@ const SettingsPage = ({ portalId: _portalId }: { portalId: number }) => {
     setTeamMembers([]);
     if (!teamId) return;
     setLoadingMembers(true);
-    callApi('loadTeamMembers', { teamId })
+    callApi('loadTeamMembers', { portalId: String(portalId), teamId })
       .then(res => {
         const data = JSON.parse(res.body) as { teamMembers: LinearOption[] };
         setTeamMembers(data.teamMembers ?? []);
       })
       .catch(() => setTeamMembers([]))
       .finally(() => setLoadingMembers(false));
-  }, []);
+  }, [portalId]);
 
   const handleSave = useCallback(() => {
     setSaving(true);
     setStatus('idle');
     callApi('saveSettings', {
+      portalId: String(portalId),
       linearTeamId: settings.linearTeamId,
       assigneeFilter: settings.assigneeFilter,
       linearAssigneeId: settings.linearAssigneeId,
@@ -118,7 +119,7 @@ const SettingsPage = ({ portalId: _portalId }: { portalId: number }) => {
       })
       .catch(() => setStatus('error'))
       .finally(() => setSaving(false));
-  }, [settings]);
+  }, [portalId, settings]);
 
   if (loading) {
     return (
