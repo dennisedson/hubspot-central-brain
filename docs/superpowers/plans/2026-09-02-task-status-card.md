@@ -1,6 +1,6 @@
 # Linear/Asana Status Card Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** A read-only CRM card on `content_piece` records showing live Linear issue and Asana task status, flagging when either has drifted from the HubSpot pipeline stage.
 
@@ -44,7 +44,7 @@ Pure functions, no I/O. Fully unit tested before anything touches the network.
   - `computeLinearDrift(pipeline: PipelineName, stage: string, linearState: string): DriftResult | null`
   - `computeAsanaDrift(pipeline: PipelineName, stage: string, asanaStageGid: string): DriftResult | null`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `src/app/__tests__/drift.test.ts`:
 
@@ -161,12 +161,12 @@ describe('computeAsanaDrift', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run src/app/__tests__/drift.test.ts`
 Expected: FAIL — cannot resolve `../lib/drift`.
 
-- [ ] **Step 3: Implement `drift.ts`**
+- [x] **Step 3: Implement `drift.ts`**
 
 Create `src/app/lib/drift.ts`:
 
@@ -247,12 +247,12 @@ export function computeAsanaDrift(
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run src/app/__tests__/drift.test.ts`
 Expected: PASS, 16 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/app/lib/drift.ts src/app/__tests__/drift.test.ts
@@ -285,7 +285,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 Both return `null` when the remote record does not exist, and throw on transport or auth failure. The caller distinguishes "not found" from "broken".
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `src/app/__tests__/task-status-clients.test.ts`:
 
@@ -392,12 +392,12 @@ describe('getAsanaTask', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run src/app/__tests__/task-status-clients.test.ts`
 Expected: FAIL — `getLinearIssue` / `getAsanaTask` are not exported.
 
-- [ ] **Step 3: Add `getLinearIssue` to `src/app/lib/linear-client.ts`**
+- [x] **Step 3: Add `getLinearIssue` to `src/app/lib/linear-client.ts`**
 
 Append:
 
@@ -446,7 +446,7 @@ export async function getLinearIssue(apiKey: string, issueId: string): Promise<L
 }
 ```
 
-- [ ] **Step 4: Add `getAsanaTask` to `src/app/lib/asana-client.ts`**
+- [x] **Step 4: Add `getAsanaTask` to `src/app/lib/asana-client.ts`**
 
 Append:
 
@@ -483,17 +483,17 @@ export async function getAsanaTask(apiKey: string, taskGid: string): Promise<Asa
 }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run src/app/__tests__/task-status-clients.test.ts`
 Expected: PASS, 7 tests.
 
-- [ ] **Step 6: Confirm nothing else broke**
+- [x] **Step 6: Confirm nothing else broke**
 
 Run: `npm test && npm run typecheck`
 Expected: all suites PASS, typecheck exits 0.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/app/lib/linear-client.ts src/app/lib/asana-client.ts src/app/__tests__/task-status-clients.test.ts
@@ -518,7 +518,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: `getLinearIssue`, `getAsanaTask` (Task 2); `resolvePipeline`, `stageNameFromId`, `computeLinearDrift`, `computeAsanaDrift` (Task 1); `getPortalConfig` from `../lib/portal-config`.
 - Produces: uid `task_status_api`, called as `hubspot.serverless('task_status_api', { parameters: { objectId } })`, returning `{ statusCode, body }` where `body` is the JSON string documented in the spec's response contract.
 
-- [ ] **Step 1: Create the hsmeta**
+- [x] **Step 1: Create the hsmeta**
 
 Create `src/app/functions/TaskStatusApi-hsmeta.json`:
 
@@ -537,7 +537,7 @@ Create `src/app/functions/TaskStatusApi-hsmeta.json`:
 }
 ```
 
-- [ ] **Step 2: Implement the function**
+- [x] **Step 2: Implement the function**
 
 Create `src/app/functions/TaskStatusApi.ts`:
 
@@ -632,12 +632,12 @@ export async function main(context: TaskStatusContext) {
 }
 ```
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/app/functions/TaskStatusApi.ts src/app/functions/TaskStatusApi-hsmeta.json
@@ -665,7 +665,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: uid `task_status_api` and its response contract (Task 3).
 - Produces: card component uid `task_status_card`.
 
-- [ ] **Step 1: Create the card package files**
+- [x] **Step 1: Create the card package files**
 
 `src/app/cards/package.json`:
 
@@ -717,7 +717,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 }
 ```
 
-- [ ] **Step 2: Implement the card**
+- [x] **Step 2: Implement the card**
 
 Create `src/app/cards/TaskStatusCard.tsx`:
 
@@ -877,12 +877,12 @@ const Card = ({ context }: { context: { crm: { objectId: string | number } } }) 
 hubspot.extend<'crm.record.tab'>(({ context }) => <Card context={context as never} />);
 ```
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 Run: `npm run typecheck`
 Expected: exits 0. The root `tsconfig.json` may not include `src/app/cards`; if the card is not covered, that is acceptable — it is typechecked by the HubSpot build at upload time, the same as `src/app/pages`.
 
-- [ ] **Step 4: Add the per-portal substitution to all three workflows**
+- [x] **Step 4: Add the per-portal substitution to all three workflows**
 
 In `.github/workflows/deploy-dev.yml`, immediately after the existing "Set sync function URL" step, add:
 
@@ -894,7 +894,7 @@ In `.github/workflows/deploy-dev.yml`, immediately after the existing "Set sync 
 In `deploy-staging.yml`, the same step with `2-67508770`.
 In `deploy-prod.yml`, the same step with `2-67508928`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/app/cards .github/workflows
@@ -910,7 +910,7 @@ id in each of the three portals.
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 6: Push and confirm the deploy is green**
+- [x] **Step 6: Push and confirm the deploy is green**
 
 ```bash
 git push origin develop

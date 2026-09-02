@@ -132,17 +132,14 @@ Each source resolves independently. Linear failing must never blank the Asana ha
 | Neither ID present | Single empty state for the card |
 | Function itself fails | Card-level error with a retry |
 
-## Per-portal object type ID
+## Per-portal object type ID — SUPERSEDED
 
-The card's `objectTypes` is static in hsmeta, but `content_piece` has a different ID in every portal:
-
-| Portal | `content_piece` |
-|---|---|
-| dev 51869810 | `2-67505887` |
-| staging 51869787 | `2-67508770` |
-| prod 22047910 | `2-67508928` |
-
-Handled with a `${CONTENT_OBJECT_TYPE_ID}` placeholder substituted by `sed` in each deploy workflow — the identical mechanism already used for `${SYNC_TO_LINEAR_URL}`. No new pattern is introduced.
+> **This section was wrong.** Build #177 rejected the type id outright:
+> `The object name '2-67505887' is invalid ... If this is supposed to be a custom object, prefix it with 'p_'`.
+>
+> Card `objectTypes` takes the custom object **name**, not the per-portal type id. `p_content_piece` is identical in every portal, so no substitution is needed and none is used. The `sed` step briefly added to the three deploy workflows was removed in `700ce22`.
+>
+> The original reasoning below is kept because the underlying observation was correct — `content_piece` really does have a different type id per portal (dev `2-67505887`, staging `2-67508770`, prod `2-67508928`) — but it was solving a problem the platform does not have here.
 
 ## Card location
 
