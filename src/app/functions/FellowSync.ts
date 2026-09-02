@@ -5,6 +5,7 @@ import {
   findContactByEmail,
   upsertFellowProject,
   associateProjectToContact,
+  resolveProjectsPipeline,
 } from '../lib/hubspot-client';
 import { getPortalConfig } from '../lib/portal-config';
 
@@ -47,7 +48,10 @@ export async function main(context: FellowSyncContext): Promise<{ statusCode: nu
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing hs_object_id' }) };
   }
 
-  const lastSync = await getFellowLastSync(config.appConfig.objectTypeId, appConfigRecordId);
+  const [lastSync, pipeline] = await Promise.all([
+    getFellowLastSync(config.appConfig.objectTypeId, appConfigRecordId),
+    resolveProjectsPipeline(),
+  ]);
   console.log(`FellowSync: polling since ${lastSync ?? 'beginning (7-day window)'}`);
 
   const groups = await pollFellowActionItems(fellowApiKey, lastSync);
@@ -95,15 +99,13 @@ export async function main(context: FellowSyncContext): Promise<{ statusCode: nu
           }
         }
 
-        const stageId = assignee.status === 'done'
-          ? config.projects.stageIds.completed
-          : config.projects.stageIds.execution;
-
         const properties: Record<string, string> = {
           hs_name: item.text.slice(0, 255),
           hs_description: `From meeting: ${group.noteTitle}\nAssigned to: ${assignee.name}`,
-          hs_pipeline: config.projects.pipelineId,
-          hs_pipeline_stage: stageId,
+          hs_pipeline: pipeline.pipelineId,
+          hs_pipeline_stage: assignee.status === 'done'
+            ? pipeline.completedStageId
+            : pipeline.executionStageId,
           hs_type: 'internal_ops',
           fellow_action_item_id: actionItemId,
         };

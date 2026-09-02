@@ -241,6 +241,36 @@ export async function findContactByEmail(email: string): Promise<string | null> 
   return data.id;
 }
 
+export interface ProjectsPipelineConfig {
+  pipelineId: string;
+  executionStageId: string;
+  completedStageId: string;
+}
+
+export async function resolveProjectsPipeline(): Promise<ProjectsPipelineConfig> {
+  const token = getToken();
+  const res = await fetch(`${HS_BASE}/crm/v3/pipelines/projects`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Projects pipeline lookup failed ${res.status}: ${await res.text()}`);
+  const data = await res.json() as { results: Array<{ id: string; label: string; stages: Array<{ id: string; label: string }> }> };
+
+  const pipeline = data.results.find(p => p.label === 'Project Pipeline') ?? data.results[0];
+  if (!pipeline) throw new Error('No Projects pipeline found in HubSpot');
+
+  const find = (label: string) => {
+    const stage = pipeline.stages.find(s => s.label === label);
+    if (!stage) throw new Error(`Projects pipeline has no "${label}" stage`);
+    return stage.id;
+  };
+
+  return {
+    pipelineId: pipeline.id,
+    executionStageId: find('Execution'),
+    completedStageId: find('Completed'),
+  };
+}
+
 export async function upsertFellowProject(
   fellowActionItemId: string,
   properties: Record<string, string>,

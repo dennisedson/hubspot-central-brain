@@ -12,6 +12,11 @@ beforeEach(async () => {
     findContactByEmail: vi.fn().mockResolvedValue('contact-1'),
     upsertFellowProject: vi.fn().mockResolvedValue({ id: 'proj-1', action: 'created' }),
     associateProjectToContact: vi.fn().mockResolvedValue(undefined),
+    resolveProjectsPipeline: vi.fn().mockResolvedValue({
+      pipelineId: 'test-pipeline',
+      executionStageId: 'stage-execution',
+      completedStageId: 'stage-completed',
+    }),
   }));
 
   vi.doMock('@lib/fellow-client', () => ({
@@ -22,10 +27,6 @@ beforeEach(async () => {
   vi.doMock('@lib/portal-config', () => ({
     getPortalConfig: vi.fn().mockReturnValue({
       appConfig: { objectTypeId: '2-app' },
-      projects: {
-        pipelineId: 'test-pipeline',
-        stageIds: { execution: 'stage-execution', completed: 'stage-completed' },
-      },
     }),
   }));
 
