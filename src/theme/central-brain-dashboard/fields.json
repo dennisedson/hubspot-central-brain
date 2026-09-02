@@ -1,1 +1,8 @@
-[]
+[
+  {
+    "type": "group",
+    "name": "colors",
+    "label": "Colors",
+    "children": []
+  }
+]
