@@ -71,3 +71,46 @@ export async function updateLinearIssueState(
     throw new Error(`Linear issueUpdate returned success: false for issue ${issueId}`);
   }
 }
+
+export interface LinearIssueDetail {
+  identifier: string;
+  title: string;
+  state: string;
+  assignee: string | null;
+  updatedAt: string;
+  url: string;
+}
+
+interface LinearIssueNode {
+  identifier: string;
+  title: string;
+  updatedAt: string;
+  url: string;
+  state: { name: string } | null;
+  assignee: { displayName: string } | null;
+}
+
+export async function getLinearIssue(apiKey: string, issueId: string): Promise<LinearIssueDetail | null> {
+  const query = `
+    query GetIssue($issueId: String!) {
+      issue(id: $issueId) {
+        identifier
+        title
+        updatedAt
+        url
+        state { name }
+        assignee { displayName }
+      }
+    }
+  `;
+  const data = await gql<{ issue: LinearIssueNode | null }>(apiKey, query, { issueId });
+  if (!data.issue) return null;
+  return {
+    identifier: data.issue.identifier,
+    title: data.issue.title,
+    state: data.issue.state?.name ?? 'Unknown',
+    assignee: data.issue.assignee?.displayName ?? null,
+    updatedAt: data.issue.updatedAt,
+    url: data.issue.url,
+  };
+}

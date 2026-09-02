@@ -105,3 +105,34 @@ export async function findTaskByLinearIssueUrl(
   const tasks = await request<Array<{ gid: string }>>(apiKey, 'GET', `/workspaces/${workspaceGid}/tasks/search?${params}`);
   return tasks[0]?.gid ?? null;
 }
+
+export interface AsanaTaskDetail {
+  name: string;
+  stageGid: string | null;
+  assignee: string | null;
+  url: string;
+}
+
+export async function getAsanaTask(apiKey: string, taskGid: string): Promise<AsanaTaskDetail | null> {
+  const res = await fetch(
+    `${ASANA_API}/tasks/${taskGid}?opt_fields=name,permalink_url,assignee.name,custom_fields.gid,custom_fields.enum_value.gid`,
+    { headers: { Authorization: `Bearer ${apiKey}` } },
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Asana GET task failed ${res.status}: ${await res.text()}`);
+  const json = await res.json() as {
+    data: {
+      name: string;
+      permalink_url: string;
+      assignee?: { name: string } | null;
+      custom_fields: Array<{ gid: string; enum_value?: { gid: string } | null }>;
+    };
+  };
+  const field = json.data.custom_fields.find(f => f.gid === ASANA_PIPELINE_STAGE_FIELD_GID);
+  return {
+    name: json.data.name,
+    stageGid: field?.enum_value?.gid ?? null,
+    assignee: json.data.assignee?.name ?? null,
+    url: json.data.permalink_url,
+  };
+}
