@@ -1,9 +1,7 @@
-# Deploy to Staging — auto-uploads on push to master
+# Deploy to Staging — manual trigger only
 name: Deploy › Staging
 
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
 
 concurrency:
