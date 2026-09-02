@@ -20,10 +20,10 @@
     ],
     "labels": {
       "en": {
-        "actionName": "Sync Fellow Action Items to HubSpot Tasks",
+        "actionName": "Sync Fellow Action Items to HubSpot Projects",
         "appDisplayName": "Central Brain",
-        "actionDescription": "Polls Fellow API for meeting action items and creates or updates HubSpot Tasks associated to matching contacts",
-        "actionCardContent": "Poll Fellow → create HubSpot Tasks",
+        "actionDescription": "Polls Fellow API for meeting action items and creates or updates HubSpot Projects associated to matching contacts",
+        "actionCardContent": "Poll Fellow → create HubSpot Projects",
         "inputFieldLabels": {},
         "inputFieldDescriptions": {},
         "outputFieldLabels": {
