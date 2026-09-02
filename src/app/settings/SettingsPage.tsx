@@ -28,7 +28,8 @@ interface SettingsResponse extends AppSettings {
 }
 
 type ServerlessResult = {
-  body: { statusCode: number; body: string };
+  statusCode: number;
+  body: string;
 };
 
 async function callApi(action: string, params: Record<string, string> = {}): Promise<{ statusCode: number; body: string }> {
@@ -36,10 +37,10 @@ async function callApi(action: string, params: Record<string, string> = {}): Pro
     'app_settings_api',
     { parameters: { action, ...params } },
   );
-  if (!result.body) {
-    throw new Error(`Serverless call returned no body: ${JSON.stringify(result)}`);
+  if (!result || result.statusCode === undefined) {
+    throw new Error(`Unexpected serverless result: ${JSON.stringify(result)}`);
   }
-  return result.body;
+  return result;
 }
 
 hubspot.extend<'settings'>(({ context }) => <SettingsPage portalId={context.portal.id} />);

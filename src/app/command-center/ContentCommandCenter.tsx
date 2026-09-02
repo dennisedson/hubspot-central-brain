@@ -110,15 +110,12 @@ function PipelineBoard() {
     setError(null);
     hubspot
       .serverless('content_data_api', { parameters: {} })
-      .then((result: { body: { statusCode: number; body: string } }) => {
-        const res = result.body;
-        if (res && res.statusCode === 200) {
-          setData(JSON.parse(res.body) as ContentData);
-        } else if (res) {
-          const parsed = JSON.parse(res.body) as { error?: string };
-          setError(parsed.error ?? 'Failed to load content data');
+      .then((result: { statusCode: number; body: string }) => {
+        if (result.statusCode === 200) {
+          setData(JSON.parse(result.body) as ContentData);
         } else {
-          setError(`Unexpected serverless result: ${JSON.stringify(result)}`);
+          const parsed = JSON.parse(result.body) as { error?: string };
+          setError(parsed.error ?? 'Failed to load content data');
         }
       })
       .catch((err: unknown) => {

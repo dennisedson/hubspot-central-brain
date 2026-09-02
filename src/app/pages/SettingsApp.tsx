@@ -28,7 +28,8 @@ interface SettingsResponse extends AppSettings {
 }
 
 type ServerlessResult = {
-  body: { statusCode: number; body: string };
+  statusCode: number;
+  body: string;
 };
 
 async function callApi(action: string, params: Record<string, string> = {}): Promise<{ statusCode: number; body: string }> {
@@ -36,7 +37,10 @@ async function callApi(action: string, params: Record<string, string> = {}): Pro
     'app_settings_api',
     { parameters: { action, ...params } },
   );
-  throw new Error(`RAW_SHAPE:${JSON.stringify(result).slice(0, 300)}`);
+  if (!result || result.statusCode === undefined) {
+    throw new Error(`Unexpected serverless result: ${JSON.stringify(result)}`);
+  }
+  return result;
 }
 
 interface SettingsPageProps {
