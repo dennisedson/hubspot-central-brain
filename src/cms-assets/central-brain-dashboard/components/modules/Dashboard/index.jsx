@@ -1,14 +1,9 @@
-import { ModuleFields, TextField } from '@hubspot/cms-components/fields';
+import { Island } from '@hubspot/cms-components';
+import DashboardIsland from '../../islands/DashboardIsland.jsx?island';
 
-export function Component({ fieldValues }) {
-  return <div>{fieldValues.footerText}</div>;
+export function Component() {
+  return <Island module={DashboardIsland} hydrateOn="load" title="Central Brain Dashboard" />;
 }
-
-export const fields = (
-  <ModuleFields>
-    <TextField label="Footer Text" name="footerText" default="Be Well." />
-  </ModuleFields>
-);
 
 export const meta = {
   label: 'Central Brain Dashboard',
