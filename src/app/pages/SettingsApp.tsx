@@ -1,6 +1,15 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { hubspot, Form, Input, Select, Button, Alert, Heading, Text, Flex, Box, LoadingSpinner } from '@hubspot/ui-extensions';
-import { createPageRouter, PageRoutes, PageTitle } from '@hubspot/ui-extensions/pages';
+import { useEffect, useState, useCallback } from 'react';
+import {
+  hubspot,
+  Form,
+  Select,
+  Button,
+  Alert,
+  Heading,
+  Text,
+  Flex,
+  LoadingSpinner,
+} from '@hubspot/ui-extensions';
 
 interface AppSettings {
   linearTeamId: string;
@@ -8,68 +17,111 @@ interface AppSettings {
   linearAssigneeId: string;
 }
 
-interface FunctionResponse {
-  statusCode: number;
-  body: string;
+interface LinearOption {
+  id: string;
+  name: string;
 }
 
-const SettingsPage = () => {
+interface SettingsResponse extends AppSettings {
+  teams: LinearOption[];
+  teamMembers: LinearOption[];
+}
+
+type ServerlessResult = {
+  status: 'SUCCESS' | 'TIMEOUT' | 'ERROR';
+  response?: { statusCode: number; body: string };
+  message?: string;
+};
+
+async function callApi(action: string, params: Record<string, string> = {}): Promise<{ statusCode: number; body: string }> {
+  const result = await (hubspot.serverless as (uid: string, opts: { parameters: Record<string, string> }) => Promise<ServerlessResult>)(
+    'app_settings_api',
+    { parameters: { action, ...params } },
+  );
+  if (result.status !== 'SUCCESS' || !result.response) {
+    throw new Error(result.message ?? 'Serverless call failed');
+  }
+  return result.response;
+}
+
+interface SettingsPageProps {
+  portalId: number;
+}
+
+const SettingsPage = ({ portalId }: SettingsPageProps) => {
   const [settings, setSettings] = useState<AppSettings>({
     linearTeamId: '',
     assigneeFilter: 'all',
     linearAssigneeId: '',
   });
+  const [teams, setTeams] = useState<LinearOption[]>([]);
+  const [teamMembers, setTeamMembers] = useState<LinearOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMembers, setLoadingMembers] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [errorDetail, setErrorDetail] = useState<string>('');
 
   useEffect(() => {
-    hubspot
-      .serverless('app_settings_api', { parameters: { method: 'GET' } })
-      .then(result => {
-        if (result.status === 'SUCCESS') {
-          const res = result.response as FunctionResponse;
-          if (res.statusCode === 200) {
-            setSettings(JSON.parse(res.body) as AppSettings);
-          } else {
-            setStatus('error');
-            console.error('AppSettingsApi GET non-200:', res.statusCode, res.body);
-          }
+    callApi('getSettings', { portalId: String(portalId) })
+      .then(res => {
+        if (res.statusCode === 200) {
+          const data = JSON.parse(res.body) as SettingsResponse;
+          setSettings({
+            linearTeamId: data.linearTeamId,
+            assigneeFilter: data.assigneeFilter,
+            linearAssigneeId: data.linearAssigneeId,
+          });
+          setTeams(data.teams ?? []);
+          setTeamMembers(data.teamMembers ?? []);
         } else {
+          const data = JSON.parse(res.body) as { error?: string; detail?: string };
+          setErrorDetail(`${res.statusCode}: ${data.detail ?? data.error ?? res.body}`);
           setStatus('error');
-          console.error('AppSettingsApi GET serverless error:', result.message);
         }
       })
       .catch((err: unknown) => {
+        setErrorDetail(err instanceof Error ? err.message : 'Failed to load settings');
         setStatus('error');
-        console.error('AppSettingsApi GET rejected:', err);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [portalId]);
+
+  const handleTeamChange = useCallback((teamId: string) => {
+    setSettings(s => ({ ...s, linearTeamId: teamId, linearAssigneeId: '' }));
+    setTeamMembers([]);
+    if (!teamId) return;
+    setLoadingMembers(true);
+    callApi('loadTeamMembers', { portalId: String(portalId), teamId })
+      .then(res => {
+        const data = JSON.parse(res.body) as { teamMembers: LinearOption[] };
+        setTeamMembers(data.teamMembers ?? []);
+      })
+      .catch(() => setTeamMembers([]))
+      .finally(() => setLoadingMembers(false));
+  }, [portalId]);
 
   const handleSave = useCallback(() => {
     setSaving(true);
     setStatus('idle');
-    hubspot
-      .serverless('app_settings_api', {
-        parameters: {
-          method: 'POST',
-          linearTeamId: settings.linearTeamId,
-          assigneeFilter: settings.assigneeFilter,
-          linearAssigneeId: settings.linearAssigneeId,
-        },
-      })
-      .then(result => {
-        if (result.status === 'SUCCESS') {
-          const res = result.response as FunctionResponse;
-          setStatus(res.statusCode === 200 ? 'success' : 'error');
+    callApi('saveSettings', {
+      portalId: String(portalId),
+      linearTeamId: settings.linearTeamId,
+      assigneeFilter: settings.assigneeFilter,
+      linearAssigneeId: settings.linearAssigneeId,
+    })
+      .then(res => {
+        if (res.statusCode === 200) {
+          setStatus('success');
         } else {
+          const data = JSON.parse(res.body) as { error?: string; detail?: string };
+          setErrorDetail(`${res.statusCode}: ${data.detail ?? data.error ?? ''}`);
           setStatus('error');
         }
       })
       .catch(() => setStatus('error'))
       .finally(() => setSaving(false));
-  }, [settings]);
+  }, [portalId, settings]);
 
   if (loading) {
     return (
@@ -79,69 +131,75 @@ const SettingsPage = () => {
     );
   }
 
-  if (status === 'error' && !settings.linearTeamId) {
+  if (status === 'error' && !settings.linearTeamId && teams.length === 0) {
     return (
       <Alert title="Failed to load settings" variant="error">
-        <Text>Check Sentry for AppSettingsApi errors. Portal may be missing App Config object type ID in portal-config.ts.</Text>
+        <Text>{errorDetail || 'Check function logs in the developer portal.'}</Text>
       </Alert>
     );
   }
 
+  const teamOptions = teams.map(t => ({ label: t.name, value: t.id }));
+  const memberOptions = teamMembers.map(m => ({ label: m.name, value: m.id }));
+
+  const canSave = !!settings.linearTeamId &&
+    (settings.assigneeFilter !== 'mine' || !!settings.linearAssigneeId);
+
   return (
     <Form>
-      <PageTitle>Linear Sync Settings</PageTitle>
       <Heading>Linear Sync Settings</Heading>
       <Text>Configure how this portal syncs with Linear.</Text>
 
-      <Box>
-        <Input
-          label="Linear Team ID"
-          name="linearTeamId"
-          description="Find in Linear Settings → Teams → click your team → copy the UUID from the URL"
-          value={settings.linearTeamId}
-          onChange={value => setSettings(s => ({ ...s, linearTeamId: value }))}
-        />
-      </Box>
+      <Select
+        label="Linear Team"
+        name="linearTeamId"
+        value={settings.linearTeamId}
+        placeholder={teams.length === 0 ? 'No teams found — check LINEAR_API_KEY' : 'Select a team'}
+        onChange={value => handleTeamChange(String(value))}
+        options={teamOptions}
+      />
 
-      <Box>
-        <Select
-          label="Which issues should sync to HubSpot?"
-          name="assigneeFilter"
-          value={settings.assigneeFilter}
-          onChange={value =>
-            setSettings(s => ({
-              ...s,
-              assigneeFilter: value as AppSettings['assigneeFilter'],
-            }))
-          }
-          options={[
-            { label: 'All issues', value: 'all' },
-            { label: 'Assigned issues only', value: 'assigned' },
-            { label: 'My issues only', value: 'mine' },
-          ]}
-        />
+      <Select
+        label="Which issues should sync to HubSpot?"
+        name="assigneeFilter"
+        value={settings.assigneeFilter}
+        onChange={value =>
+          setSettings(s => ({ ...s, assigneeFilter: value as AppSettings['assigneeFilter'], linearAssigneeId: '' }))
+        }
+        options={[
+          { label: 'All issues', value: 'all' },
+          { label: 'Assigned issues only', value: 'assigned' },
+          { label: 'My issues only', value: 'mine' },
+        ]}
+      />
 
-        {settings.assigneeFilter === 'mine' && (
-          <Input
-            label="Your Linear User ID"
+      {settings.assigneeFilter === 'mine' && (
+        loadingMembers ? (
+          <Flex justify="start" align="center">
+            <LoadingSpinner label="Loading team members..." />
+          </Flex>
+        ) : (
+          <Select
+            label="Which team member are you?"
             name="linearAssigneeId"
-            description="Find in Linear Settings → Profile → copy the UUID from the URL"
             value={settings.linearAssigneeId}
-            onChange={value => setSettings(s => ({ ...s, linearAssigneeId: value }))}
+            placeholder={memberOptions.length === 0 ? 'Select a team first' : 'Select your name'}
+            onChange={value => setSettings(s => ({ ...s, linearAssigneeId: String(value) }))}
+            options={memberOptions}
           />
-        )}
-      </Box>
+        )
+      )}
 
       {status === 'success' && <Alert title="Settings saved" variant="success" />}
       {status === 'error' && (
         <Alert title="Failed to save settings" variant="error">
-          <Text>Check function logs in Sentry for details.</Text>
+          <Text>{errorDetail || 'Check the function logs for details.'}</Text>
         </Alert>
       )}
 
       <Button
         onClick={handleSave}
-        disabled={saving || !settings.linearTeamId}
+        disabled={saving || !canSave}
         variant="primary"
       >
         {saving ? 'Saving…' : 'Save settings'}
@@ -150,10 +208,7 @@ const SettingsPage = () => {
   );
 };
 
-const PageRouter = createPageRouter(
-  <PageRoutes>
-    <PageRoutes.IndexRoute component={SettingsPage} />
-  </PageRoutes>
-);
-
-hubspot.extend<'pages'>(() => <PageRouter />);
+hubspot.extend<'pages'>(({ context }) => {
+  const portalId = (context as { portal: { id: number } }).portal.id;
+  return <SettingsPage portalId={portalId} />;
+});
