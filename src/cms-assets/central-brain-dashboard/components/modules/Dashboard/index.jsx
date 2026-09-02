@@ -7,4 +7,5 @@ export function Component() {
 
 export const meta = {
   label: 'Central Brain Dashboard',
+  host_template_types: ['PAGE'],
 };
