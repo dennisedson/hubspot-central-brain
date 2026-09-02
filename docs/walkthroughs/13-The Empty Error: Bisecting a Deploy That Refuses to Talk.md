@@ -1,5 +1,9 @@
 ## 🎬 YouTube Episode Guide: The Empty Error — Bisecting a Deploy That Refuses to Talk
 
+> **⚠️ Correction — read before filming.** The conclusion this episode reaches, that `export const fields` cannot deploy, is **wrong**. The real cause was a double-deploy race in CI: `hs project upload` auto-deploys after building, and the workflow then deployed the *same build* a second time. A component only deploys successfully once, so whichever attempt ran second failed. `fields` deploys fine — it only broke the redundant second deploy. See [episode 15](15-The%20Bisect%20That%20Lied:%20When%20Your%20Test%20Harness%20Is%20Non-Deterministic.md).
+>
+> The bisect *technique* below is still sound and still worth teaching. What it produced was a false conviction, because the harness underneath it was non-deterministic — a perfect 7-for-7 correlation that was really a coin flip weighted by build timing. That is the deeper lesson, and the honest version of this episode leads with it: **a bisect is only as trustworthy as the determinism of the thing you're testing.**
+
 **🎯 Core Learning Objective:**
 "By the end of this video, you will know how to isolate an opaque deploy failure — the kind that gives you no stack trace, no error ID, and literally an empty error body — by bisecting a component down to its absolute floor and walking it back up one rung at a time, using CI runs as your test harness."
 
@@ -61,8 +65,9 @@ export function Component({ fieldValues }) {
   return <div>{fieldValues.footerText}</div>;
 }
 
-// ⛔ This export is the culprit. Removing it is the difference
-//    between a red deploy and a green one.
+// ⚠️ This export was CONVICTED IN ERROR. Removing it did flip the
+//    build green — but only by changing timing in a racy CI pipeline.
+//    See the correction at the top of this file.
 export const fields = (
   <ModuleFields>
     <TextField label="Footer Text" name="footerText" default="Be Well." />
@@ -128,4 +133,4 @@ gh run view <run-id> --log | grep -iE "Building central-brain-cms|Deploying cent
 | #146 | full island, **no** `fields` export | ✅ green |
 | #147 | + dependency pinned to `1.2.70` | ✅ green |
 
-**Known limitation to state on camera:** the module title is hardcoded until the `fields` export can deploy. Content editors can't change it in the page editor yet. That's the honest cost of the workaround, and the reason builds #143–#145 belong in a support ticket as a minimal reproduction.
+**Known limitation, since corrected:** at the time of filming the module title was hardcoded, on the belief that the `fields` export could not deploy. That belief was wrong (see the correction at the top). No support ticket was warranted — the bug was in our own workflow, not HubSpot's platform. Restoring the `fields` export is what ultimately made the module render at all.

@@ -10,7 +10,7 @@ The component currently deployed to dev (build #147) works, but carries three ar
 
 1. `assets/.gitkeep` and `styles/.gitkeep` — placeholder directories added to test a hypothesis that turned out to be wrong. Nothing references them.
 2. All styling lives in a 33-key JavaScript object inside the island, applied via `style={...}`. The styles were inlined under the theory that CSS modules broke the deploy. They did not — `fields` did.
-3. The module title is hardcoded because `export const fields` cannot deploy (a HubSpot platform bug, reproduced with their own reference markup in builds #143–#145).
+3. The module title is hardcoded because `export const fields` was believed undeployable. **This was wrong** — see the correction below. It was a double-deploy race in CI, not a platform bug.
 
 Items 1 and 2 are in scope. Item 3 stays as-is until HubSpot resolves the platform bug.
 

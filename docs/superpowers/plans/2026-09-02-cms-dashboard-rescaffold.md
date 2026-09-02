@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Component is `central-brain-cms` at `src/cms-assets/central-brain-dashboard`. Deploys only via CI on push to `develop`; there is no local `~/.hscli` auth.
-- **Do NOT add `export const fields` to the module.** It cannot deploy — reproduced with HubSpot's own reference markup in builds #143–#145. The module title stays hardcoded.
+- ~~**Do NOT add `export const fields` to the module.** It cannot deploy.~~ **RETRACTED:** `fields` deploys fine. The failures came from a double-deploy race in CI (fixed in `a9d8393`), and the missing `fields` export was later found to be why the module would not render at all.
 - `@hubspot/cms-components` and `@hubspot/cms-dev-server` stay pinned at exactly `1.2.70`.
 - Do not modify `cms-assets.json`, `cms-assets-hsmeta.json`, `package.json`, or `components/modules/Dashboard/index.jsx`.
 - Rendered output must be pixel-identical to build #147. This is a refactor, not a redesign.
