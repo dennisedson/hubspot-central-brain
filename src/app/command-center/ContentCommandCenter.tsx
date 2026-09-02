@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   hubspot,
   Box,
@@ -38,7 +38,7 @@ interface ContentData {
   total: number;
 }
 
-type TagVariant = 'default' | 'success' | 'warning' | 'danger' | 'info';
+type TagVariant = 'default' | 'success' | 'warning' | 'error' | 'info';
 
 const CONTENT_TYPE_VARIANT: Record<string, TagVariant> = {
   'blog post': 'info',
@@ -48,7 +48,7 @@ const CONTENT_TYPE_VARIANT: Record<string, TagVariant> = {
   'changelog': 'default',
   'documentation': 'info',
   'talk': 'warning',
-  'social': 'danger',
+  'social': 'error',
 };
 
 function formatDate(iso: string | null): string {
@@ -191,7 +191,7 @@ function PipelineBoard() {
           label="Filter by type"
           name="typeFilter"
           value={typeFilter}
-          onChange={val => setTypeFilter(val)}
+          onChange={val => setTypeFilter(String(val))}
           options={typeOptions}
         />
         <Button
