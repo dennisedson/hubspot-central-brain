@@ -1,0 +1,12 @@
+{
+  "uid": "asana_poll",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/AsanaPoll.js",
+    "endpoint": {
+      "path": "asana-poll",
+      "methods": ["POST"]
+    },
+    "secretKeys": ["ASANA_API_KEY", "HS_ACCESS_TOKEN"]
+  }
+}

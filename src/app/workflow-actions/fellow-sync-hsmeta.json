@@ -2,7 +2,7 @@
   "uid": "fellow_sync_v1",
   "type": "workflow-action",
   "config": {
-    "actionUrl": "${FELLOW_SYNC_URL}",
+    "actionUrl": "https://51869810.hs-sites.com/hs/serverless/fellow-sync",
     "isPublished": true,
     "supportedClients": [{ "client": "WORKFLOWS" }],
     "objectTypes": [],
