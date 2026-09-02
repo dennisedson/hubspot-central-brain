@@ -1,0 +1,12 @@
+{
+  "uid": "enterpret_insights_card",
+  "type": "card",
+  "config": {
+    "name": "Enterpret Insights",
+    "location": "crm.record.tab",
+    "entrypoint": "/app/cards/EnterpretInsightsCard.tsx",
+    "objectTypes": [
+      "p_content_piece"
+    ]
+  }
+}

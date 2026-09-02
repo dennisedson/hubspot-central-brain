@@ -1,0 +1,12 @@
+{
+  "uid": "enterpret_insights_api",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/EnterpretInsightsApi.js",
+    "endpoint": {
+      "path": "enterpret-insights-api",
+      "methods": ["GET", "POST"]
+    },
+    "secretKeys": ["HS_ACCESS_TOKEN"]
+  }
+}
