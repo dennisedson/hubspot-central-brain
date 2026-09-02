@@ -1,0 +1,12 @@
+{
+  "uid": "content_data_api",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/ContentDataApi.js",
+    "endpoint": {
+      "path": "content-data-api",
+      "methods": ["GET"]
+    },
+    "secretKeys": ["PRIVATE_APP_ACCESS_TOKEN", "HS_ACCESS_TOKEN"]
+  }
+}

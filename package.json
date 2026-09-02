@@ -19,7 +19,7 @@
     "patch:unique-property": "tsx src/scripts/patch-unique-property.ts",
     "provision:workflows": "tsx src/scripts/provision-workflows.ts",
     "provision:fellow-sync": "tsx src/scripts/provision-fellow-sync.ts",
-    "build": "esbuild src/app/functions/LinearWebhook.ts src/app/functions/SyncToLinear.ts src/app/functions/AppSettingsApi.ts src/app/functions/SyncToAsana.ts src/app/functions/AsanaWebhook.ts src/app/functions/AsanaPoll.ts src/app/functions/FellowSync.ts --bundle --platform=node --target=node18 --outdir=src/app/functions",
+    "build": "esbuild src/app/functions/LinearWebhook.ts src/app/functions/SyncToLinear.ts src/app/functions/AppSettingsApi.ts src/app/functions/SyncToAsana.ts src/app/functions/AsanaWebhook.ts src/app/functions/AsanaPoll.ts src/app/functions/FellowSync.ts src/app/functions/ContentDataApi.ts --bundle --platform=node --target=node18 --outdir=src/app/functions",
     "dev": "hs project dev",
     "upload": "npm run build && hs project upload",
     "upload:dev": "npm run build && hs project upload --profile=dev",
