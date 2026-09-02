@@ -28,9 +28,7 @@ interface SettingsResponse extends AppSettings {
 }
 
 type ServerlessResult = {
-  status: 'SUCCESS' | 'TIMEOUT' | 'ERROR';
-  response?: { statusCode: number; body: string };
-  message?: string;
+  body: { statusCode: number; body: string };
 };
 
 async function callApi(action: string, params: Record<string, string> = {}): Promise<{ statusCode: number; body: string }> {
@@ -38,10 +36,10 @@ async function callApi(action: string, params: Record<string, string> = {}): Pro
     'app_settings_api',
     { parameters: { action, ...params } },
   );
-  if (result.status !== 'SUCCESS' || !result.response) {
-    throw new Error(result.message ?? 'Serverless call failed');
+  if (!result.body) {
+    throw new Error(`Serverless call returned no body: ${JSON.stringify(result)}`);
   }
-  return result.response;
+  return result.body;
 }
 
 interface SettingsPageProps {

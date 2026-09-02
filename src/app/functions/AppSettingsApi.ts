@@ -3,7 +3,7 @@ import type { AppSettings } from '../lib/portal-config';
 
 interface SettingsContext {
   accountId?: number;
-  body?: Record<string, string | undefined>;
+  parameters?: Record<string, string | undefined>;
 }
 
 interface LinearTeam {
@@ -81,7 +81,7 @@ async function hsUpdate(objectTypeId: string, objectId: string, properties: Reco
 }
 
 export async function main(context: SettingsContext): Promise<{ statusCode: number; body: string }> {
-  const portalId = context.accountId ?? parseInt(context.body?.portalId ?? '0', 10);
+  const portalId = context.accountId ?? parseInt(context.parameters?.portalId ?? '0', 10);
   if (!portalId) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing portalId' }) };
   }
@@ -105,7 +105,7 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
     return { statusCode: 500, body: JSON.stringify({ error: 'App config object type not configured' }) };
   }
 
-  const action = context.body?.action ?? 'getSettings';
+  const action = context.parameters?.action ?? 'getSettings';
 
   if (action === 'getSettings') {
     try {
@@ -138,7 +138,7 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
   }
 
   if (action === 'loadTeamMembers') {
-    const teamId = context.body?.teamId;
+    const teamId = context.parameters?.teamId;
     if (!teamId || !linearApiKey) {
       return { statusCode: 200, body: JSON.stringify({ teamMembers: [] }) };
     }
@@ -147,7 +147,7 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
   }
 
   if (action === 'saveSettings') {
-    const { linearTeamId, assigneeFilter, linearAssigneeId } = context.body ?? {};
+    const { linearTeamId, assigneeFilter, linearAssigneeId } = context.parameters ?? {};
     if (!linearTeamId || !assigneeFilter) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields' }) };
     }
