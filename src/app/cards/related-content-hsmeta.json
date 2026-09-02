@@ -1,0 +1,13 @@
+{
+  "uid": "related_content_card",
+  "type": "card",
+  "config": {
+    "name": "Related Content",
+    "location": "crm.record.tab",
+    "entrypoint": "/app/cards/RelatedContentCard.tsx",
+    "objectTypes": [
+      "p_content_piece",
+      "p_video"
+    ]
+  }
+}

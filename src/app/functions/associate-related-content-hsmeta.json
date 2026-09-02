@@ -1,0 +1,12 @@
+{
+  "uid": "associate_related_content_fn",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/AssociateRelatedContent.js",
+    "endpoint": {
+      "path": "associate-related-content",
+      "methods": ["POST"]
+    },
+    "secretKeys": ["SYNC_SHARED_SECRET", "HS_ACCESS_TOKEN"]
+  }
+}

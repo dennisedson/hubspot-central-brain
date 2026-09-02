@@ -1,0 +1,88 @@
+{
+  "uid": "associate_related_content",
+  "type": "workflow-action",
+  "config": {
+    "actionUrl": "${ASSOCIATE_RELATED_CONTENT_URL}",
+    "isPublished": true,
+    "supportedClients": [{ "client": "WORKFLOWS" }],
+    "objectTypes": [],
+    "inputFields": [
+      {
+        "typeDefinition": {
+          "name": "sharedSecret",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": true
+      },
+      {
+        "typeDefinition": {
+          "name": "objectId",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "isRequired": true
+      },
+      {
+        "typeDefinition": {
+          "name": "objectType",
+          "type": "enumeration",
+          "fieldType": "select",
+          "options": [
+            { "value": "content", "label": "Content Piece" },
+            { "value": "video", "label": "Video" }
+          ]
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": true
+      },
+      {
+        "typeDefinition": {
+          "name": "maxAssociations",
+          "type": "number",
+          "fieldType": "number"
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      }
+    ],
+    "outputFields": [
+      {
+        "typeDefinition": { "name": "associationStatus", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "associationsCreated", "type": "number", "fieldType": "number" }
+      },
+      {
+        "typeDefinition": { "name": "relatedTitles", "type": "string", "fieldType": "text" }
+      }
+    ],
+    "labels": {
+      "en": {
+        "actionName": "Associate Related Content",
+        "appDisplayName": "Central Brain",
+        "actionDescription": "Scores other records of the same type by shared topic tags and Enterpret theme, then associates the closest matches to the enrolled record",
+        "actionCardContent": "Associate related {{objectType}}",
+        "inputFieldLabels": {
+          "sharedSecret": "Shared Secret",
+          "objectId": "Record ID",
+          "objectType": "Object Type",
+          "maxAssociations": "Max Associations"
+        },
+        "inputFieldDescriptions": {
+          "sharedSecret": "Shared secret that authenticates this request; must match the SYNC_SHARED_SECRET function secret",
+          "objectId": "The Record ID (hs_object_id) of the enrolled record",
+          "objectType": "Whether this workflow runs on Content Pieces or Videos",
+          "maxAssociations": "How many related records to associate, 1-5 (defaults to 3). Requires a default association definition between these object types to already exist in the portal."
+        },
+        "outputFieldLabels": {
+          "associationStatus": "Association Status",
+          "associationsCreated": "Associations Created",
+          "relatedTitles": "Related Titles"
+        }
+      }
+    }
+  }
+}

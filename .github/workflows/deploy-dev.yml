@@ -33,6 +33,8 @@ jobs:
           sed -i 's|${SYNC_TO_LINEAR_URL}|https://51869810.hs-sites.com/hs/serverless/sync-to-linear|g' src/app/workflow-actions/sync-to-linear-hsmeta.json
           sed -i 's|${SYNC_TO_ASANA_URL}|https://51869810.hs-sites.com/hs/serverless/sync-to-asana|g' src/app/workflow-actions/sync-to-asana-hsmeta.json
           sed -i 's|${ASANA_POLL_URL}|https://51869810.hs-sites.com/hs/serverless/asana-poll|g' src/app/workflow-actions/asana-poll-hsmeta.json
+          sed -i 's|${ASSOCIATE_RELATED_CONTENT_URL}|https://51869810.hs-sites.com/hs/serverless/associate-related-content|g' src/app/workflow-actions/associate-related-content-hsmeta.json
+          sed -i 's|${GENERATE_SOCIAL_DRAFT_URL}|https://51869810.hs-sites.com/hs/serverless/generate-social-draft|g' src/app/workflow-actions/generate-social-draft-hsmeta.json
 
 
       - name: Install HubSpot CLI

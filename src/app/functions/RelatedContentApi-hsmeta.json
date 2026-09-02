@@ -1,0 +1,12 @@
+{
+  "uid": "related_content_api",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/RelatedContentApi.js",
+    "endpoint": {
+      "path": "related-content-api",
+      "methods": ["GET", "POST"]
+    },
+    "secretKeys": ["HS_ACCESS_TOKEN"]
+  }
+}

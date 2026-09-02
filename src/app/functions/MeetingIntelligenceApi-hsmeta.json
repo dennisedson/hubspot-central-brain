@@ -1,0 +1,12 @@
+{
+  "uid": "meeting_intelligence_api",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/MeetingIntelligenceApi.js",
+    "endpoint": {
+      "path": "meeting-intelligence-api",
+      "methods": ["GET", "POST"]
+    },
+    "secretKeys": ["HS_ACCESS_TOKEN"]
+  }
+}

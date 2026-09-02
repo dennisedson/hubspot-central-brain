@@ -1,0 +1,66 @@
+{
+  "uid": "generate_social_draft_v1",
+  "type": "workflow-action",
+  "config": {
+    "actionUrl": "${GENERATE_SOCIAL_DRAFT_URL}",
+    "isPublished": true,
+    "supportedClients": [{ "client": "WORKFLOWS" }],
+    "objectTypes": [],
+    "inputFields": [
+      {
+        "typeDefinition": {
+          "name": "objectId",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "isRequired": true
+      },
+      {
+        "typeDefinition": {
+          "name": "force",
+          "type": "enumeration",
+          "fieldType": "select",
+          "options": [
+            { "value": "false", "label": "No — skip records that already have a draft" },
+            { "value": "true", "label": "Yes — overwrite the existing draft" }
+          ]
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      }
+    ],
+    "outputFields": [
+      {
+        "typeDefinition": { "name": "draftStatus", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "draftLength", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "reason", "type": "string", "fieldType": "text" }
+      }
+    ],
+    "labels": {
+      "en": {
+        "actionName": "Generate Social Post Draft",
+        "appDisplayName": "Central Brain",
+        "actionDescription": "Builds a templated LinkedIn draft from the content piece's title, type, published URL and topic tags, and writes it to the Social Post Draft property",
+        "actionCardContent": "Generate social draft for {{objectId}}",
+        "inputFieldLabels": {
+          "objectId": "Content Piece Record ID",
+          "force": "Overwrite Existing Draft"
+        },
+        "inputFieldDescriptions": {
+          "objectId": "The Record ID (hs_object_id) of the Content Piece to draft a post for",
+          "force": "By default an existing Social Post Draft is left alone so human edits are never lost. Choose Yes to regenerate it from scratch."
+        },
+        "outputFieldLabels": {
+          "draftStatus": "Draft Status",
+          "draftLength": "Draft Length",
+          "reason": "Reason"
+        }
+      }
+    }
+  }
+}
