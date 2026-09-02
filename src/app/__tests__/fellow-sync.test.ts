@@ -22,6 +22,10 @@ beforeEach(async () => {
   vi.doMock('@lib/portal-config', () => ({
     getPortalConfig: vi.fn().mockReturnValue({
       appConfig: { objectTypeId: '2-app' },
+      projects: {
+        pipelineId: 'test-pipeline',
+        stageIds: { execution: 'stage-execution', completed: 'stage-completed' },
+      },
     }),
   }));
 
@@ -104,7 +108,8 @@ describe('FellowSync.main', () => {
       'mtg-1:0:dennis_edson',
       expect.objectContaining({
         hs_name: 'Write the blog post',
-        hs_pipeline_stage: 'pending',
+        hs_pipeline: 'test-pipeline',
+        hs_pipeline_stage: 'stage-execution',
         hs_type: 'internal_ops',
         fellow_action_item_id: 'mtg-1:0:dennis_edson',
       }),
@@ -125,7 +130,7 @@ describe('FellowSync.main', () => {
     await main(baseCtx);
     expect(vi.mocked(mockUpsert)).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ hs_pipeline_stage: 'done' }),
+      expect.objectContaining({ hs_pipeline_stage: 'stage-completed' }),
     );
   });
 

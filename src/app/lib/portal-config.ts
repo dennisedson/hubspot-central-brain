@@ -41,6 +41,13 @@ export interface PortalConfig {
       public: string;
     };
   };
+  projects: {
+    pipelineId: string;
+    stageIds: {
+      execution: string;
+      completed: string;
+    };
+  };
 }
 
 const CONFIGS: Record<number, PortalConfig> = {
@@ -88,6 +95,13 @@ const CONFIGS: Record<number, PortalConfig> = {
         public: '1418680348',
       },
     },
+    projects: {
+      pipelineId: '139663aa-09ee-418e-b67d-c8cfcd3e5ce3',
+      stageIds: {
+        execution: 'c51bb66c-8141-44ef-82ec-703ae9c3a19f',
+        completed: 'd742ec1d-2e4d-4e7f-81e7-d33314c0074e',
+      },
+    },
   },
   // staging
   51869787: {
@@ -128,6 +142,10 @@ const CONFIGS: Record<number, PortalConfig> = {
         public: '1418723710',
       },
     },
+    projects: {
+      pipelineId: '',
+      stageIds: { execution: '', completed: '' },
+    },
   },
   // prod
   22047910: {
@@ -167,6 +185,10 @@ const CONFIGS: Record<number, PortalConfig> = {
         scheduled: '1418723413',
         public: '1418723414',
       },
+    },
+    projects: {
+      pipelineId: '',
+      stageIds: { execution: '', completed: '' },
     },
   },
 };

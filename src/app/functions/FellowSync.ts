@@ -95,10 +95,15 @@ export async function main(context: FellowSyncContext): Promise<{ statusCode: nu
           }
         }
 
+        const stageId = assignee.status === 'done'
+          ? config.projects.stageIds.completed
+          : config.projects.stageIds.execution;
+
         const properties: Record<string, string> = {
           hs_name: item.text.slice(0, 255),
           hs_description: `From meeting: ${group.noteTitle}\nAssigned to: ${assignee.name}`,
-          hs_pipeline_stage: assignee.status === 'done' ? 'done' : 'pending',
+          hs_pipeline: config.projects.pipelineId,
+          hs_pipeline_stage: stageId,
           hs_type: 'internal_ops',
           fellow_action_item_id: actionItemId,
         };
