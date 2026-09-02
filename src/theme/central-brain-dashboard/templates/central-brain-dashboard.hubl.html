@@ -11,15 +11,19 @@
   <title>{{ content.html_title }}</title>
   <meta name="description" content="{{ content.meta_description }}">
   {{ standard_header_includes }}
-  <style>
-    *, *::before, *::after { box-sizing: border-box; }
-    body { margin: 0; padding: 0; }
-  </style>
+  <style>*, *::before, *::after { box-sizing: border-box; } body { margin: 0; padding: 0; }</style>
 </head>
 <body>
-  {% module "central_brain_dashboard"
-    path="@projects/hubspot-central-brain/cbrain-theme/central-brain-dashboard/components/modules/Dashboard"
-  %}
+  {% dnd_area "main" label="Main" %}
+    {% dnd_section %}
+      {% dnd_column %}
+        {% dnd_row %}
+          {% dnd_module path="../components/modules/Dashboard" %}
+          {% end_dnd_module %}
+        {% end_dnd_row %}
+      {% end_dnd_column %}
+    {% end_dnd_section %}
+  {% end_dnd_area %}
   {{ standard_footer_includes }}
 </body>
 </html>
