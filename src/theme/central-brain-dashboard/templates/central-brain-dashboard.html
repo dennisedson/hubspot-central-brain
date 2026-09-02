@@ -1,0 +1,25 @@
+<!--
+  templateType: "page"
+  isAvailableForNewContent: true
+  label: "Central Brain Dashboard"
+-->
+<!doctype html>
+<html lang="{{ html_lang }}" {{ html_lang_dir }}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ content.html_title }}</title>
+  <meta name="description" content="{{ content.meta_description }}">
+  {{ standard_header_includes }}
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; padding: 0; }
+  </style>
+</head>
+<body>
+  {% module "central_brain_dashboard"
+    path="@projects/hubspot-central-brain/central-brain-theme/components/modules/Dashboard"
+  %}
+  {{ standard_footer_includes }}
+</body>
+</html>

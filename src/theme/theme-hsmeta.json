@@ -1,6 +1,6 @@
 {
-  "uid": "central-brain-cms",
-  "type": "cms-assets",
+  "uid": "central-brain-theme",
+  "type": "theme",
   "config": {
     "themePath": "central-brain-dashboard",
     "secretNames": []
