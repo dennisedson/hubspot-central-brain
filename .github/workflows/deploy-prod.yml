@@ -32,6 +32,7 @@ jobs:
           sed -i 's|${SYNC_TO_ASANA_URL}|https://22047910.hs-sites.com/hs/serverless/sync-to-asana|g' src/app/workflow-actions/sync-to-asana-hsmeta.json
           sed -i 's|${ASANA_POLL_URL}|https://22047910.hs-sites.com/hs/serverless/asana-poll|g' src/app/workflow-actions/asana-poll-hsmeta.json
           sed -i 's|${FELLOW_SYNC_URL}|https://22047910.hs-sites.com/hs/serverless/fellow-sync|g' src/app/workflow-actions/fellow-sync-hsmeta.json
+          sed -i 's|${CONTENT_OBJECT_TYPE_ID}|2-67508928|g' src/app/cards/task-status-hsmeta.json
 
       - name: Install HubSpot CLI
         uses: HubSpot/hubspot-project-actions/install-hubspot-cli@v1.1.0
