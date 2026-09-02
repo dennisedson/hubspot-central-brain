@@ -1,3 +1,4 @@
+import { ModuleFields, TextField } from '@hubspot/cms-components/fields';
 import styles from '../../../styles/dashboard.module.css';
 
 export const hublDataTemplate = `{% set hublData = {"portalId": hub_id} %}`;
@@ -154,3 +155,9 @@ export const meta = {
   label: 'Central Brain Dashboard',
   host_template_types: ['PAGE'],
 };
+
+export const fields = (
+  <ModuleFields>
+    <TextField name="title" label="Dashboard Title" default="Central Brain Dashboard" />
+  </ModuleFields>
+);
