@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import {
   hubspot,
   Alert,
@@ -32,7 +32,7 @@ interface RelatedPayload {
   errors: { candidates: string | null };
 }
 
-type ServerlessResult = { statusCode: number; body: string };
+interface ServerlessResult { statusCode: number; body: string }
 
 interface CrmContext {
   objectId: string | number;
@@ -62,34 +62,36 @@ const Card = ({ context }: { context: { crm: CrmContext } }) => {
   const objectId = String(context.crm.objectId);
   const objectTypeId = context.crm.objectTypeId ? String(context.crm.objectTypeId) : '';
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const parameters: Record<string, string> = { objectId };
-      if (objectTypeId) parameters.objectTypeId = objectTypeId;
-
-      const result = await (hubspot.serverless as unknown as (
-        uid: string,
-        opts: { parameters: Record<string, string> },
-      ) => Promise<ServerlessResult>)('related_content_api', { parameters });
-
-      if (!result || result.statusCode === undefined) {
-        throw new Error(`Unexpected serverless result: ${JSON.stringify(result)}`);
-      }
-      const parsed = JSON.parse(result.body) as RelatedPayload & { error?: string };
-      if (result.statusCode !== 200) throw new Error(parsed.error ?? `HTTP ${result.statusCode}`);
-      setData(parsed);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load related content');
-    } finally {
-      setLoading(false);
-    }
-  }, [objectId, objectTypeId]);
-
+  // The async work lives inside the effect with a cancellation guard so no
+  // setState runs synchronously within it, and none runs after unmount.
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const parameters: Record<string, string> = { objectId };
+        if (objectTypeId) parameters.objectTypeId = objectTypeId;
+
+        const result = await (hubspot.serverless as unknown as (
+          uid: string,
+          opts: { parameters: Record<string, string> },
+        ) => Promise<ServerlessResult>)('related_content_api', { parameters });
+
+        if (!result || result.statusCode === undefined) {
+          throw new Error(`Unexpected serverless result: ${JSON.stringify(result)}`);
+        }
+        const parsed = JSON.parse(result.body) as RelatedPayload & { error?: string };
+        if (result.statusCode !== 200) throw new Error(parsed.error ?? `HTTP ${result.statusCode}`);
+        if (!cancelled) setData(parsed);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load related content');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [objectId, objectTypeId]);
 
   if (loading) return <LoadingSpinner label="Finding related content" />;
   if (error) {

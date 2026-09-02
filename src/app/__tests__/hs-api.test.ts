@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  associationLabelsPath,
+  schemaAssociationsPath,
   HS_BASE,
   HS_API_VERSION,
   objectPath,
@@ -180,5 +182,27 @@ describe('migration status (issue #14)', () => {
     // literals become the same shape — and this assertion is where you say so.
     expect(objectSearchPath('projects')).toBe('/crm/v3/objects/projects/search');
     expect(datedObjectSearchPath('projects')).toBe('/crm/objects/2026-03/projects/search');
+  });
+});
+
+// Added for the association-definition provisioning (issue #3). These belong in
+// the migration checklist alongside every other legacy builder.
+describe('association definition builders', () => {
+  it('associationLabelsPath is still on legacy v4', () => {
+    expect(associationLabelsPath('2-67505887', '2-67505887')).toBe(
+      '/crm/v4/associations/2-67505887/2-67505887/labels',
+    );
+  });
+
+  it('associationLabelsPath handles a cross-type pairing', () => {
+    expect(associationLabelsPath('2-67505887', '2-67505890')).toBe(
+      '/crm/v4/associations/2-67505887/2-67505890/labels',
+    );
+  });
+
+  it('schemaAssociationsPath is still on legacy v3', () => {
+    expect(schemaAssociationsPath('2-67505887')).toBe(
+      '/crm/v3/schemas/2-67505887/associations',
+    );
   });
 });

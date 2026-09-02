@@ -46,3 +46,6 @@ src/app/pages/node_modules/
 
 # Subagent-driven development workspaces
 .superpowers/
+
+# Cards UI extension deps
+src/app/cards/node_modules/

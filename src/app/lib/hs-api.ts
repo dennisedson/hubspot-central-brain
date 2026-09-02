@@ -155,6 +155,25 @@ export function associationBatchCreatePath(
   return `${ASSOCIATIONS_V4}/${fromObjectType}/${toObjectType}/batch/create`;
 }
 
+/**
+ * The association *definitions* (a.k.a. types/labels) between two object types.
+ *
+ * GET lists every defined type for the pairing, including the unlabeled one
+ * (`label: null`) that `defaultAssociationPath` needs. An empty `results` array
+ * means no association definition exists between the two types at all.
+ *
+ * POST creates a labeled definition — `{ name, label }` for a symmetric label,
+ * plus `inverseLabel` for a paired one. `label` and `inverseLabel` must differ;
+ * sending the same string for both makes HubSpot 500.
+ */
+// LEGACY v4 — migrate to dated per issue #14
+export function associationLabelsPath(
+  fromObjectType: string,
+  toObjectType: string,
+): string {
+  return `${ASSOCIATIONS_V4}/${fromObjectType}/${toObjectType}/labels`;
+}
+
 // ---------------------------------------------------------------------------
 // Schema / properties / pipelines
 // ---------------------------------------------------------------------------
@@ -174,6 +193,23 @@ export function propertiesPath(objectType: string, propertyName?: string): strin
 // LEGACY v3 — migrate to dated per issue #14
 export function schemasPath(): string {
   return SCHEMAS_V3;
+}
+
+/**
+ * The association definitions declared on one schema (POST to add one).
+ *
+ * This is the post-creation equivalent of the `associatedObjects` field on
+ * `POST /crm/v3/schemas`: the body is `{ fromObjectTypeId, toObjectTypeId, name }`
+ * and it creates the *unlabeled* definition, which is what
+ * `defaultAssociationPath` requires.
+ *
+ * It rejects `fromObjectTypeId === toObjectTypeId` with
+ * `ObjectSchemaError.CANNOT_ASSOCIATE_OBJECT_TYPE_WITH_ITSELF`, so
+ * same-object-type pairings have to go through `associationLabelsPath` instead.
+ */
+// LEGACY v3 — migrate to dated per issue #14
+export function schemaAssociationsPath(objectType: string): string {
+  return `${SCHEMAS_V3}/${objectType}/associations`;
 }
 
 /**

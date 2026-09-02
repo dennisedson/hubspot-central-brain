@@ -1,5 +1,11 @@
 import { Client } from '@hubspot/api-client';
 import { loadEnv } from './script-env';
+import {
+  associationPairingsFor,
+  ensureAssociationDefinitions,
+  isSelfReferential,
+  unusablePairings,
+} from './association-definitions';
 
 const { token } = loadEnv();
 const client = new Client({ accessToken: token });
@@ -58,7 +64,7 @@ function printPortalConfig(objectTypeId: string, contentPipeline: any, changelog
   console.log(`    },`);
 }
 
-async function provisionContent(): Promise<void> {
+async function provisionContent(): Promise<string> {
   console.log('\n--- Content custom object ---');
 
   let objectTypeId = await findExistingSchema('content_piece', 'Content Piece');
@@ -154,9 +160,10 @@ async function provisionContent(): Promise<void> {
   }
 
   printPortalConfig(objectTypeId, contentPipeline, changelogPipeline);
+  return objectTypeId;
 }
 
-async function provisionVideo(): Promise<void> {
+async function provisionVideo(): Promise<string> {
   console.log('\n--- Video custom object ---');
 
   let objectTypeId = await findExistingSchema('video', 'Video');
@@ -213,13 +220,47 @@ async function provisionVideo(): Promise<void> {
   }
 
   printVideoConfig(objectTypeId, pipeline);
+  return objectTypeId;
+}
+
+/**
+ * `associatedObjects` on the schema create above cannot express these: the
+ * self-referential pairings are the object associating with itself, and the
+ * content -> video pairing needs the video objectTypeId, which does not exist
+ * yet when content is created. So they are made here, once both schemas exist.
+ *
+ * Idempotent, and non-fatal — a rejected self-referential pairing must not fail
+ * the whole provisioning run. See `association-definitions.ts` for why
+ * self-referential support on custom objects is not guaranteed, and run
+ * `npx tsx src/scripts/provision-associations.ts` to retry just this step.
+ */
+async function provisionAssociations(contentTypeId: string, videoTypeId: string): Promise<void> {
+  console.log('\n--- Association definitions ---');
+
+  const results = await ensureAssociationDefinitions(
+    token,
+    associationPairingsFor(contentTypeId, videoTypeId),
+  );
+
+  for (const result of results) {
+    const route = isSelfReferential(result.pairing) ? 'v4 labels' : 'v3 schema associations';
+    console.log(`  ${result.pairing.description} (${route}): ${result.outcome} — ${result.detail}`);
+  }
+
+  for (const result of unusablePairings(results)) {
+    console.warn(
+      `  ! ${result.pairing.description} has no unlabeled definition — ` +
+      'AssociateRelatedContent cannot associate these records.',
+    );
+  }
 }
 
 async function main() {
   try {
     await listAllSchemas();
-    await provisionContent();
-    await provisionVideo();
+    const contentTypeId = await provisionContent();
+    const videoTypeId = await provisionVideo();
+    await provisionAssociations(contentTypeId, videoTypeId);
     console.log('\n✓ Provisioning complete. Update portal-config.ts with the values above.');
   } catch (err: unknown) {
     console.error('Provisioning failed:', err instanceof Error ? err.message : err);

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import {
   hubspot,
   Alert,
@@ -38,7 +38,7 @@ interface InsightsPayload {
   errors: { enterpret: string | null };
 }
 
-type ServerlessResult = { statusCode: number; body: string };
+interface ServerlessResult { statusCode: number; body: string }
 
 const SENTIMENT_TAG: Record<Sentiment, 'success' | 'warning' | 'default'> = {
   positive: 'success',
@@ -128,33 +128,35 @@ const Card = ({ context }: { context: { crm: { objectId: string | number } } }) 
 
   const objectId = String(context.crm.objectId);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await (hubspot.serverless as unknown as (
-        uid: string,
-        opts: { parameters: Record<string, string> },
-      ) => Promise<ServerlessResult>)('enterpret_insights_api', {
-        parameters: { objectId },
-      });
-
-      if (!result || result.statusCode === undefined) {
-        throw new Error(`Unexpected serverless result: ${JSON.stringify(result)}`);
-      }
-      const parsed = JSON.parse(result.body) as InsightsPayload & { error?: string };
-      if (result.statusCode !== 200) throw new Error(parsed.error ?? `HTTP ${result.statusCode}`);
-      setData(parsed);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load Enterpret insights');
-    } finally {
-      setLoading(false);
-    }
-  }, [objectId]);
-
+  // The async work lives inside the effect with a cancellation guard so no
+  // setState runs synchronously within it, and none runs after unmount.
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await (hubspot.serverless as unknown as (
+          uid: string,
+          opts: { parameters: Record<string, string> },
+        ) => Promise<ServerlessResult>)('enterpret_insights_api', {
+          parameters: { objectId },
+        });
+
+        if (!result || result.statusCode === undefined) {
+          throw new Error(`Unexpected serverless result: ${JSON.stringify(result)}`);
+        }
+        const parsed = JSON.parse(result.body) as InsightsPayload & { error?: string };
+        if (result.statusCode !== 200) throw new Error(parsed.error ?? `HTTP ${result.statusCode}`);
+        if (!cancelled) setData(parsed);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load Enterpret insights');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [objectId]);
 
   if (loading) return <LoadingSpinner label="Loading Enterpret insights" />;
   if (error) {

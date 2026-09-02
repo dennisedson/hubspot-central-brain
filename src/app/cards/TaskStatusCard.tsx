@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import {
   hubspot,
   Alert,
@@ -42,7 +42,7 @@ interface StatusPayload {
   errors: { linear: string | null; asana: string | null };
 }
 
-type ServerlessResult = { statusCode: number; body: string };
+interface ServerlessResult { statusCode: number; body: string }
 
 function formatWhen(iso: string): string {
   const then = new Date(iso).getTime();
@@ -69,32 +69,34 @@ const Card = ({ context }: { context: { crm: { objectId: string | number } } }) 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await (hubspot.serverless as unknown as (
-        uid: string,
-        opts: { parameters: Record<string, string> },
-      ) => Promise<ServerlessResult>)('task_status_api', {
-        parameters: { objectId: String(context.crm.objectId) },
-      });
-      if (!result || result.statusCode === undefined) {
-        throw new Error(`Unexpected serverless result: ${JSON.stringify(result)}`);
-      }
-      const parsed = JSON.parse(result.body) as StatusPayload & { error?: string };
-      if (result.statusCode !== 200) throw new Error(parsed.error ?? `HTTP ${result.statusCode}`);
-      setData(parsed);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load status');
-    } finally {
-      setLoading(false);
-    }
-  }, [context.crm.objectId]);
-
+  // The async work lives inside the effect with a cancellation guard so no
+  // setState runs synchronously within it, and none runs after unmount.
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await (hubspot.serverless as unknown as (
+          uid: string,
+          opts: { parameters: Record<string, string> },
+        ) => Promise<ServerlessResult>)('task_status_api', {
+          parameters: { objectId: String(context.crm.objectId) },
+        });
+        if (!result || result.statusCode === undefined) {
+          throw new Error(`Unexpected serverless result: ${JSON.stringify(result)}`);
+        }
+        const parsed = JSON.parse(result.body) as StatusPayload & { error?: string };
+        if (result.statusCode !== 200) throw new Error(parsed.error ?? `HTTP ${result.statusCode}`);
+        if (!cancelled) setData(parsed);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load status');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [context.crm.objectId]);
 
   if (loading) return <LoadingSpinner label="Loading task status" />;
   if (error) return <Alert title="Could not load status" variant="error"><Text>{error}</Text></Alert>;

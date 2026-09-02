@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   hubspot,
@@ -34,7 +34,7 @@ interface IntelligencePayload {
   errors: { meetings: string | null; content: string | null };
 }
 
-type ServerlessResult = { statusCode: number; body: string };
+interface ServerlessResult { statusCode: number; body: string }
 
 /**
  * One section of the card. Each renders from its own slice of the payload so a
@@ -72,32 +72,34 @@ const Card = ({ context }: { context: { crm: { objectId: string | number } } }) 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await (hubspot.serverless as unknown as (
-        uid: string,
-        opts: { parameters: Record<string, string> },
-      ) => Promise<ServerlessResult>)('meeting_intelligence_api', {
-        parameters: { contactId: String(context.crm.objectId) },
-      });
-      if (!result || result.statusCode === undefined) {
-        throw new Error(`Unexpected serverless result: ${JSON.stringify(result)}`);
-      }
-      const parsed = JSON.parse(result.body) as IntelligencePayload & { error?: string };
-      if (result.statusCode !== 200) throw new Error(parsed.error ?? `HTTP ${result.statusCode}`);
-      setData(parsed);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load meeting intelligence');
-    } finally {
-      setLoading(false);
-    }
-  }, [context.crm.objectId]);
-
+  // The async work lives inside the effect with a cancellation guard so no
+  // setState runs synchronously within it, and none runs after unmount.
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await (hubspot.serverless as unknown as (
+          uid: string,
+          opts: { parameters: Record<string, string> },
+        ) => Promise<ServerlessResult>)('meeting_intelligence_api', {
+          parameters: { contactId: String(context.crm.objectId) },
+        });
+        if (!result || result.statusCode === undefined) {
+          throw new Error(`Unexpected serverless result: ${JSON.stringify(result)}`);
+        }
+        const parsed = JSON.parse(result.body) as IntelligencePayload & { error?: string };
+        if (result.statusCode !== 200) throw new Error(parsed.error ?? `HTTP ${result.statusCode}`);
+        if (!cancelled) setData(parsed);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load meeting intelligence');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [context.crm.objectId]);
 
   if (loading) return <LoadingSpinner label="Loading meeting intelligence" />;
   if (error) {
