@@ -9,6 +9,7 @@
  */
 
 import { loadEnv } from './script-env';
+import { HS_BASE, propertiesPath } from '../app/lib/hs-api';
 
 const OBJECT_TYPE_IDS: Record<string, string> = {
   dev:     '2-67505887',
@@ -16,7 +17,7 @@ const OBJECT_TYPE_IDS: Record<string, string> = {
   prod:    '2-67508928',
 };
 
-const API = 'https://api.hubapi.com';
+const API = HS_BASE;
 
 async function hs(token: string, method: string, path: string, body?: unknown) {
   const res = await fetch(`${API}${path}`, {
@@ -38,14 +39,14 @@ async function ensureProperty(
   unique: boolean,
 ) {
   try {
-    const existing = await hs(token, 'GET', `/crm/v3/properties/${objectTypeId}/${name}`);
+    const existing = await hs(token, 'GET', propertiesPath(objectTypeId, name));
     if (existing.hasUniqueValue === unique) {
       console.log(`  – ${name} already exists (hasUniqueValue=${existing.hasUniqueValue})`);
     } else {
       console.log(`  ! ${name} exists but hasUniqueValue=${existing.hasUniqueValue} (wanted ${unique}) — cannot change on existing property`);
     }
   } catch {
-    const created = await hs(token, 'POST', `/crm/v3/properties/${objectTypeId}`, {
+    const created = await hs(token, 'POST', propertiesPath(objectTypeId), {
       name,
       label,
       type: 'string',

@@ -10,8 +10,9 @@
 
 import { getPortalConfig } from '../app/lib/portal-config';
 import { loadEnv } from './script-env';
+import { HS_BASE, objectSearchPath } from '../app/lib/hs-api';
 
-const API = 'https://api.hubapi.com';
+const API = HS_BASE;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function hs(token: string, method: string, path: string, body?: unknown): Promise<any> {
@@ -96,7 +97,7 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
 
 // Reads the linearTeamId from the app settings CRM object (same source as AppSettingsApi).
 async function fetchLinearTeamId(token: string, appConfigObjectTypeId: string): Promise<string> {
-  const res = await hs(token, 'POST', `/crm/v3/objects/${appConfigObjectTypeId}/search`, {
+  const res = await hs(token, 'POST', objectSearchPath(appConfigObjectTypeId), {
     properties: ['linear_team_id'],
     limit: 1,
     filterGroups: [],

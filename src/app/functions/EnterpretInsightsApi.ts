@@ -7,8 +7,7 @@ import {
   parseQuoteCount,
 } from '../lib/enterpret-client';
 import type { EnterpretQuote, SentimentSummary } from '../lib/enterpret-client';
-
-const HS_BASE = 'https://api.hubapi.com';
+import { HS_BASE, objectPath } from '../lib/hs-api';
 
 /** How many verbatims to surface in the card. */
 const QUOTE_LIMIT = 5;
@@ -65,7 +64,7 @@ export async function main(context: EnterpretInsightsContext) {
 
   const config = getPortalConfig(portalId);
   const props = ['enterpret_theme', 'enterpret_quote_count'];
-  const url = `${HS_BASE}/crm/v3/objects/${config.content.objectTypeId}/${objectId}?properties=${props.join(',')}`;
+  const url = `${HS_BASE}${objectPath(config.content.objectTypeId, objectId)}?properties=${props.join(',')}`;
 
   const recordRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!recordRes.ok) {

@@ -1,5 +1,6 @@
 import { getPortalConfig, DEFAULT_APP_SETTINGS } from '../lib/portal-config';
 import type { AppSettings } from '../lib/portal-config';
+import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 
 interface SettingsContext {
   accountId?: number;
@@ -22,7 +23,6 @@ interface LinearMember {
   name: string;
 }
 
-const HS_BASE = 'https://api.hubapi.com';
 const LINEAR_API = 'https://api.linear.app/graphql';
 
 async function linearQuery(gql: string, variables: Record<string, unknown>, apiKey: string) {
@@ -59,7 +59,7 @@ async function getLinearTeamMembers(teamId: string, apiKey: string): Promise<Lin
 }
 
 async function hsSearch(objectTypeId: string, props: string[], token: string) {
-  const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}/search`, {
+  const res = await fetch(`${HS_BASE}${objectSearchPath(objectTypeId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ filterGroups: [], properties: props, limit: 1, sorts: [], query: '', after: '0' }),
@@ -69,7 +69,7 @@ async function hsSearch(objectTypeId: string, props: string[], token: string) {
 }
 
 async function hsCreate(objectTypeId: string, properties: Record<string, string>, token: string) {
-  const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}`, {
+  const res = await fetch(`${HS_BASE}${objectPath(objectTypeId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ properties, associations: [] }),
@@ -78,7 +78,7 @@ async function hsCreate(objectTypeId: string, properties: Record<string, string>
 }
 
 async function hsUpdate(objectTypeId: string, objectId: string, properties: Record<string, string>, token: string) {
-  const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}/${objectId}`, {
+  const res = await fetch(`${HS_BASE}${objectPath(objectTypeId, objectId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ properties }),

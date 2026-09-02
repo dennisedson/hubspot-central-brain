@@ -1,8 +1,7 @@
 import { getPortalConfig } from '../lib/portal-config';
 import { hsUpdate } from '../lib/hubspot-client';
 import { generateSocialDraft } from '../lib/social-draft';
-
-const HS_BASE = 'https://api.hubapi.com';
+import { HS_BASE, objectPath } from '../lib/hs-api';
 
 const READ_PROPERTIES = [
   'title',
@@ -68,7 +67,7 @@ export async function main(context: GenerateSocialDraftContext) {
   if (!portalId) return result(400, { error: 'accountId missing from context' }, { draftStatus: 'error', reason: 'missing_account_id' });
 
   const objectTypeId = getPortalConfig(portalId).content.objectTypeId;
-  const url = `${HS_BASE}/crm/v3/objects/${objectTypeId}/${objectId}?properties=${READ_PROPERTIES.join(',')}`;
+  const url = `${HS_BASE}${objectPath(objectTypeId, objectId)}?properties=${READ_PROPERTIES.join(',')}`;
 
   let record: { properties: Record<string, string | null> };
   try {

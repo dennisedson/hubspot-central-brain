@@ -13,8 +13,9 @@
  */
 
 import { loadEnv } from './script-env';
+import { HS_BASE, propertiesPath, schemasPath } from '../app/lib/hs-api';
 
-const API = 'https://api.hubapi.com';
+const API = HS_BASE;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function hs(token: string, method: string, path: string, body?: unknown): Promise<any> {
@@ -35,7 +36,7 @@ async function ensureProperty(
   property: { name: string; label: string },
 ): Promise<void> {
   try {
-    await hs(token, 'POST', `/crm/v3/properties/${objectTypeId}`, {
+    await hs(token, 'POST', propertiesPath(objectTypeId), {
       name: property.name,
       label: property.label,
       type: 'string',
@@ -58,7 +59,7 @@ async function main() {
   console.log(`[${portal}] Provisioning Fellow sync properties...`);
 
   // Find the App Config schema to get its group name
-  const schemas = await hs(token, 'GET', '/crm/v3/schemas?limit=100');
+  const schemas = await hs(token, 'GET', `${schemasPath()}?limit=100`);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const appSettings = (schemas.results ?? []).find((s: any) => s.name === 'app_configs' || s.name === 'app_settings');
   if (!appSettings) {

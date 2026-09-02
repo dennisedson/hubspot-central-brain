@@ -2,8 +2,15 @@ import type { LinearWebhookPayload, UpsertResult } from './types';
 import { LINEAR_STATE_TO_CONTENT_STAGE, LINEAR_STATE_TO_CHANGELOG_STAGE } from './mapping';
 import { getPortalConfig, DEFAULT_APP_SETTINGS } from './portal-config';
 import type { AppSettings } from './portal-config';
-
-const HS_BASE = 'https://api.hubapi.com';
+import {
+  HS_BASE,
+  objectPath,
+  objectSearchPath,
+  pipelinesPath,
+  associationBatchCreatePath,
+  datedObjectPath,
+  datedObjectSearchPath,
+} from './hs-api';
 
 function getToken(): string {
   const token = process.env.PRIVATE_APP_ACCESS_TOKEN ?? process.env.HS_ACCESS_TOKEN;
@@ -18,7 +25,7 @@ async function hsSearch(
 ): Promise<{ results: Array<{ id: string; properties: Record<string, string | null> }> }> {
   const token = getToken();
   const filterGroups = filters.length > 0 ? [{ filters }] : [];
-  const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}/search`, {
+  const res = await fetch(`${HS_BASE}${objectSearchPath(objectTypeId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ filterGroups, properties, limit: 1, sorts: [], query: '', after: '0' }),
@@ -29,7 +36,7 @@ async function hsSearch(
 
 async function hsCreate(objectTypeId: string, properties: Record<string, string>): Promise<{ id: string }> {
   const token = getToken();
-  const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}`, {
+  const res = await fetch(`${HS_BASE}${objectPath(objectTypeId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ properties, associations: [] }),
@@ -46,7 +53,7 @@ async function hsUpsertByUniqueProperty(
 ): Promise<UpsertResult> {
   const token = getToken();
   const res = await fetch(
-    `${HS_BASE}/crm/v3/objects/${objectTypeId}/${idValue}?idProperty=${idProperty}`,
+    `${HS_BASE}${objectPath(objectTypeId, idValue)}?idProperty=${idProperty}`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -75,7 +82,7 @@ async function hsUpsertByUniqueProperty(
 
 export async function hsUpdate(objectTypeId: string, objectId: string, properties: Record<string, string>): Promise<void> {
   const token = getToken();
-  const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}/${objectId}`, {
+  const res = await fetch(`${HS_BASE}${objectPath(objectTypeId, objectId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ properties }),
@@ -104,7 +111,7 @@ export async function getCurrentStage(
   // milliseconds of each other (e.g. issue create + label assignment double-fire).
   const token = getToken();
   const res = await fetch(
-    `${HS_BASE}/crm/v3/objects/${objectTypeId}/${encodeURIComponent(linearIssueId)}?idProperty=linear_id&properties=hs_pipeline_stage`,
+    `${HS_BASE}${objectPath(objectTypeId, encodeURIComponent(linearIssueId))}?idProperty=linear_id&properties=hs_pipeline_stage`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   if (res.status === 404) return null;
@@ -191,7 +198,7 @@ export async function getAsanaSyncToken(
 ): Promise<string | null> {
   const token = getToken();
   const res = await fetch(
-    `${HS_BASE}/crm/v3/objects/${objectTypeId}/${recordId}?properties=asana_sync_token`,
+    `${HS_BASE}${objectPath(objectTypeId, recordId)}?properties=asana_sync_token`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   if (!res.ok) throw new Error(`HubSpot GET failed ${res.status}: ${await res.text()}`);
@@ -213,7 +220,7 @@ export async function getFellowLastSync(
 ): Promise<string | null> {
   const token = getToken();
   const res = await fetch(
-    `${HS_BASE}/crm/v3/objects/${objectTypeId}/${recordId}?properties=fellow_last_sync`,
+    `${HS_BASE}${objectPath(objectTypeId, recordId)}?properties=fellow_last_sync`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   if (!res.ok) throw new Error(`HubSpot GET failed ${res.status}: ${await res.text()}`);
@@ -232,7 +239,7 @@ export async function setFellowLastSync(
 export async function findContactByEmail(email: string): Promise<string | null> {
   const token = getToken();
   const res = await fetch(
-    `${HS_BASE}/crm/v3/objects/contacts/${encodeURIComponent(email)}?idProperty=email&properties=email`,
+    `${HS_BASE}${objectPath('contacts', encodeURIComponent(email))}?idProperty=email&properties=email`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   if (res.status === 404) return null;
@@ -249,7 +256,7 @@ export interface ProjectsPipelineConfig {
 
 export async function resolveProjectsPipeline(): Promise<ProjectsPipelineConfig> {
   const token = getToken();
-  const res = await fetch(`${HS_BASE}/crm/v3/pipelines/projects`, {
+  const res = await fetch(`${HS_BASE}${pipelinesPath('projects')}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Projects pipeline lookup failed ${res.status}: ${await res.text()}`);
@@ -278,7 +285,7 @@ export async function upsertFellowProject(
   const token = getToken();
 
   // Search for existing project by dedup key
-  const searchRes = await fetch(`${HS_BASE}/crm/objects/2026-03/projects/search`, {
+  const searchRes = await fetch(`${HS_BASE}${datedObjectSearchPath('projects')}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({
@@ -292,7 +299,7 @@ export async function upsertFellowProject(
 
   if (searchData.results.length > 0) {
     const projectId = searchData.results[0].id;
-    const patchRes = await fetch(`${HS_BASE}/crm/objects/2026-03/projects/${projectId}`, {
+    const patchRes = await fetch(`${HS_BASE}${datedObjectPath('projects', projectId)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ properties }),
@@ -301,7 +308,7 @@ export async function upsertFellowProject(
     return { id: projectId, action: 'updated' };
   }
 
-  const createRes = await fetch(`${HS_BASE}/crm/objects/2026-03/projects`, {
+  const createRes = await fetch(`${HS_BASE}${datedObjectPath('projects')}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ properties }),
@@ -314,7 +321,7 @@ export async function upsertFellowProject(
 export async function associateProjectToContact(projectId: string, contactId: string): Promise<void> {
   const token = getToken();
   const res = await fetch(
-    `${HS_BASE}/crm/v4/associations/projects/contacts/batch/create`,
+    `${HS_BASE}${associationBatchCreatePath('projects', 'contacts')}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

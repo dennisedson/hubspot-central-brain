@@ -7,8 +7,7 @@ import {
   computeLinearDrift,
   computeAsanaDrift,
 } from '../lib/drift';
-
-const HS_BASE = 'https://api.hubapi.com';
+import { HS_BASE, objectPath } from '../lib/hs-api';
 
 interface TaskStatusContext {
   accountId?: number;
@@ -40,7 +39,7 @@ export async function main(context: TaskStatusContext) {
 
   const config = getPortalConfig(portalId);
   const props = ['linear_issue_id', 'asana_task_id', 'hs_pipeline', 'hs_pipeline_stage'];
-  const url = `${HS_BASE}/crm/v3/objects/${config.content.objectTypeId}/${objectId}?properties=${props.join(',')}`;
+  const url = `${HS_BASE}${objectPath(config.content.objectTypeId, objectId)}?properties=${props.join(',')}`;
 
   const recordRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!recordRes.ok) {

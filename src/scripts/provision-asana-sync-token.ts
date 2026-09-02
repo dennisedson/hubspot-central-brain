@@ -11,8 +11,9 @@
  */
 
 import { loadEnv } from './script-env';
+import { HS_BASE, propertiesPath, schemasPath } from '../app/lib/hs-api';
 
-const API = 'https://api.hubapi.com';
+const API = HS_BASE;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function hs(token: string, method: string, path: string, body?: unknown): Promise<any> {
@@ -32,7 +33,7 @@ async function main() {
 
   console.log(`[${portal}] Adding asana_sync_token to App Settings...`);
 
-  const schemas = await hs(token, 'GET', '/crm/v3/schemas?limit=100');
+  const schemas = await hs(token, 'GET', `${schemasPath()}?limit=100`);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const appSettings = (schemas.results ?? []).find((s: any) => s.name === 'app_configs' || s.name === 'app_settings');
 
@@ -45,7 +46,7 @@ async function main() {
   console.log(`Found app_settings: ${objectTypeId}`);
 
   try {
-    await hs(token, 'POST', `/crm/v3/properties/${objectTypeId}`, {
+    await hs(token, 'POST', propertiesPath(objectTypeId), {
       name: 'asana_sync_token',
       label: 'Asana Sync Token',
       type: 'string',

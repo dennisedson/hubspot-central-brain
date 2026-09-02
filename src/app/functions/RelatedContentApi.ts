@@ -1,8 +1,8 @@
 import { getPortalConfig } from '../lib/portal-config';
 import { parseTopicTags, scoreRelated } from '../lib/related-content';
 import type { RelatedCandidate } from '../lib/related-content';
+import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 
-const HS_BASE = 'https://api.hubapi.com';
 const CANDIDATE_LIMIT = 100;
 const RESULT_LIMIT = 5;
 
@@ -117,14 +117,14 @@ export async function main(context: RelatedContentContext) {
   const [sourceOutcome, candidateOutcome] = await Promise.allSettled([
     (async () => {
       const res = await fetch(
-        `${HS_BASE}/crm/v3/objects/${objectTypeId}/${objectId}?properties=${properties.join(',')}`,
+        `${HS_BASE}${objectPath(objectTypeId, objectId)}?properties=${properties.join(',')}`,
         { headers },
       );
       if (!res.ok) throw new Error(`Could not read record ${objectId}: ${res.status}`);
       return await res.json() as HsRecord;
     })(),
     (async () => {
-      const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}/search`, {
+      const res = await fetch(`${HS_BASE}${objectSearchPath(objectTypeId)}`, {
         method: 'POST',
         headers,
         body: JSON.stringify({

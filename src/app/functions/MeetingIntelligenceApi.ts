@@ -1,8 +1,7 @@
 import { getPortalConfig } from '../lib/portal-config';
 import { sortAndCapMeetings, MEETING_CAP } from '../lib/meeting-format';
 import type { NormalisedMeeting, RawMeeting } from '../lib/meeting-format';
-
-const HS_BASE = 'https://api.hubapi.com';
+import { HS_BASE, associationListPath, objectBatchReadPath } from '../lib/hs-api';
 
 /**
  * How many associated ids we pull before sorting client-side. The v3 batch/read
@@ -66,8 +65,8 @@ async function listAssociatedIds(
   toObjectType: string,
 ): Promise<string[]> {
   const url =
-    `${HS_BASE}/crm/v4/objects/contacts/${encodeURIComponent(contactId)}` +
-    `/associations/${encodeURIComponent(toObjectType)}?limit=${ASSOCIATION_LIMIT}`;
+    `${HS_BASE}${associationListPath('contacts', encodeURIComponent(contactId), encodeURIComponent(toObjectType))}` +
+    `?limit=${ASSOCIATION_LIMIT}`;
 
   const res = await fetch(url, { headers: authHeaders(token) });
   if (res.status === 404) return [];
@@ -90,7 +89,7 @@ async function batchReadObjects(
 ): Promise<Array<{ id: string; properties: Record<string, string | null> }>> {
   if (ids.length === 0) return [];
 
-  const res = await fetch(`${HS_BASE}/crm/v3/objects/${encodeURIComponent(objectType)}/batch/read`, {
+  const res = await fetch(`${HS_BASE}${objectBatchReadPath(encodeURIComponent(objectType))}`, {
     method: 'POST',
     headers: authHeaders(token),
     body: JSON.stringify({ properties, inputs: ids.map(id => ({ id })) }),

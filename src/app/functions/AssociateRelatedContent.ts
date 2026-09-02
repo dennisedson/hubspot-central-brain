@@ -2,8 +2,8 @@ import { getPortalConfig } from '../lib/portal-config';
 import { parseTopicTags, scoreRelated } from '../lib/related-content';
 import type { RelatedCandidate } from '../lib/related-content';
 import { verifySharedSecret } from '../lib/shared-secret';
+import { HS_BASE, objectPath, objectSearchPath, defaultAssociationPath } from '../lib/hs-api';
 
-const HS_BASE = 'https://api.hubapi.com';
 const CANDIDATE_LIMIT = 100;
 const DEFAULT_MAX_ASSOCIATIONS = 3;
 const HARD_MAX_ASSOCIATIONS = 5;
@@ -80,7 +80,7 @@ async function associateDefault(
   toId: string,
 ): Promise<void> {
   const res = await fetch(
-    `${HS_BASE}/crm/v4/objects/${objectTypeId}/${fromId}/associations/default/${objectTypeId}/${toId}`,
+    `${HS_BASE}${defaultAssociationPath(objectTypeId, fromId, objectTypeId, toId)}`,
     { method: 'PUT', headers: { Authorization: `Bearer ${token}` } },
   );
   if (!res.ok) {
@@ -143,14 +143,14 @@ export async function main(context: AssociateRelatedContentContext) {
   const [sourceOutcome, candidateOutcome] = await Promise.allSettled([
     (async () => {
       const res = await fetch(
-        `${HS_BASE}/crm/v3/objects/${objectTypeId}/${objectId}?properties=${properties.join(',')}`,
+        `${HS_BASE}${objectPath(objectTypeId, objectId)}?properties=${properties.join(',')}`,
         { headers },
       );
       if (!res.ok) throw new Error(`Could not read record ${objectId}: ${res.status}`);
       return await res.json() as HsRecord;
     })(),
     (async () => {
-      const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}/search`, {
+      const res = await fetch(`${HS_BASE}${objectSearchPath(objectTypeId)}`, {
         method: 'POST',
         headers,
         body: JSON.stringify({

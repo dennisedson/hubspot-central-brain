@@ -1,6 +1,5 @@
 import { getPortalConfig } from '../lib/portal-config';
-
-const HS_BASE = 'https://api.hubapi.com';
+import { HS_BASE, objectSearchPath, pipelinesPath } from '../lib/hs-api';
 
 interface PipelineStage {
   id: string;
@@ -42,8 +41,8 @@ export async function main(context: ContentDataContext): Promise<{ statusCode: n
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
   const [pipelineRes, searchRes] = await Promise.all([
-    fetch(`${HS_BASE}/crm/v3/pipelines/${objectTypeId}/${pipelineId}`, { headers }),
-    fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}/search`, {
+    fetch(`${HS_BASE}${pipelinesPath(objectTypeId, pipelineId)}`, { headers }),
+    fetch(`${HS_BASE}${objectSearchPath(objectTypeId)}`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
