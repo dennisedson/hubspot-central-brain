@@ -1,8 +1,0 @@
-{
-  "uid": "central-brain-cms",
-  "type": "cms-assets",
-  "config": {
-    "themePath": "central-brain-dashboard",
-    "secretNames": []
-  }
-}
