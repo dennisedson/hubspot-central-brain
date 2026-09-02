@@ -207,6 +207,95 @@ export async function setAsanaSyncToken(
   await hsUpdate(objectTypeId, recordId, { asana_sync_token: syncToken });
 }
 
+export async function getFellowLastSync(
+  objectTypeId: string,
+  recordId: string,
+): Promise<string | null> {
+  const token = getToken();
+  const res = await fetch(
+    `${HS_BASE}/crm/v3/objects/${objectTypeId}/${recordId}?properties=fellow_last_sync`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error(`HubSpot GET failed ${res.status}: ${await res.text()}`);
+  const data = await res.json() as { properties: { fellow_last_sync: string | null } };
+  return data.properties.fellow_last_sync ?? null;
+}
+
+export async function setFellowLastSync(
+  objectTypeId: string,
+  recordId: string,
+  isoDate: string,
+): Promise<void> {
+  await hsUpdate(objectTypeId, recordId, { fellow_last_sync: isoDate });
+}
+
+export async function findContactByEmail(email: string): Promise<string | null> {
+  const token = getToken();
+  const res = await fetch(
+    `${HS_BASE}/crm/v3/objects/contacts/${encodeURIComponent(email)}?idProperty=email&properties=email`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`HubSpot contact lookup failed ${res.status}: ${await res.text()}`);
+  const data = await res.json() as { id: string };
+  return data.id;
+}
+
+export async function upsertFellowProject(
+  fellowActionItemId: string,
+  properties: Record<string, string>,
+): Promise<UpsertResult> {
+  const token = getToken();
+
+  // Search for existing project by dedup key
+  const searchRes = await fetch(`${HS_BASE}/crm/objects/2026-03/projects/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      filterGroups: [{ filters: [{ propertyName: 'fellow_action_item_id', operator: 'EQ', value: fellowActionItemId }] }],
+      properties: ['fellow_action_item_id'],
+      limit: 1,
+    }),
+  });
+  if (!searchRes.ok) throw new Error(`Project search failed ${searchRes.status}: ${await searchRes.text()}`);
+  const searchData = await searchRes.json() as { results: Array<{ id: string }> };
+
+  if (searchData.results.length > 0) {
+    const projectId = searchData.results[0].id;
+    const patchRes = await fetch(`${HS_BASE}/crm/objects/2026-03/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ properties }),
+    });
+    if (!patchRes.ok) throw new Error(`Project update failed ${patchRes.status}: ${await patchRes.text()}`);
+    return { id: projectId, action: 'updated' };
+  }
+
+  const createRes = await fetch(`${HS_BASE}/crm/objects/2026-03/projects`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ properties }),
+  });
+  if (!createRes.ok) throw new Error(`Project create failed ${createRes.status}: ${await createRes.text()}`);
+  const created = await createRes.json() as { id: string };
+  return { id: created.id, action: 'created' };
+}
+
+export async function associateProjectToContact(projectId: string, contactId: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(
+    `${HS_BASE}/crm/v4/associations/projects/contacts/batch/create`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        inputs: [{ from: { id: projectId }, to: { id: contactId } }],
+      }),
+    },
+  );
+  if (!res.ok) throw new Error(`Project-contact association failed ${res.status}: ${await res.text()}`);
+}
+
 export async function readAppSettings(portalId: number): Promise<AppSettings> {
   const config = getPortalConfig(portalId);
   const objectTypeId = config.appConfig.objectTypeId;

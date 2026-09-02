@@ -12,6 +12,9 @@
         "crm.schemas.custom.read",
         "crm.schemas.custom.write",
         "crm.objects.contacts.read",
+        "crm.objects.projects.read",
+        "crm.objects.projects.write",
+        "crm.schemas.projects.write",
         "timeline",
         "automation",
         "oauth"

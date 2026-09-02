@@ -1,0 +1,37 @@
+{
+  "uid": "fellow_sync_v1",
+  "type": "workflow-action",
+  "config": {
+    "actionUrl": "${FELLOW_SYNC_URL}",
+    "isPublished": true,
+    "supportedClients": [{ "client": "WORKFLOWS" }],
+    "objectTypes": [],
+    "inputFields": [],
+    "outputFields": [
+      {
+        "typeDefinition": { "name": "syncStatus", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "projectsCreated", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "projectsUpdated", "type": "string", "fieldType": "text" }
+      }
+    ],
+    "labels": {
+      "en": {
+        "actionName": "Sync Fellow Action Items to HubSpot Tasks",
+        "appDisplayName": "Central Brain",
+        "actionDescription": "Polls Fellow API for meeting action items and creates or updates HubSpot Tasks associated to matching contacts",
+        "actionCardContent": "Poll Fellow → create HubSpot Tasks",
+        "inputFieldLabels": {},
+        "inputFieldDescriptions": {},
+        "outputFieldLabels": {
+          "syncStatus": "Sync Status",
+          "projectsCreated": "Projects Created",
+          "projectsUpdated": "Projects Updated"
+        }
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@
  * Adds the asana_sync_token property to the App Settings (App Config) custom object.
  * Safe to re-run — skips if the property already exists.
  *
- * This property stores the Asana Events API sync token between hourly poll runs.
+ * This property stores the Asana Events API sync token between daily poll runs.
  *
  * Usage:
  *   npm run provision:asana-sync-token
@@ -63,7 +63,7 @@ async function main() {
     }
   }
 
-  console.log('\nDone. The AsanaPoll workflow action will read and write this property hourly.');
+  console.log('\nDone. The AsanaPoll workflow action will read and write this property daily.');
 }
 
 main().catch(err => { console.error('\nFailed:', err.message); process.exit(1); });
