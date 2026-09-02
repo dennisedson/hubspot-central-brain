@@ -1,12 +1,15 @@
-import { ModuleFields } from '@hubspot/cms-components/fields';
+import { ModuleFields, TextField } from '@hubspot/cms-components/fields';
 
 export function Component({ fieldValues }) {
-  const title = fieldValues?.title || 'Central Brain Dashboard';
-  return <div>{title}</div>;
+  return <div>{fieldValues.footerText}</div>;
 }
+
+export const fields = (
+  <ModuleFields>
+    <TextField label="Footer Text" name="footerText" default="Be Well." />
+  </ModuleFields>
+);
 
 export const meta = {
   label: 'Central Brain Dashboard',
 };
-
-export const fields = <ModuleFields></ModuleFields>;
