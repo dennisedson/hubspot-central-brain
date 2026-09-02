@@ -1,6 +1,7 @@
 {
   "name": "central-brain-dashboard",
   "version": "1.0.0",
+  "type": "module",
   "dependencies": {
     "@hubspot/cms-components": "1.2.70"
   },
