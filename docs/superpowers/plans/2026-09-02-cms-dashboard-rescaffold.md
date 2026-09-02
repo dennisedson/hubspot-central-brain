@@ -36,7 +36,7 @@ There is no meaningful unit-test surface for a pure style extraction. The repo's
 - Consumes: nothing from earlier tasks.
 - Produces: `styles/dashboard.module.css` exporting these class names for the island — `root`, `header`, `headerLeft`, `logo`, `title`, `subtitle`, `refreshBtn`, `body`, `grid`, `card`, `cardTitle`, `bigStat`, `bigStatLabel`, `statRow`, `dot`, `dotGreen`, `dotGrey`, `statLabel`, `statValue`, `settingsRow`, `settingsRowLast`, `badge`, `badgeMine`, `pipeline`, `stageGrid`, `stageCard`, `stageCardActive`, `stageName`, `stageCount`, `loading`, `error`.
 
-- [ ] **Step 1: Create the stylesheet**
+- [x] **Step 1: Create the stylesheet**
 
 Create `src/cms-assets/central-brain-dashboard/styles/dashboard.module.css`:
 
@@ -266,7 +266,7 @@ Create `src/cms-assets/central-brain-dashboard/styles/dashboard.module.css`:
 }
 ```
 
-- [ ] **Step 2: Replace the island's style object with the import**
+- [x] **Step 2: Replace the island's style object with the import**
 
 In `components/islands/DashboardIsland.jsx`, replace lines 1–34 (the `import` line through the closing `};` of the `styles` object) with:
 
@@ -277,7 +277,7 @@ import css from '../../styles/dashboard.module.css';
 
 Leave `getBase()`, `formatTime()`, and `assigneeLabel()` exactly as they are.
 
-- [ ] **Step 3: Convert every style prop to a className**
+- [x] **Step 3: Convert every style prop to a className**
 
 Replace the entire `return (...)` block of `DashboardIsland` with:
 
@@ -371,7 +371,7 @@ Replace the entire `return (...)` block of `DashboardIsland` with:
   );
 ```
 
-- [ ] **Step 4: Verify no `style=` or `styles.` references survive**
+- [x] **Step 4: Verify no `style=` or `styles.` references survive**
 
 Run:
 
@@ -381,14 +381,14 @@ grep -n "style=\|styles\." src/cms-assets/central-brain-dashboard/components/isl
 
 Expected: no output. Any hit is a missed conversion — fix it before continuing.
 
-- [ ] **Step 5: Remove the placeholder directories**
+- [x] **Step 5: Remove the placeholder directories**
 
 ```bash
 git rm src/cms-assets/central-brain-dashboard/styles/.gitkeep
 git rm src/cms-assets/central-brain-dashboard/assets/.gitkeep
 ```
 
-- [ ] **Step 6: Confirm the component's file inventory**
+- [x] **Step 6: Confirm the component's file inventory**
 
 Run:
 
@@ -407,12 +407,12 @@ src/cms-assets/central-brain-dashboard/styles/dashboard.module.css
 src/cms-assets/cms-assets-hsmeta.json
 ```
 
-- [ ] **Step 7: Confirm the rest of the repo still passes**
+- [x] **Step 7: Confirm the rest of the repo still passes**
 
 Run: `npm run validate`
 Expected: PASS. This does not inspect the changed files (see Testing Note) — it confirms nothing else regressed.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/cms-assets/
@@ -441,13 +441,13 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: the commit produced by Task 1.
 - Produces: a confirmed-green deploy, or a revert.
 
-- [ ] **Step 1: Push to trigger the deploy**
+- [x] **Step 1: Push to trigger the deploy**
 
 ```bash
 git push origin develop
 ```
 
-- [ ] **Step 2: Wait for the run to complete**
+- [x] **Step 2: Wait for the run to complete**
 
 ```bash
 gh run list --branch develop --limit 1 --json databaseId,status,conclusion,headSha \
@@ -456,7 +456,7 @@ gh run list --branch develop --limit 1 --json databaseId,status,conclusion,headS
 
 Poll until `status` is `completed`. Record the `databaseId`.
 
-- [ ] **Step 3: Confirm both the build and deploy lines**
+- [x] **Step 3: Confirm both the build and deploy lines**
 
 ```bash
 gh run view <databaseId> --log | grep -iE "Building central-brain-cms|Deploying central-brain-cms" | sort -u
@@ -466,7 +466,7 @@ Expected: both `Building central-brain-cms  ... DONE` and `Deploying central-bra
 
 A `Building ... DONE` line on its own means nothing — every failed deploy in this component's history built cleanly.
 
-- [ ] **Step 4: Confirm the run's overall conclusion**
+- [x] **Step 4: Confirm the run's overall conclusion**
 
 The `conclusion` from Step 2 must be `success`. A component can print `DONE` inside a deploy that fails as a whole; throughout the original investigation fifteen components reported DONE in runs that failed. Both signals are required.
 
