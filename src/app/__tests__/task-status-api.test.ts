@@ -443,10 +443,25 @@ describe('TaskStatusApi.main — status codes', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
+  // Regression: cards call this via hubspot.serverless(), which does NOT populate
+  // context.accountId. The card passes portalId explicitly instead. Before this
+  // fallback existed every card rendered "accountId missing from context".
+  it('resolves the portal from an explicit portalId when accountId is absent', async () => {
+    // Getting as far as the record fetch is the proof: the portalId guard was
+    // cleared. This block does not stub a response, so the call rejects after
+    // that point — which is fine, the guard is what is under test.
+    await main({
+      parameters: { objectId: OBJECT_ID, portalId: '51869810' },
+      query: {},
+      body: {},
+    }).catch(() => undefined);
+    expect(mockFetch).toHaveBeenCalled();
+  });
+
   it('returns 400 when accountId is missing from the context', async () => {
     const res = await main({ parameters: { objectId: OBJECT_ID }, query: {}, body: {} });
     expect(res.statusCode).toBe(400);
-    expect(JSON.parse(res.body).error).toBe('accountId missing from context');
+    expect(JSON.parse(res.body).error).toBe('portalId is required');
     expect(mockFetch).not.toHaveBeenCalled();
   });
 

@@ -352,10 +352,23 @@ describe('MeetingIntelligenceApi.main — status codes', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
+  // Regression: cards call this via hubspot.serverless(), which does NOT populate
+  // context.accountId. The card passes portalId explicitly instead. Before this
+  // fallback existed every card rendered "accountId missing from context".
+  it('resolves the portal from an explicit portalId when accountId is absent', async () => {
+    const res = await main({
+      parameters: { contactId: CONTACT_ID, portalId: '51869810' },
+      query: {},
+      body: {},
+    });
+    expect(res.statusCode).not.toBe(400);
+    expect(mockFetch).toHaveBeenCalled();
+  });
+
   it('returns 400 when accountId is missing from the context', async () => {
     const res = await main({ parameters: { contactId: CONTACT_ID }, query: {}, body: {} });
     expect(res.statusCode).toBe(400);
-    expect(JSON.parse(res.body).error).toBe('accountId missing from context');
+    expect(JSON.parse(res.body).error).toBe('portalId is required');
   });
 
   it('returns 500 when no HubSpot access token is available', async () => {

@@ -64,7 +64,7 @@ function DriftNotice({ drift, system }: { drift: Drift | null; system: string })
   );
 }
 
-const Card = ({ context }: { context: { crm: { objectId: string | number } } }) => {
+const Card = ({ context }: { context: { crm: { objectId: string | number }; portal: { id: number } } }) => {
   const [data, setData] = useState<StatusPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,7 +79,7 @@ const Card = ({ context }: { context: { crm: { objectId: string | number } } }) 
           uid: string,
           opts: { parameters: Record<string, string> },
         ) => Promise<ServerlessResult>)('task_status_api', {
-          parameters: { objectId: String(context.crm.objectId) },
+          parameters: { objectId: String(context.crm.objectId), portalId: String(context.portal.id) },
         });
         if (!result || result.statusCode === undefined) {
           throw new Error(`Unexpected serverless result: ${JSON.stringify(result)}`);

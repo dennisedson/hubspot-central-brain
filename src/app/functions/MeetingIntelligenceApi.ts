@@ -154,11 +154,13 @@ export async function fetchContactContent(
 export async function main(context: MeetingIntelligenceContext) {
   const token = process.env.PRIVATE_APP_ACCESS_TOKEN ?? process.env.HS_ACCESS_TOKEN;
   const contactId = param(context, 'contactId');
-  const portalId = context.accountId;
+  // hubspot.serverless() calls from a card do NOT populate context.accountId —
+  // the caller passes portalId explicitly, same as SettingsApp.tsx has always done.
+  const portalId = context.accountId ?? parseInt(param(context, 'portalId') ?? '0', 10);
 
   if (!token) return json(500, { error: 'No HubSpot access token' });
   if (!contactId) return json(400, { error: 'contactId is required' });
-  if (!portalId) return json(400, { error: 'accountId missing from context' });
+  if (!portalId) return json(400, { error: 'portalId is required' });
 
   let contentObjectTypeId: string;
   try {

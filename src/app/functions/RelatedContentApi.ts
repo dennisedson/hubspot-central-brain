@@ -73,11 +73,13 @@ export async function main(context: RelatedContentContext) {
   const objectId = param(context, 'objectId');
   const requestedType = param(context, 'objectType');
   const requestedTypeId = param(context, 'objectTypeId');
-  const portalId = context.accountId;
+  // hubspot.serverless() calls from a card do NOT populate context.accountId —
+  // the caller passes portalId explicitly, same as SettingsApp.tsx has always done.
+  const portalId = context.accountId ?? parseInt(param(context, 'portalId') ?? '0', 10);
 
   if (!token) return json(500, { error: 'No HubSpot access token' });
   if (!objectId) return json(400, { error: 'objectId is required' });
-  if (!portalId) return json(400, { error: 'accountId missing from context' });
+  if (!portalId) return json(400, { error: 'portalId is required' });
   if (requestedType && requestedType !== 'content' && requestedType !== 'video') {
     return json(400, { error: `objectType must be "content" or "video", got "${requestedType}"` });
   }

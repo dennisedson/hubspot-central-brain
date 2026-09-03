@@ -54,7 +54,7 @@ function MatchReason({ item }: { item: RelatedItem }) {
   );
 }
 
-const Card = ({ context }: { context: { crm: CrmContext } }) => {
+const Card = ({ context }: { context: { crm: CrmContext; portal: { id: number } } }) => {
   const [data, setData] = useState<RelatedPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,7 +68,10 @@ const Card = ({ context }: { context: { crm: CrmContext } }) => {
     let cancelled = false;
     void (async () => {
       try {
-        const parameters: Record<string, string> = { objectId };
+        const parameters: Record<string, string> = {
+          objectId,
+          portalId: String(context.portal.id),
+        };
         if (objectTypeId) parameters.objectTypeId = objectTypeId;
 
         const result = await (hubspot.serverless as unknown as (

@@ -68,11 +68,13 @@ function json(statusCode: number, payload: unknown) {
 export async function main(context: EnterpretInsightsContext) {
   const token = process.env.PRIVATE_APP_ACCESS_TOKEN ?? process.env.HS_ACCESS_TOKEN;
   const objectId = param(context, 'objectId');
-  const portalId = context.accountId;
+  // hubspot.serverless() calls from a card do NOT populate context.accountId —
+  // the caller passes portalId explicitly, same as SettingsApp.tsx has always done.
+  const portalId = context.accountId ?? parseInt(param(context, 'portalId') ?? '0', 10);
 
   if (!token) return json(500, { error: 'No HubSpot access token' });
   if (!objectId) return json(400, { error: 'objectId is required' });
-  if (!portalId) return json(400, { error: 'accountId missing from context' });
+  if (!portalId) return json(400, { error: 'portalId is required' });
 
   const config = getPortalConfig(portalId);
   const url = `${HS_BASE}${objectPath(config.content.objectTypeId, objectId)}?properties=${ENTERPRET_PROPS.join(',')}`;

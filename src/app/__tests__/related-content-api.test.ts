@@ -295,7 +295,7 @@ describe('RelatedContentApi.main — status codes', () => {
   it('returns 400 when accountId is missing from the context', async () => {
     const res = await main({ parameters: { objectId: SOURCE_ID }, query: {}, body: {} });
     expect(res.statusCode).toBe(400);
-    expect(JSON.parse(res.body).error).toBe('accountId missing from context');
+    expect(JSON.parse(res.body).error).toBe('portalId is required');
   });
 
   it('returns 500 when no HubSpot access token is available', async () => {

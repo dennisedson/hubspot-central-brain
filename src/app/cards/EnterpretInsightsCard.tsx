@@ -127,7 +127,7 @@ function QuoteRow({ quote, showDivider }: { quote: Quote; showDivider: boolean }
   );
 }
 
-const Card = ({ context }: { context: { crm: { objectId: string | number } } }) => {
+const Card = ({ context }: { context: { crm: { objectId: string | number }; portal: { id: number } } }) => {
   const [data, setData] = useState<InsightsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,7 +144,7 @@ const Card = ({ context }: { context: { crm: { objectId: string | number } } }) 
           uid: string,
           opts: { parameters: Record<string, string> },
         ) => Promise<ServerlessResult>)('enterpret_insights_api', {
-          parameters: { objectId },
+          parameters: { objectId, portalId: String(context.portal.id) },
         });
 
         if (!result || result.statusCode === undefined) {
