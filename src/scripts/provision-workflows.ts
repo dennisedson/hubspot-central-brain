@@ -48,7 +48,7 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
 
   console.log(`  Found ${actions.length} custom action(s) for appId ${appId}`);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  actions.forEach((a: any) => console.log(`    – [${a.id}] uid=${a.uid ?? '?'}`));
+  actions.forEach((a: any) => console.log(`    – [${a.id}] uid=${a.uid ?? '?'} name=${a.labels?.en?.actionName ?? '?'}`));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const asanaSyncAction = actions.find((a: any) => {
@@ -72,11 +72,13 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
   );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const associateRelatedContentAction = actions.find((a: any) =>
-    (a.uid ?? '') === 'associate_related_content',
+    (a.uid ?? '').includes('associate_related') ||
+    (a.labels?.en?.actionName ?? '').toLowerCase().includes('associate related'),
   );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const generateSocialDraftAction = actions.find((a: any) =>
-    (a.uid ?? '') === 'generate_social_draft_v1',
+    (a.uid ?? '').includes('generate_social') ||
+    (a.labels?.en?.actionName ?? '').toLowerCase().includes('social'),
   );
 
   if (!asanaSyncAction || !linearAction) {
