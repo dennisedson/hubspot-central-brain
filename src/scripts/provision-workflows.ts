@@ -34,6 +34,8 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
   syncToLinearId: string;
   asanaPollId: string;
   fellowSyncId: string;
+  associateRelatedContentId: string;
+  generateSocialDraftId: string;
 }> {
   const res = await fetch(
     `${API}/automation/v4/actions/${appId}?hapikey=${devKey}&limit=100`,
@@ -68,6 +70,14 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
   const fellowAction = actions.find((a: any) =>
     (a.uid ?? '').includes('fellow') || (a.labels?.en?.actionName ?? '').toLowerCase().includes('fellow'),
   );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const associateRelatedContentAction = actions.find((a: any) =>
+    (a.uid ?? '') === 'associate_related_content',
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const generateSocialDraftAction = actions.find((a: any) =>
+    (a.uid ?? '') === 'generate_social_draft_v1',
+  );
 
   if (!asanaSyncAction || !linearAction) {
     throw new Error(
@@ -87,11 +97,25 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
     );
   }
 
+  if (!associateRelatedContentAction) {
+    throw new Error(
+      `Could not find AssociateRelatedContent action. Make sure you have deployed the project before running this script. Found UIDs: ${actions.map((a: any) => a.uid ?? a.id).join(', ')}`,
+    );
+  }
+
+  if (!generateSocialDraftAction) {
+    throw new Error(
+      `Could not find GenerateSocialDraft action. Make sure you have deployed the project before running this script. Found UIDs: ${actions.map((a: any) => a.uid ?? a.id).join(', ')}`,
+    );
+  }
+
   return {
     syncToAsanaId: `1-${asanaSyncAction.id}`,
     syncToLinearId: `1-${linearAction.id}`,
     asanaPollId: `1-${pollAction.id}`,
     fellowSyncId: `1-${fellowAction.id}`,
+    associateRelatedContentId: `1-${associateRelatedContentAction.id}`,
+    generateSocialDraftId: `1-${generateSocialDraftAction.id}`,
   };
 }
 
@@ -285,6 +309,85 @@ function buildPollWorkflow(name: string, appConfigObjectTypeId: string, asanaPol
   };
 }
 
+function buildStageWorkflow(
+  name: string,
+  objectTypeId: string,
+  pipelineId: string,
+  targetStageId: string,
+  actionTypeId: string,
+  fields: Record<string, string>,
+) {
+  return {
+    name,
+    type: 'PLATFORM_FLOW',
+    flowType: 'WORKFLOW',
+    isEnabled: false,
+    objectTypeId,
+    startActionId: '1',
+    enrollmentCriteria: {
+      shouldReEnroll: true,
+      type: 'EVENT_BASED',
+      eventFilterBranches: [{
+        filterBranches: [],
+        filters: [
+          {
+            filterType: 'PROPERTY',
+            property: 'hs_name',
+            operation: {
+              operator: 'IS_EQUAL_TO',
+              includeObjectsWithNoValueSet: false,
+              value: 'hs_pipeline_stage',
+              operationType: 'STRING',
+            },
+          },
+          {
+            filterType: 'PROPERTY',
+            property: 'hs_value',
+            operation: {
+              operator: 'IS_EQUAL_TO',
+              includeObjectsWithNoValueSet: false,
+              value: targetStageId,
+              operationType: 'STRING',
+            },
+          },
+        ],
+        eventTypeId: '4-655002',
+        operator: 'HAS_COMPLETED',
+        filterBranchType: 'UNIFIED_EVENTS',
+        filterBranchOperator: 'AND',
+      }],
+      listMembershipFilterBranches: [],
+      listFilterBranch: {
+        filterBranches: [{
+          filterBranches: [],
+          filters: [{
+            filterType: 'PROPERTY',
+            property: 'hs_pipeline',
+            operation: {
+              operator: 'IS_EQUAL_TO',
+              includeObjectsWithNoValueSet: false,
+              values: [pipelineId],
+              operationType: 'MULTISTRING',
+            },
+          }],
+          filterBranchType: 'AND',
+          filterBranchOperator: 'AND',
+        }],
+        filters: [],
+        filterBranchType: 'OR',
+        filterBranchOperator: 'OR',
+      },
+    },
+    actions: [{
+      type: 'SINGLE_CONNECTION',
+      actionId: '1',
+      actionTypeId,
+      actionTypeVersion: 0,
+      fields,
+    }],
+  };
+}
+
 async function main() {
   const { token, sharedSecret, portalId, portal, appId, developerApiKey } = loadEnv();
 
@@ -293,8 +396,8 @@ async function main() {
 
   // Step 1: Discover action definition IDs for our custom workflow actions
   console.log('\nDiscovering custom action IDs...');
-  const { syncToAsanaId, syncToLinearId, asanaPollId, fellowSyncId } = await discoverActionIds(developerApiKey, appId);
-  console.log(`  appId=${appId}  syncToAsanaId=${syncToAsanaId}  syncToLinearId=${syncToLinearId}  asanaPollId=${asanaPollId}  fellowSyncId=${fellowSyncId}`);
+  const { syncToAsanaId, syncToLinearId, asanaPollId, fellowSyncId, associateRelatedContentId, generateSocialDraftId } = await discoverActionIds(developerApiKey, appId);
+  console.log(`  appId=${appId}  syncToAsanaId=${syncToAsanaId}  syncToLinearId=${syncToLinearId}  asanaPollId=${asanaPollId}  fellowSyncId=${fellowSyncId}  associateRelatedContentId=${associateRelatedContentId}  generateSocialDraftId=${generateSocialDraftId}`);
 
   // Step 2: Fetch linearTeamId from app settings CRM object
   console.log('\nFetching Linear team ID from app settings...');
@@ -369,6 +472,67 @@ async function main() {
     config.appConfig.objectTypeId,
     fellowSyncId,
   ));
+
+  // Step 7: Content → Associate Related Content (fires on enter review stage)
+  const contentReviewStageId = config.content.pipelines.content.stageIds.review;
+  if (!contentReviewStageId) {
+    console.log('\nStep 7: Skipping "Content → Associate Related Content" — review stage ID not provisioned yet.');
+  } else {
+    const contentAssociateName = 'Content → Associate Related Content';
+    await upsertWorkflow(contentAssociateName, buildStageWorkflow(
+      contentAssociateName,
+      config.content.objectTypeId,
+      config.content.pipelines.content.pipelineId,
+      contentReviewStageId,
+      associateRelatedContentId,
+      fieldSpec([
+        { name: 'sharedSecret', value: sharedSecret },
+        { name: 'objectId', value: 'hs_object_id' },
+        { name: 'objectType', value: 'content' },
+        { name: 'maxAssociations', value: '3' },
+      ]),
+    ));
+  }
+
+  // Step 8: Video → Associate Related Content (fires on enter scheduled stage)
+  const videoScheduledStageId = config.video.stageIds.scheduled;
+  if (!videoScheduledStageId) {
+    console.log('\nStep 8: Skipping "Video → Associate Related Content" — scheduled stage ID not provisioned yet.');
+  } else {
+    const videoAssociateName = 'Video → Associate Related Content';
+    await upsertWorkflow(videoAssociateName, buildStageWorkflow(
+      videoAssociateName,
+      config.video.objectTypeId,
+      config.video.pipelineId,
+      videoScheduledStageId,
+      associateRelatedContentId,
+      fieldSpec([
+        { name: 'sharedSecret', value: sharedSecret },
+        { name: 'objectId', value: 'hs_object_id' },
+        { name: 'objectType', value: 'video' },
+        { name: 'maxAssociations', value: '3' },
+      ]),
+    ));
+  }
+
+  // Step 9: Content → Generate LinkedIn Draft (fires on enter published stage)
+  const contentPublishedStageId = config.content.pipelines.content.stageIds.published;
+  if (!contentPublishedStageId) {
+    console.log('\nStep 9: Skipping "Content → Generate LinkedIn Draft" — published stage ID not provisioned yet.');
+  } else {
+    const contentLinkedInName = 'Content → Generate LinkedIn Draft';
+    await upsertWorkflow(contentLinkedInName, buildStageWorkflow(
+      contentLinkedInName,
+      config.content.objectTypeId,
+      config.content.pipelines.content.pipelineId,
+      contentPublishedStageId,
+      generateSocialDraftId,
+      fieldSpec([
+        { name: 'objectId', value: 'hs_object_id' },
+        { name: 'force', value: 'false' },
+      ]),
+    ));
+  }
 
   console.log('\n✓ Done. New workflows are disabled — enable in HubSpot after verifying. Re-runs update existing workflows in place.');
 }
