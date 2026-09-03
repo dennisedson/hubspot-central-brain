@@ -127,3 +127,23 @@ expect(urls()).toEqual([READ_URL]);
 expect(res.statusCode).toBe(200);
 expect(JSON.parse(res.body).outputFields.associationStatus).toBe('failed');
 ```
+
+---
+
+> **📌 Postscript — these pins did their job, and the URLs above have since changed.**
+>
+> The `/crm/v3/` and `/crm/v4/` URLs pinned throughout this episode are no longer what the code emits. Every family except schemas has since moved to dated paths, and **that is the point** rather than a flaw in the episode.
+>
+> When each family was flipped, these assertions failed in a batch — 56 for objects, then 43 for associations, properties and pipelines — each naming its old and new string. The diff of *this test file* is the record of exactly which handlers moved. A suite that asserted only status codes and response bodies, as this repo's did before, would have gone green through the entire migration and told you nothing.
+>
+> So when you re-film, keep the pins and update the expectations. The value was never the specific strings; it was having something that fails loudly and specifically the moment a URL changes underneath you.
+>
+> Current shapes, for reference:
+>
+> ```
+> https://api.hubapi.com/crm/objects/2026-03/2-67505887/4201
+> https://api.hubapi.com/crm/objects/2026-03/2-67505887/{id}/associations/2-67505887
+> https://api.hubapi.com/crm/associations/2026-03/2-67505887/2-67505887/labels
+> https://api.hubapi.com/crm/properties/2026-03/2-67505887
+> https://api.hubapi.com/crm/v3/schemas          <- the one family with no dated equivalent
+> ```

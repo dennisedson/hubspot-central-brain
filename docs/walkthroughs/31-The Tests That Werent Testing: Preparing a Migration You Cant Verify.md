@@ -50,6 +50,23 @@
     4. **A green deploy is not verification** when the pipeline never exercises the code path.
     5. **Leave the switch loaded but unpulled**, with a test that fires when someone pulls it.
 
+> **📌 Postscript — the switch has since been pulled, and this is how.** Film this as the epilogue; it is the payoff for the discipline above.
+>
+> Credentials arrived the next day, which changed the calculus completely. The rule was never "don't migrate" — it was "don't migrate blind." With a live portal, each family was **probed before flipping**: call both surfaces, diff the response shapes.
+>
+> | Family | Dated path | Result |
+> |---|---|---|
+> | objects | `/crm/objects/2026-03/{type}` | 200, identical (list, single, search, batch) |
+> | associations | `/crm/objects/2026-03/{t}/{id}/associations/{t}` | GET 200, PUT 201, DELETE 204 |
+> | assoc labels | `/crm/associations/2026-03/{a}/{b}/labels` | 200, identical |
+> | properties | `/crm/properties/2026-03/{type}` | 200, identical |
+> | pipelines | `/crm/pipelines/2026-03/{type}` | 200, identical |
+> | **schemas** | *none* | **404 at every variant — held on v3** |
+>
+> Two things worth putting on camera. **Associations hang off the `objects` family, not `associations`** — `/crm/v4/objects/{t}/{id}/associations/{t}` became `/crm/objects/2026-03/{t}/{id}/associations/{t}`, while `/crm/associations/` covers label *definitions* only. Inferring that from the v4 shape would have been wrong. And **schemas has no dated equivalent at all**, so one family stays legacy with a comment recording the evidence and the date.
+>
+> The flips produced 56 then 43 failing URL assertions, each naming its old and new string. That is exactly what the prep was for: the tests that weren't testing anything are now the audit trail for the change they were built to guard.
+
 **💻 Screen-Ready Code Snippets:**
 
 **The grep that changes how much you trust your suite:**

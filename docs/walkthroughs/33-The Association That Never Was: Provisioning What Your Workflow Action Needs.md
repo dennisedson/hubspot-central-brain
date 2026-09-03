@@ -1,5 +1,12 @@
 ## 🎬 YouTube Episode Guide: The Association That Never Was
 
+> **⚠️ Correction — do not film this episode as written.** Two central claims were later disproven by testing against a live portal. See [episode 34](34-The%20Name%20Was%20the%20Bug:%20Self-Referential%20HubSpot%20Associations%20That%20Actually%20Work.md), which supersedes this one.
+>
+> 1. **Self-referential associations are NOT blocked for custom objects.** The `ObjectSchemaError.CANNOT_ASSOCIATE_OBJECT_TYPE_WITH_ITSELF` rejection cited below came from a community report and does not reproduce. Creating a self-referential label succeeds immediately — provided you supply a **distinct name**. The real rejection is a name collision: the auto-generated `{type}_to_{type}` conflicts with a reserved unlabeled name that does not itself exist.
+> 2. **`defined-unlabeled` is not the success state, and is not reachable.** There is no default/unlabeled association for a self-referential pairing and one cannot be created. The workflow action had to move off `.../associations/default/...` onto the **labeled** endpoint with a runtime-resolved `associationTypeId`.
+>
+> The provisioning *technique* below — idempotent, read-back-and-classify, unit-tested without a portal — is sound and worth teaching. Its conclusions about what HubSpot permits are not. The deeper lesson is the one episode 34 opens with: this episode was written from a community report and careful reading, and both were wrong. One live API call would have settled it, and eventually did.
+
 **🎯 Core Learning Objective:**
 "By the end of this video, you will know how to write an idempotent provisioning script that creates HubSpot association *definitions* between custom objects — including the self-referential case — and how to unit test the exact request it sends without ever touching a portal."
 
@@ -14,7 +21,7 @@
     associatedObjects: ['CONTACT', 'COMPANY'],
     ```
 
-    Content can associate to contacts and companies. It cannot associate to *content*. The definition the action needs was never created. Final demo: run the new script, watch it print `defined-unlabeled` for each pairing, then watch the action associate three records.
+    Content can associate to contacts and companies. It cannot associate to *content*. The definition the action needs was never created. Final demo: run the new script, watch it print `defined-labeled` and an `associationTypeId` for each pairing, then watch the action associate the records.
 
 *   **The Architecture (1:00 - 3:00):**
     Plain English, no code yet. In HubSpot there are two completely different things both called "associations":
@@ -26,10 +33,12 @@
 
     Then the twist worth the whole episode: there are *two different endpoints* for creating a definition after the fact, and which one you need depends on whether the two object types are the same.
 
-    *   Different types (Content → Video): `POST /crm/v3/schemas/{type}/associations`. Creates the **unlabeled** definition. This is the one you want.
-    *   Same type (Content → Content): that endpoint refuses you, by name — `ObjectSchemaError.CANNOT_ASSOCIATE_OBJECT_TYPE_WITH_ITSELF`. Your only route is `POST /crm/v4/associations/{type}/{type}/labels`, which creates a *labeled* definition.
+    *   Different types (Content → Video): `POST /crm/v3/schemas/{type}/associations`. Creates the **unlabeled** definition.
+    *   Same type (Content → Content): use `POST /crm/associations/2026-03/{type}/{type}/labels`, which creates a *labeled* definition.
 
-    And that distinction matters, because the workflow action calls `.../associations/default/...` — the **unlabeled** path. Creating a label is not obviously the same thing as creating the default. So the script does not assume: it creates, then reads back, then tells you which state you actually landed in.
+    > **Corrected:** this section originally claimed the schema endpoint refuses same-type pairings with `CANNOT_ASSOCIATE_OBJECT_TYPE_WITH_ITSELF`. That does not reproduce. Self-referential definitions are permitted; the labels endpoint is the right route for them, but not because the other one is forbidden.
+
+    And that distinction matters, because the workflow action originally called `.../associations/default/...` — the **unlabeled** path. That path cannot work for a self-referential pairing: no default association exists and none can be created. So the script does not assume: it creates, then reads back, then tells you which state you actually landed in. Episode 34 covers what it actually lands in.
 
 *   **Step-by-Step Implementation (3:00 - 8:00):**
 
@@ -77,9 +86,10 @@ export function isSelfReferential(p: AssociationPairing): boolean {
 
 ```ts
 export function definitionRequest(p: AssociationPairing): HsRequest {
-  // Same object type on both sides: the v3 schema endpoint refuses this with
-  // CANNOT_ASSOCIATE_OBJECT_TYPE_WITH_ITSELF, so the labels endpoint is the
-  // only route. No inverseLabel — HubSpot 500s when it equals label.
+  // Same object type on both sides: use the labels endpoint, which creates a
+  // labeled definition. Supply a DISTINCT name — the auto-generated
+  // {type}_to_{type} collides with a reserved unlabeled name.
+  // No inverseLabel — HubSpot 500s when it equals label.
   if (isSelfReferential(p)) {
     return {
       method: 'POST',
