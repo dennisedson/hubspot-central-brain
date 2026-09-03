@@ -2,7 +2,19 @@ import { getPortalConfig } from '../lib/portal-config';
 import { parseTopicTags, scoreRelated } from '../lib/related-content';
 import type { RelatedCandidate } from '../lib/related-content';
 import { verifySharedSecret } from '../lib/shared-secret';
-import { HS_BASE, objectPath, objectSearchPath, defaultAssociationPath } from '../lib/hs-api';
+import {
+  HS_BASE,
+  objectPath,
+  objectSearchPath,
+  associationLabelsPath,
+  labeledAssociationPath,
+} from '../lib/hs-api';
+import {
+  SELF_ASSOCIATION_LABELS,
+  findAssociationTypeId,
+  labeledAssociationBody,
+  type AssociationLabelsResponse,
+} from '../lib/related-content-associations';
 
 const CANDIDATE_LIMIT = 100;
 const DEFAULT_MAX_ASSOCIATIONS = 3;
@@ -69,19 +81,48 @@ function toCandidate(record: HsRecord, tagProp: string, themeProp: string | null
 }
 
 /**
- * Creates the *default* (unlabeled) association between two records of the given
- * object types. This requires a default association definition to exist between
- * those two object types in the portal — see the note in the hsmeta description.
+ * Reads back the typeId of this object type's self-referential association
+ * label (issue #3).
+ *
+ * A custom object has NO unlabeled association with itself, so there is no
+ * default association to PUT — the app associates through the labeled
+ * definition `provision-associations.ts` creates. Its typeId is assigned by
+ * HubSpot and differs per portal ("Related Content" is 99 on dev and will not
+ * be 99 on staging or prod), so it is looked up here rather than hardcoded.
+ *
+ * `null` means the portal has no such label yet: not an error, just
+ * unprovisioned.
  */
-async function associateDefault(
+async function resolveAssociationTypeId(
+  token: string,
+  objectTypeId: string,
+  objectType: RelatedObjectType,
+): Promise<number | null> {
+  const res = await fetch(`${HS_BASE}${associationLabelsPath(objectTypeId, objectTypeId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error(`Could not read association labels for ${objectTypeId}: ${res.status}`);
+  }
+  const payload = await res.json() as AssociationLabelsResponse;
+  return findAssociationTypeId(payload, SELF_ASSOCIATION_LABELS[objectType]);
+}
+
+/** Creates the labeled association between two records of the same object type. */
+async function associateLabeled(
   token: string,
   objectTypeId: string,
   fromId: string,
   toId: string,
+  associationTypeId: number,
 ): Promise<void> {
   const res = await fetch(
-    `${HS_BASE}${defaultAssociationPath(objectTypeId, fromId, objectTypeId, toId)}`,
-    { method: 'PUT', headers: { Authorization: `Bearer ${token}` } },
+    `${HS_BASE}${labeledAssociationPath(objectTypeId, fromId, objectTypeId, toId)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(labeledAssociationBody(associationTypeId)),
+    },
   );
   if (!res.ok) {
     throw new Error(`Association ${fromId}->${toId} failed ${res.status}: ${await res.text()}`);
@@ -184,8 +225,31 @@ export async function main(context: AssociateRelatedContentContext) {
     return outcome({ associationStatus: 'no_matches', associationsCreated: 0, relatedTitles: '' });
   }
 
+  // One lookup per invocation, reused for every winner.
+  let associationTypeId: number | null;
+  try {
+    associationTypeId = await resolveAssociationTypeId(token, objectTypeId, objectType);
+  } catch (err: unknown) {
+    console.error('AssociateRelatedContent label lookup failed:', reason(err));
+    return outcome({ associationStatus: 'failed', associationsCreated: 0, relatedTitles: '' });
+  }
+
+  if (associationTypeId === null) {
+    const { label, name } = SELF_ASSOCIATION_LABELS[objectType];
+    console.error(
+      `AssociateRelatedContent: portal has no "${label}" (${name}) association label on ` +
+      `${objectTypeId} — run \`npx tsx src/scripts/provision-associations.ts\` for this portal`,
+    );
+    return outcome({
+      associationStatus: 'not_provisioned',
+      associationsCreated: 0,
+      relatedTitles: '',
+    });
+  }
+
+  const typeId = associationTypeId;
   const results = await Promise.allSettled(
-    winners.map(w => associateDefault(token, objectTypeId, objectId, w.candidate.id)),
+    winners.map(w => associateLabeled(token, objectTypeId, objectId, w.candidate.id, typeId)),
   );
 
   const created: string[] = [];

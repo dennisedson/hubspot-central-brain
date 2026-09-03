@@ -6,17 +6,15 @@
  * Safe to re-run — every pairing is read first and only created when missing.
  *
  * Definitions created:
- *  - Content Piece ↔ Content Piece  (self-referential — see the note below)
- *  - Content Piece ↔ Video
- *  - Video ↔ Video                  (self-referential — see the note below)
+ *  - Content Piece ↔ Content Piece  labeled "Related Content" (cb_related_content)
+ *  - Content Piece ↔ Video          unlabeled, via the schema endpoint
+ *  - Video ↔ Video                  labeled "Related Video"   (cb_related_video)
  *
- * SELF-REFERENTIAL PAIRINGS ARE NOT GUARANTEED. HubSpot documents same-object
- * associations for standard objects but says nothing about a custom object
- * paired with itself, and its schema endpoint has a dedicated
- * CANNOT_ASSOCIATE_OBJECT_TYPE_WITH_ITSELF rejection. This script attempts them
- * via the v4 labels endpoint and tells you exactly what the portal answered.
- * Read the summary at the end: only a pairing reported as `defined-unlabeled`
- * will actually work with `AssociateRelatedContent`.
+ * The two self-referential pairings are the ones `AssociateRelatedContent` uses.
+ * They exist only as LABELED definitions — a custom object has no unlabeled
+ * association with itself — so the run prints the typeId of each label it
+ * finds. Those typeIds are per-portal; nothing in the app hardcodes them, the
+ * workflow action reads them back at call time.
  *
  * Usage:
  *   npx tsx src/scripts/provision-associations.ts
@@ -30,7 +28,6 @@ import {
   ensureAssociationDefinitions,
   requiredAssociationPairings,
   unusablePairings,
-  isSelfReferential,
   type EnsureResult,
 } from './association-definitions';
 
@@ -43,11 +40,14 @@ const ICONS: Record<EnsureResult['outcome'], string> = {
 function report(results: EnsureResult[]): void {
   console.log('');
   for (const result of results) {
-    const route = isSelfReferential(result.pairing) ? 'v4 labels' : 'v3 schema associations';
+    const route = result.pairing.route === 'labels' ? 'v4 labels' : 'v3 schema associations';
     console.log(
       `  ${ICONS[result.outcome]} ${result.pairing.description} (${route}) — ${result.detail}`,
     );
     if (result.state) console.log(`      state: ${result.state}`);
+    if (result.typeId !== null) {
+      console.log(`      label "${result.pairing.label}" → associationTypeId ${result.typeId}`);
+    }
   }
 }
 
@@ -65,19 +65,20 @@ async function main() {
 
   const broken = unusablePairings(results);
   if (broken.length === 0) {
-    console.log('\n✓ All pairings have an unlabeled definition — AssociateRelatedContent can associate.');
+    console.log('\n✓ Every pairing is provisioned — AssociateRelatedContent can associate.');
     return;
   }
 
-  console.error('\n✗ These pairings still have no unlabeled association definition:');
+  console.error('\n✗ These pairings are still not usable:');
   for (const result of broken) {
     console.error(`  - ${result.pairing.description}: ${result.detail}`);
   }
   console.error(
-    '\nAssociateRelatedContent uses PUT …/associations/default/… which needs the unlabeled\n' +
-    'type. For any pairing above, either create the association by hand in\n' +
-    'Data Management → Data Model, or switch that path to the labeled association\n' +
-    'endpoint using the typeId from GET /crm/v4/associations/{from}/{to}/labels.',
+    '\nAssociateRelatedContent associates through the LABELED definition, so a\n' +
+    'self-referential pairing needs its own label present — an unlabeled\n' +
+    'definition alone is not enough. Create the missing label by hand in\n' +
+    'Data Management → Data Model, or re-run this script once the reported\n' +
+    'error is addressed.',
   );
   process.exit(1);
 }

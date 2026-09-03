@@ -154,6 +154,28 @@ export function defaultAssociationPath(
   return `${ASSOCIATION_OBJECTS_V4}/${fromObjectType}/${fromId}/associations/default/${toObjectType}/${toId}`;
 }
 
+/**
+ * Create a *labeled* association between two records (PUT).
+ *
+ * The body is an array of association types:
+ *
+ *     [{ "associationCategory": "USER_DEFINED", "associationTypeId": 99 }]
+ *
+ * Unlike `defaultAssociationPath` this needs no unlabeled definition — only a
+ * labeled one, which is the single route that works for a custom object paired
+ * with itself. typeIds are PER-PORTAL: read them from `associationLabelsPath`
+ * at runtime, never hardcode one.
+ */
+// LEGACY v4 — migrate to dated per issue #14
+export function labeledAssociationPath(
+  fromObjectType: string,
+  fromId: string,
+  toObjectType: string,
+  toId: string,
+): string {
+  return `${ASSOCIATION_OBJECTS_V4}/${fromObjectType}/${fromId}/associations/${toObjectType}/${toId}`;
+}
+
 /** Create associations in bulk between two object types (POST). */
 // LEGACY v4 — migrate to dated per issue #14
 export function associationBatchCreatePath(
@@ -166,13 +188,17 @@ export function associationBatchCreatePath(
 /**
  * The association *definitions* (a.k.a. types/labels) between two object types.
  *
- * GET lists every defined type for the pairing, including the unlabeled one
- * (`label: null`) that `defaultAssociationPath` needs. An empty `results` array
- * means no association definition exists between the two types at all.
+ * GET lists every defined type for the pairing with its `typeId`, which is how
+ * `labeledAssociationPath` callers discover the id to send. An empty `results`
+ * array means no association definition exists between the two types at all.
  *
  * POST creates a labeled definition — `{ name, label }` for a symmetric label,
  * plus `inverseLabel` for a paired one. `label` and `inverseLabel` must differ;
  * sending the same string for both makes HubSpot 500.
+ *
+ * `name` must NOT be the `{a}_to_{a}` form HubSpot generates for the unlabeled
+ * association: it is rejected as `conflicts with unlabeled association name`
+ * (case-insensitive). See `related-content-associations.ts`.
  */
 // LEGACY v4 — migrate to dated per issue #14
 export function associationLabelsPath(
@@ -212,8 +238,9 @@ export function schemasPath(): string {
  * `defaultAssociationPath` requires.
  *
  * It rejects `fromObjectTypeId === toObjectTypeId` with
- * `ObjectSchemaError.CANNOT_ASSOCIATE_OBJECT_TYPE_WITH_ITSELF`, so
- * same-object-type pairings have to go through `associationLabelsPath` instead.
+ * `ObjectSchemaError.CANNOT_ASSOCIATE_OBJECT_TYPE_WITH_ITSELF`. That is a limit
+ * of THIS endpoint only — a custom object can be associated with itself, via a
+ * labeled definition created through `associationLabelsPath`.
  */
 // LEGACY v3 — migrate to dated per issue #14
 export function schemaAssociationsPath(objectType: string): string {

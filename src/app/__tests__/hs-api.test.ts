@@ -9,6 +9,7 @@ import {
   objectBatchReadPath,
   associationListPath,
   defaultAssociationPath,
+  labeledAssociationPath,
   associationBatchCreatePath,
   propertiesPath,
   schemasPath,
@@ -86,6 +87,27 @@ describe('association paths', () => {
     );
   });
 
+  it('builds the labeled association path between two records', () => {
+    // Issue #3: the path AssociateRelatedContent PUTs to. Same shape as
+    // defaultAssociationPath minus the `default` segment — the association type
+    // travels in the body instead.
+    expect(labeledAssociationPath('2-67505887', '10', '2-67505887', '20')).toBe(
+      '/crm/v4/objects/2-67505887/10/associations/2-67505887/20',
+    );
+  });
+
+  it('never emits the default segment — that endpoint has no self-referential definition', () => {
+    expect(labeledAssociationPath('2-67505887', '10', '2-67505887', '20')).not.toContain(
+      '/associations/default/',
+    );
+  });
+
+  it('extends associationListPath with the target record id', () => {
+    expect(labeledAssociationPath('2-1', '10', '2-2', '20')).toBe(
+      `${associationListPath('2-1', '10', '2-2')}/20`,
+    );
+  });
+
   it('builds the batch create path between two object types', () => {
     expect(associationBatchCreatePath('projects', 'contacts')).toBe(
       '/crm/v4/associations/projects/contacts/batch/create',
@@ -150,6 +172,7 @@ describe('migration status (issue #14)', () => {
   const legacyBuilders: Array<[string, string]> = [
     ['associationListPath', associationListPath('contacts', '5', 'meetings')],
     ['defaultAssociationPath', defaultAssociationPath('2-1', '5', '2-1', '6')],
+    ['labeledAssociationPath', labeledAssociationPath('2-1', '5', '2-1', '6')],
     ['associationBatchCreatePath', associationBatchCreatePath('projects', 'contacts')],
     ['propertiesPath', propertiesPath('2-1')],
     ['schemasPath', schemasPath()],
