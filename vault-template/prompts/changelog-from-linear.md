@@ -27,7 +27,7 @@ Content-Type: application/json
    "hs_pipeline":"929918080",
    "hs_pipeline_stage":"1426412984",
    "linear_issue_url":"…",
-   "source_url":"obsidian://open?vault=<VAULT_NAME>&file=changelogs%2F<slug>.md"
+   "source_url":"obsidian://open?vault=Dev-%20Central-Brain&file=changelogs%2F<slug>.md"
 }}
 ```
 

@@ -13,9 +13,17 @@ and every assumption about what Cowork does with a connected folder, is not.
 Treat them as starting points to edit, not instructions to trust. When one turns out to be wrong,
 fix it here so the next run starts better.
 
-## Before first use
+## Vault name
 
-Replace `<VAULT_NAME>` throughout with your actual vault name, so the `obsidian://` links resolve.
+The vault is **`Dev- Central-Brain`**. Note the space — in an `obsidian://` URI it must be
+percent-encoded:
+
+```
+obsidian://open?vault=Dev-%20Central-Brain&file=changelogs%2Fexample.md
+```
+
+`Dev-%20Central-Brain` is already filled in wherever a prompt builds one of these links. If you
+rename the vault, update it here and in `changelog-from-linear.md`.
 
 ## Prompts
 

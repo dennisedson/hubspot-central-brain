@@ -112,6 +112,28 @@ describe('Cowork prompts', () => {
     }
   });
 
+  // A half-done substitution leaves a link that opens nothing, and Obsidian
+  // gives no useful error for it.
+  it('no unsubstituted vault-name placeholder survives', () => {
+    for (const file of PROMPTS) {
+      expect(read(path.join('prompts', file)), `${file} still has a placeholder`)
+        .not.toContain('<VAULT_NAME>');
+    }
+    expect(read('README.md')).not.toContain('<vault-name>');
+  });
+
+  // The vault name contains a space, so every obsidian:// URI must carry it
+  // percent-encoded. A raw space silently produces a link that will not open.
+  it('obsidian URIs percent-encode the vault name', () => {
+    for (const file of [...PROMPTS.map(f => path.join('prompts', f)), 'README.md']) {
+      const body = read(file);
+      for (const m of body.matchAll(/obsidian:\/\/open\?vault=([^&\s]*)/g)) {
+        expect(m[1], `${file} has an unencoded vault name`).not.toContain(' ');
+        expect(m[1]).toBe('Dev-%20Central-Brain');
+      }
+    }
+  });
+
   it('no prompt uses the changelog pipeline against staging or prod', () => {
     for (const file of PROMPTS) {
       const body = read(path.join('prompts', file));
