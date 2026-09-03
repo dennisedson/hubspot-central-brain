@@ -52,7 +52,7 @@ export async function getServerSideProps({ hublData }) {
   }
 }
 
-export function Component({ pipeline, settings, fetchError }) {
+export function Component({ pipeline, settings, fetchError, fieldValues }) {
   const activeStages =
     pipeline?.stages?.filter(s => !s.metadata?.isClosed && s.label !== 'Archived') ?? [];
   const recordsByStage = {};
@@ -73,7 +73,7 @@ export function Component({ pipeline, settings, fetchError }) {
         <div className={styles.headerLeft}>
           <div className={styles.logo}>🧠</div>
           <div>
-            <h1 className={styles.title}>Central Brain Dashboard</h1>
+            <h1 className={styles.title}>{fieldValues?.title ?? 'Central Brain Dashboard'}</h1>
             <p className={styles.subtitle}>
               {fetchError ? 'Error loading data' : `Updated ${formatTime(new Date().toISOString())}`}
             </p>

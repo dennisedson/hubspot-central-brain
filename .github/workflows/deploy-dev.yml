@@ -25,6 +25,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Typecheck cards, pages, settings
+        run: npm run typecheck:cards && npm run typecheck:pages && npm run typecheck:settings
+
       - name: Build functions
         run: npm run build
 

@@ -7,7 +7,7 @@ import {
   objectPath,
   objectSearchPath,
   pipelinesPath,
-  associationBatchCreatePath,
+  defaultAssociationPath,
   datedObjectPath,
   datedObjectSearchPath,
 } from './hs-api';
@@ -321,13 +321,10 @@ export async function upsertFellowProject(
 export async function associateProjectToContact(projectId: string, contactId: string): Promise<void> {
   const token = getToken();
   const res = await fetch(
-    `${HS_BASE}${associationBatchCreatePath('projects', 'contacts')}`,
+    `${HS_BASE}${defaultAssociationPath('projects', projectId, 'contacts', contactId)}`,
     {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        inputs: [{ from: { id: projectId }, to: { id: contactId } }],
-      }),
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` },
     },
   );
   if (!res.ok) throw new Error(`Project-contact association failed ${res.status}: ${await res.text()}`);
