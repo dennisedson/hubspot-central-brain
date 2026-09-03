@@ -1,16 +1,18 @@
 import { getPortalConfig } from '../lib/portal-config';
 import {
-  isEnterpretConfigured,
-  getEnterpretQuotes,
   summariseSentiment,
   normaliseTheme,
   parseQuoteCount,
+  shapeQuotes,
 } from '../lib/enterpret-client';
 import type { EnterpretQuote, SentimentSummary } from '../lib/enterpret-client';
 import { HS_BASE, objectPath } from '../lib/hs-api';
 
 /** How many verbatims to surface in the card. */
 const QUOTE_LIMIT = 5;
+
+/** The three Enterpret properties a content_piece carries. */
+const ENTERPRET_PROPS = ['enterpret_theme', 'enterpret_quote_count', 'enterpret_quotes'];
 
 interface EnterpretInsightsContext {
   accountId?: number;
@@ -20,14 +22,19 @@ interface EnterpretInsightsContext {
 }
 
 interface InsightsPayload {
-  /** False whenever no Enterpret API key is available. Never an error. */
-  configured: boolean;
   /** The friction theme stored on the record, or null. */
   theme: string | null;
   /** `enterpret_quote_count` from the record as a number, or null. */
   quoteCount: number | null;
+  /** Parsed from `enterpret_quotes`. Empty when nothing has been synced. */
   quotes: EnterpretQuote[];
+  /** Summary of `quotes`, or null when there are none to summarise. */
   sentiment: SentimentSummary | null;
+  /**
+   * Retained so the card's payload contract does not change shape. There is no
+   * external call left to fail here, so this is always null — a read failure is
+   * a non-200 instead (see the status codes below).
+   */
   errors: { enterpret: string | null };
 }
 
@@ -39,19 +46,24 @@ function json(statusCode: number, payload: unknown) {
   return { statusCode, body: JSON.stringify(payload) };
 }
 
-function reason(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
 /**
- * Returns the Enterpret friction theme stored on a content_piece plus, when an
- * Enterpret API key is available, the developer quotes behind that theme.
+ * Returns the Enterpret data stored on a content_piece: the friction theme, the
+ * quote count, and the developer verbatims behind that theme.
  *
- * The unconfigured path is a first-class success: it still returns 200 with the
- * stored `theme` and `quoteCount` so the card renders something useful today.
+ * THIS HANDLER MAKES EXACTLY ONE HTTP CALL — the CRM record read. It never
+ * talks to Enterpret.
  *
- * `ENTERPRET_API_KEY` is intentionally absent from `secretKeys` in
- * EnterpretInsightsApi-hsmeta.json — see the note at the declaration site below.
+ * Enterpret has no obtainable API key for us, and the assistant that does have
+ * access reaches it over MCP, which a deployed HubSpot function cannot use: a
+ * different runtime behind a different trust boundary, with no MCP client and
+ * no route to that server. So the quotes are batch-synced into the
+ * `enterpret_quotes` property out-of-band and this function simply reads them.
+ * `secretKeys` is therefore just `["HS_ACCESS_TOKEN"]` — there is no Enterpret
+ * credential anywhere in this app, and nothing to rotate.
+ *
+ * `enterpret_quotes` is untrusted input: absent, empty or malformed JSON all
+ * shape to zero quotes (see `shapeQuotes`), which the card renders as its
+ * "not synced yet" state. A bad sync never becomes an error here.
  */
 export async function main(context: EnterpretInsightsContext) {
   const token = process.env.PRIVATE_APP_ACCESS_TOKEN ?? process.env.HS_ACCESS_TOKEN;
@@ -63,8 +75,7 @@ export async function main(context: EnterpretInsightsContext) {
   if (!portalId) return json(400, { error: 'accountId missing from context' });
 
   const config = getPortalConfig(portalId);
-  const props = ['enterpret_theme', 'enterpret_quote_count'];
-  const url = `${HS_BASE}${objectPath(config.content.objectTypeId, objectId)}?properties=${props.join(',')}`;
+  const url = `${HS_BASE}${objectPath(config.content.objectTypeId, objectId)}?properties=${ENTERPRET_PROPS.join(',')}`;
 
   const recordRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!recordRes.ok) {
@@ -72,49 +83,15 @@ export async function main(context: EnterpretInsightsContext) {
   }
   const record = (await recordRes.json()) as { properties: Record<string, string | null> };
 
-  const theme = normaliseTheme(record.properties.enterpret_theme);
-  const quoteCount = parseQuoteCount(record.properties.enterpret_quote_count);
+  const quotes = shapeQuotes(record.properties.enterpret_quotes, QUOTE_LIMIT);
 
   const payload: InsightsPayload = {
-    configured: false,
-    theme,
-    quoteCount,
-    quotes: [],
-    sentiment: null,
+    theme: normaliseTheme(record.properties.enterpret_theme),
+    quoteCount: parseQuoteCount(record.properties.enterpret_quote_count),
+    quotes,
+    sentiment: quotes.length > 0 ? summariseSentiment(quotes) : null,
     errors: { enterpret: null },
   };
-
-  // ---------------------------------------------------------------------
-  // ENTERPRET_API_KEY is NOT declared in EnterpretInsightsApi-hsmeta.json.
-  // The secret does not exist in the portal yet, and declaring a missing
-  // secret fails the project deploy — so this reads as `undefined` today and
-  // `isEnterpretConfigured()` is simply false.
-  //
-  // WHEN THE SECRET IS PROVISIONED, add it to `secretKeys` in
-  // src/app/functions/EnterpretInsightsApi-hsmeta.json:
-  //   "secretKeys": ["HS_ACCESS_TOKEN", "ENTERPRET_API_KEY"]
-  // No other change is required.
-  // ---------------------------------------------------------------------
-  const apiKey = process.env.ENTERPRET_API_KEY;
-
-  if (!isEnterpretConfigured() || !theme) {
-    return json(200, payload);
-  }
-
-  // Per-source isolation, as in TaskStatusApi: an Enterpret outage must never
-  // cost the caller the fields we already have on the record.
-  const [outcome] = await Promise.allSettled([
-    getEnterpretQuotes(apiKey ?? '', theme, QUOTE_LIMIT),
-  ]);
-
-  payload.configured = true;
-
-  if (outcome.status === 'rejected') {
-    payload.errors.enterpret = reason(outcome.reason);
-  } else {
-    payload.quotes = outcome.value;
-    payload.sentiment = summariseSentiment(outcome.value);
-  }
 
   return json(200, payload);
 }

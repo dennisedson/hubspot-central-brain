@@ -1,27 +1,30 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { main } from '../functions/EnterpretInsightsApi';
 
 /**
  * Handler tests for EnterpretInsightsApi.
  *
- * URL ASSERTIONS ARE THE POINT (issue #14). The HubSpot read is pinned to an
- * exact literal including its `?properties=` query string; the Enterpret call is
- * pinned too so the (assumed) third-party path is equally visible in a diff.
- * Do not soften these into `toContain` or a regex.
+ * ONE FETCH IS THE POINT. This handler is a pure record read: Enterpret data is
+ * batch-synced into `content_piece.enterpret_quotes` out-of-band, because there
+ * is no obtainable Enterpret API key and the assistant that does have access
+ * reaches it over MCP, which a deployed HubSpot function cannot use. Every test
+ * below asserts the full list of URLs called, so any reintroduced third-party
+ * call fails here first.
  *
- * ENV: every test stubs ENTERPRET_API_KEY explicitly — unset is the shipped
- * state, and `vi.unstubAllEnvs()` in afterEach restores the real environment so
- * a developer who happens to have the key exported cannot change the outcome.
+ * URL ASSERTIONS ARE ALSO THE POINT (issue #14). The HubSpot read is pinned to
+ * an exact literal including its `?properties=` query string. Do not soften it
+ * into `toContain` or a regex.
  */
 
 const TEST_PORTAL_ID = 51869810;
 const OBJECT_ID = '4201';
 
-// --- the exact URLs this handler must call -------------------------------
+// --- the only URL this handler may call ----------------------------------
 const READ_URL =
   'https://api.hubapi.com/crm/objects/2026-03/2-67505887/4201' +
-  '?properties=enterpret_theme,enterpret_quote_count';
-const ENTERPRET_URL = 'https://api.enterpret.com/external/v2/feedback-records/query';
+  '?properties=enterpret_theme,enterpret_quote_count,enterpret_quotes';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
@@ -29,8 +32,6 @@ vi.stubGlobal('fetch', mockFetch);
 beforeEach(() => {
   mockFetch.mockReset();
   vi.stubEnv('PRIVATE_APP_ACCESS_TOKEN', 'hs-test-token');
-  // The shipped state: the secret does not exist in the portal yet.
-  vi.stubEnv('ENTERPRET_API_KEY', undefined);
 });
 
 afterEach(() => {
@@ -54,16 +55,6 @@ function mockRecord(properties: Record<string, string | null>) {
   });
 }
 
-function mockEnterpret(payload: unknown) {
-  mockFetch.mockResolvedValueOnce({
-    ok: true,
-    status: 200,
-    statusText: 'OK',
-    json: async () => payload,
-    text: async () => '',
-  });
-}
-
 function mockFailure(status: number, statusText = 'Server Error', body = 'boom') {
   mockFetch.mockResolvedValueOnce({
     ok: false,
@@ -74,37 +65,40 @@ function mockFailure(status: number, statusText = 'Server Error', body = 'boom')
   });
 }
 
-const THEMED_RECORD = { enterpret_theme: 'Webhook reliability', enterpret_quote_count: '12' };
+/** What the MCP-driven sync writes into the textarea property. */
+const STORED_QUOTES = JSON.stringify([
+  {
+    id: 'fr-1',
+    text: 'Webhook retries silently drop the second delivery.',
+    source: { name: 'GitHub Discussions' },
+    sentiment: 'negative',
+    createdAt: '2026-08-20T10:00:00.000Z',
+    url: 'https://github.com/HubSpot/discussions/1',
+  },
+  {
+    id: 'fr-2',
+    text: 'Took me two days to work out why my webhook never fired.',
+    source: 'Developer Slack',
+    sentimentScore: -0.8,
+    occurredAt: '2026-08-22T10:00:00.000Z',
+  },
+  {
+    id: 'fr-3',
+    text: 'Docs on retries are clear enough now.',
+    source: 'Support ticket',
+    sentiment: 'neutral',
+  },
+]);
 
-const ENTERPRET_PAYLOAD = {
-  records: [
-    {
-      id: 'fr-1',
-      text: 'Webhook retries silently drop the second delivery.',
-      source: { name: 'GitHub Discussions' },
-      sentiment: 'negative',
-      createdAt: '2026-08-20T10:00:00.000Z',
-      url: 'https://github.com/HubSpot/discussions/1',
-    },
-    {
-      id: 'fr-2',
-      text: 'Took me two days to work out why my webhook never fired.',
-      source: 'Developer Slack',
-      sentimentScore: -0.8,
-      occurredAt: '2026-08-22T10:00:00.000Z',
-    },
-    {
-      id: 'fr-3',
-      text: 'Docs on retries are clear enough now.',
-      source: 'Support ticket',
-      sentiment: 'neutral',
-    },
-  ],
+const SYNCED_RECORD = {
+  enterpret_theme: 'Webhook reliability',
+  enterpret_quote_count: '12',
+  enterpret_quotes: STORED_QUOTES,
 };
 
 describe('EnterpretInsightsApi.main — request URLs', () => {
   it('reads the content_piece record from the exact CRM object URL', async () => {
-    mockRecord(THEMED_RECORD);
+    mockRecord(SYNCED_RECORD);
 
     await main(makeContext());
 
@@ -112,181 +106,153 @@ describe('EnterpretInsightsApi.main — request URLs', () => {
     expect(mockFetch.mock.calls[0][1].headers.Authorization).toBe('Bearer hs-test-token');
   });
 
-  it('calls Enterpret at the exact query URL once configured', async () => {
-    vi.stubEnv('ENTERPRET_API_KEY', 'ent-test-key');
-    mockRecord(THEMED_RECORD);
-    mockEnterpret(ENTERPRET_PAYLOAD);
+  it('makes exactly one fetch — the record read, and nothing external', async () => {
+    mockRecord(SYNCED_RECORD);
 
     await main(makeContext());
 
-    expect(urls()).toEqual([READ_URL, ENTERPRET_URL]);
-  });
-
-  it('POSTs the theme and the card quote limit to Enterpret', async () => {
-    vi.stubEnv('ENTERPRET_API_KEY', 'ent-test-key');
-    mockRecord(THEMED_RECORD);
-    mockEnterpret(ENTERPRET_PAYLOAD);
-
-    await main(makeContext());
-
-    const [, init] = mockFetch.mock.calls[1];
-    expect(init.method).toBe('POST');
-    expect(init.headers.Authorization).toBe('Bearer ent-test-key');
-    expect(JSON.parse(init.body)).toEqual({
-      filter: { reason: 'Webhook reliability' },
-      limit: 5,
-    });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(urls()).toEqual([READ_URL]);
   });
 });
 
-describe('EnterpretInsightsApi.main — unconfigured is a first-class success', () => {
-  it('returns 200 with configured:false and the record’s stored theme and count', async () => {
-    mockRecord(THEMED_RECORD);
+describe('EnterpretInsightsApi.main — quotes stored on the record', () => {
+  it('returns the payload shape EnterpretInsightsCard renders', async () => {
+    mockRecord(SYNCED_RECORD);
 
     const res = await main(makeContext());
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
 
     expect(body).toEqual({
-      configured: false,
+      theme: 'Webhook reliability',
+      quoteCount: 12,
+      quotes: [
+        {
+          id: 'fr-1',
+          text: 'Webhook retries silently drop the second delivery.',
+          source: 'GitHub Discussions',
+          sentiment: 'negative',
+          createdAt: '2026-08-20T10:00:00.000Z',
+          url: 'https://github.com/HubSpot/discussions/1',
+        },
+        {
+          id: 'fr-2',
+          text: 'Took me two days to work out why my webhook never fired.',
+          source: 'Developer Slack',
+          sentiment: 'negative',
+          createdAt: '2026-08-22T10:00:00.000Z',
+          url: null,
+        },
+        {
+          id: 'fr-3',
+          text: 'Docs on retries are clear enough now.',
+          source: 'Support ticket',
+          sentiment: 'neutral',
+          createdAt: null,
+          url: null,
+        },
+      ],
+      sentiment: { total: 3, positive: 0, negative: 2, neutral: 1, dominant: 'negative' },
+      errors: { enterpret: null },
+    });
+    expect(urls()).toEqual([READ_URL]);
+  });
+
+  it('caps the card at five quotes however many are stored', async () => {
+    const many = Array.from({ length: 9 }, (_, i) => ({ text: `quote ${i}`, source: 'Slack' }));
+    mockRecord({ ...SYNCED_RECORD, enterpret_quotes: JSON.stringify(many) });
+
+    const body = JSON.parse((await main(makeContext())).body);
+    expect(body.quotes).toHaveLength(5);
+    expect(body.sentiment.total).toBe(5);
+  });
+
+  it('preserves a legitimate zero quote count and rejects junk', async () => {
+    mockRecord({ enterpret_theme: 'Rate limits', enterpret_quote_count: '0', enterpret_quotes: '' });
+    expect(JSON.parse((await main(makeContext())).body).quoteCount).toBe(0);
+
+    mockRecord({ enterpret_theme: 'Rate limits', enterpret_quote_count: 'lots', enterpret_quotes: '' });
+    expect(JSON.parse((await main(makeContext())).body).quoteCount).toBeNull();
+  });
+});
+
+describe('EnterpretInsightsApi.main — nothing synced yet is a first-class success', () => {
+  it('returns 200 with the stored theme and count when enterpret_quotes is empty', async () => {
+    mockRecord({ ...SYNCED_RECORD, enterpret_quotes: '' });
+
+    const res = await main(makeContext());
+    expect(res.statusCode).toBe(200);
+
+    expect(JSON.parse(res.body)).toEqual({
       theme: 'Webhook reliability',
       quoteCount: 12,
       quotes: [],
       sentiment: null,
       errors: { enterpret: null },
     });
-    // No Enterpret call is attempted at all.
     expect(urls()).toEqual([READ_URL]);
   });
 
-  it('treats a blank key as unconfigured', async () => {
-    vi.stubEnv('ENTERPRET_API_KEY', '   ');
-    mockRecord(THEMED_RECORD);
+  it('treats an absent enterpret_quotes property the same as an empty one', async () => {
+    mockRecord({ enterpret_theme: 'Webhook reliability', enterpret_quote_count: '12' });
 
     const body = JSON.parse((await main(makeContext())).body);
-    expect(body.configured).toBe(false);
-    expect(body.theme).toBe('Webhook reliability');
-    expect(urls()).toEqual([READ_URL]);
-  });
-
-  it('returns configured:false when the record has no theme, even with a key present', async () => {
-    vi.stubEnv('ENTERPRET_API_KEY', 'ent-test-key');
-    mockRecord({ enterpret_theme: '   ', enterpret_quote_count: null });
-
-    const res = await main(makeContext());
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body);
-
-    expect(body.configured).toBe(false);
-    expect(body.theme).toBeNull();
-    expect(body.quoteCount).toBeNull();
-    expect(urls()).toEqual([READ_URL]);
-  });
-
-  it('preserves a legitimate zero quote count and rejects junk', async () => {
-    mockRecord({ enterpret_theme: 'Rate limits', enterpret_quote_count: '0' });
-    expect(JSON.parse((await main(makeContext())).body).quoteCount).toBe(0);
-
-    mockRecord({ enterpret_theme: 'Rate limits', enterpret_quote_count: 'lots' });
-    expect(JSON.parse((await main(makeContext())).body).quoteCount).toBeNull();
-  });
-});
-
-describe('EnterpretInsightsApi.main — configured happy path', () => {
-  it('returns the payload shape EnterpretInsightsCard renders', async () => {
-    vi.stubEnv('ENTERPRET_API_KEY', 'ent-test-key');
-    mockRecord(THEMED_RECORD);
-    mockEnterpret(ENTERPRET_PAYLOAD);
-
-    const res = await main(makeContext());
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body);
-
-    expect(body.configured).toBe(true);
-    expect(body.theme).toBe('Webhook reliability');
-    expect(body.quoteCount).toBe(12);
-    expect(body.errors).toEqual({ enterpret: null });
-    expect(body.quotes).toEqual([
-      {
-        id: 'fr-1',
-        text: 'Webhook retries silently drop the second delivery.',
-        source: 'GitHub Discussions',
-        sentiment: 'negative',
-        createdAt: '2026-08-20T10:00:00.000Z',
-        url: 'https://github.com/HubSpot/discussions/1',
-      },
-      {
-        id: 'fr-2',
-        text: 'Took me two days to work out why my webhook never fired.',
-        source: 'Developer Slack',
-        sentiment: 'negative',
-        createdAt: '2026-08-22T10:00:00.000Z',
-        url: null,
-      },
-      {
-        id: 'fr-3',
-        text: 'Docs on retries are clear enough now.',
-        source: 'Support ticket',
-        sentiment: 'neutral',
-        createdAt: null,
-        url: null,
-      },
-    ]);
-    expect(body.sentiment).toEqual({
-      total: 3,
-      positive: 0,
-      negative: 2,
-      neutral: 1,
-      dominant: 'negative',
-    });
-  });
-
-  it('degrades to an empty quote list when Enterpret returns an unfamiliar shape', async () => {
-    vi.stubEnv('ENTERPRET_API_KEY', 'ent-test-key');
-    mockRecord(THEMED_RECORD);
-    mockEnterpret({ somethingElse: true });
-
-    const body = JSON.parse((await main(makeContext())).body);
-    expect(body.configured).toBe(true);
-    expect(body.quotes).toEqual([]);
-    expect(body.sentiment).toEqual({
-      total: 0,
-      positive: 0,
-      negative: 0,
-      neutral: 0,
-      dominant: null,
-    });
-    expect(body.errors.enterpret).toBeNull();
-  });
-});
-
-describe('EnterpretInsightsApi.main — per-source failure isolation', () => {
-  it('an Enterpret outage still returns the stored theme and count', async () => {
-    vi.stubEnv('ENTERPRET_API_KEY', 'ent-test-key');
-    mockRecord(THEMED_RECORD);
-    mockFailure(503, 'Service Unavailable');
-
-    const res = await main(makeContext());
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body);
-
-    expect(body.configured).toBe(true);
-    expect(body.theme).toBe('Webhook reliability');
-    expect(body.quoteCount).toBe(12);
     expect(body.quotes).toEqual([]);
     expect(body.sentiment).toBeNull();
-    expect(body.errors.enterpret).toBe('Enterpret API HTTP error: 503 Service Unavailable');
+    expect(body.theme).toBe('Webhook reliability');
   });
 
-  it('a transport-level rejection is isolated the same way', async () => {
-    vi.stubEnv('ENTERPRET_API_KEY', 'ent-test-key');
-    mockRecord(THEMED_RECORD);
-    mockFetch.mockRejectedValueOnce(new Error('socket hang up'));
+  it('degrades malformed stored JSON to no quotes, never to an error', async () => {
+    for (const stored of [
+      '[{"text": "truncated mid-sy',
+      'not json at all',
+      '{"text":"an object, not an array"}',
+      '   ',
+      'null',
+    ]) {
+      mockRecord({ ...SYNCED_RECORD, enterpret_quotes: stored });
+
+      const res = await main(makeContext());
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+
+      expect(body.quotes).toEqual([]);
+      expect(body.sentiment).toBeNull();
+      expect(body.errors).toEqual({ enterpret: null });
+      // The theme and count still come back — a bad sync costs only the quotes.
+      expect(body.theme).toBe('Webhook reliability');
+      expect(body.quoteCount).toBe(12);
+    }
+  });
+
+  it('returns a clean empty payload when the record has no theme', async () => {
+    mockRecord({ enterpret_theme: '   ', enterpret_quote_count: null, enterpret_quotes: '' });
+
+    const res = await main(makeContext());
+    expect(res.statusCode).toBe(200);
+
+    expect(JSON.parse(res.body)).toEqual({
+      theme: null,
+      quoteCount: null,
+      quotes: [],
+      sentiment: null,
+      errors: { enterpret: null },
+    });
+    expect(urls()).toEqual([READ_URL]);
+  });
+
+  it('still returns quotes when they are synced without a theme', async () => {
+    mockRecord({
+      enterpret_theme: null,
+      enterpret_quote_count: null,
+      enterpret_quotes: '[{"text":"orphaned quote","source":"Slack"}]',
+    });
 
     const body = JSON.parse((await main(makeContext())).body);
-    expect(body.errors.enterpret).toBe('socket hang up');
-    expect(body.theme).toBe('Webhook reliability');
-    expect(body.quoteCount).toBe(12);
+    expect(body.theme).toBeNull();
+    expect(body.quotes).toHaveLength(1);
+    expect(body.sentiment.total).toBe(1);
   });
 });
 
@@ -318,5 +284,60 @@ describe('EnterpretInsightsApi.main — status codes', () => {
     expect(res.statusCode).toBe(502);
     expect(JSON.parse(res.body).error).toBe('Could not read record 4201: 403');
     expect(urls()).toEqual([READ_URL]);
+  });
+});
+
+/**
+ * REGRESSION GUARD — the Enterpret credential is gone for good.
+ *
+ * There is no key to obtain, so no code path may read one and no hsmeta may
+ * declare one. The env var name is assembled at runtime so this file does not
+ * match its own scan.
+ */
+describe('no Enterpret credential exists anywhere in the app', () => {
+  const KEY_NAME = ['ENTERPRET', 'API', 'KEY'].join('_');
+  const SRC = resolve(__dirname, '../..');
+
+  function walk(dir: string, out: string[] = []): string[] {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full, out);
+      else out.push(full);
+    }
+    return out;
+  }
+
+  it(`no file under src/ mentions ${['ENTERPRET', 'API', 'KEY'].join('_')}`, () => {
+    const offenders = walk(SRC).filter(file => readFileSync(file, 'utf8').includes(KEY_NAME));
+    expect(offenders).toEqual([]);
+  });
+
+  it('no code path reads it from the environment', () => {
+    const offenders = walk(SRC).filter(file =>
+      /process\.env\.ENTERPRET/.test(readFileSync(file, 'utf8')),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('the handler behaves identically whether or not such a key is in the env', async () => {
+    mockRecord(SYNCED_RECORD);
+    const without = JSON.parse((await main(makeContext())).body);
+
+    vi.stubEnv(KEY_NAME, 'ent-live-should-be-ignored');
+    mockRecord(SYNCED_RECORD);
+    const with_ = JSON.parse((await main(makeContext())).body);
+
+    expect(with_).toEqual(without);
+    // Still one call per invocation: a key in the env buys no extra request.
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(urls()).toEqual([READ_URL, READ_URL]);
+  });
+
+  it('the app function declares only the HubSpot token as a secret', () => {
+    const meta = JSON.parse(
+      readFileSync(resolve(__dirname, '../functions/EnterpretInsightsApi-hsmeta.json'), 'utf8'),
+    );
+    expect(meta.config.secretKeys).toEqual(['HS_ACCESS_TOKEN']);
   });
 });

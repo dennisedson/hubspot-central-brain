@@ -1,59 +1,22 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
-  isEnterpretConfigured,
   normaliseTheme,
   parseQuoteCount,
   normaliseSentiment,
   shapeQuotes,
   summariseSentiment,
-  getEnterpretQuotes,
 } from '../lib/enterpret-client';
 
-const ORIGINAL_KEY = process.env.ENTERPRET_API_KEY;
-
-function setKey(value: string | undefined) {
-  if (value === undefined) delete process.env.ENTERPRET_API_KEY;
-  else process.env.ENTERPRET_API_KEY = value;
-}
-
-afterEach(() => {
-  setKey(ORIGINAL_KEY);
-  vi.unstubAllGlobals();
-});
-
-function stubFetch(payload: unknown, ok = true, status = 200) {
-  const fn = vi.fn().mockResolvedValue({
-    ok,
-    status,
-    statusText: 'x',
-    json: async () => payload,
-    text: async () => JSON.stringify(payload),
-  });
-  vi.stubGlobal('fetch', fn);
-  return fn;
-}
-
-describe('isEnterpretConfigured', () => {
-  it('is true when the key is a non-empty string', () => {
-    setKey('ent_live_abc123');
-    expect(isEnterpretConfigured()).toBe(true);
-  });
-
-  it('is false when the key is absent', () => {
-    setKey(undefined);
-    expect(isEnterpretConfigured()).toBe(false);
-  });
-
-  it('is false when the key is an empty string', () => {
-    setKey('');
-    expect(isEnterpretConfigured()).toBe(false);
-  });
-
-  it('is false when the key is only whitespace', () => {
-    setKey('   \t ');
-    expect(isEnterpretConfigured()).toBe(false);
-  });
-});
+/**
+ * enterpret-client is now entirely pure: there is no HTTP call and no API key.
+ * Quotes are batch-synced into `content_piece.enterpret_quotes` out-of-band and
+ * this module only parses what is stored there.
+ *
+ * `shapeQuotes` is therefore the load-bearing function, and its input is
+ * untrusted: a textarea property written by a sync we do not control. The
+ * malformed cases below are not edge cases, they are the contract — every one
+ * of them must mean "no quotes", and none of them may throw.
+ */
 
 describe('normaliseTheme', () => {
   it('trims a usable theme', () => {
@@ -111,30 +74,29 @@ describe('normaliseSentiment', () => {
   });
 });
 
-describe('shapeQuotes', () => {
-  const payload = {
-    records: [
-      {
-        id: 'fr_1',
-        text: 'The OAuth refresh token docs contradict the API reference.',
-        source: 'GitHub Discussions',
-        sentiment: 'NEGATIVE',
-        createdAt: '2026-08-14T10:00:00.000Z',
-        url: 'https://github.com/x/discussions/1',
-      },
-      {
-        id: 'fr_2',
-        text: 'Took me three hours to work out the scope names.',
-        source: 'Developer Slack',
-        sentiment: 'negative',
-        createdAt: '2026-08-15T11:30:00.000Z',
-        url: 'https://slack.com/archives/1',
-      },
-    ],
-  };
+describe('shapeQuotes — the stored enterpret_quotes property', () => {
+  /** Exactly the shape the MCP sync writes into the textarea property. */
+  const STORED = JSON.stringify([
+    {
+      id: 'fr_1',
+      text: 'The OAuth refresh token docs contradict the API reference.',
+      source: 'GitHub Discussions',
+      sentiment: 'NEGATIVE',
+      createdAt: '2026-08-14T10:00:00.000Z',
+      url: 'https://github.com/x/discussions/1',
+    },
+    {
+      id: 'fr_2',
+      text: 'Took me three hours to work out the scope names.',
+      source: 'Developer Slack',
+      sentiment: 'negative',
+      createdAt: '2026-08-15T11:30:00.000Z',
+      url: 'https://slack.com/archives/1',
+    },
+  ]);
 
-  it('shapes a well-formed response into EnterpretQuote objects', () => {
-    expect(shapeQuotes(payload)).toEqual([
+  it('parses the stored JSON string into EnterpretQuote objects', () => {
+    expect(shapeQuotes(STORED)).toEqual([
       {
         id: 'fr_1',
         text: 'The OAuth refresh token docs contradict the API reference.',
@@ -154,33 +116,62 @@ describe('shapeQuotes', () => {
     ]);
   });
 
-  it('applies a limit', () => {
-    expect(shapeQuotes(payload, 1)).toHaveLength(1);
+  it('parses the minimal documented entry shape', () => {
+    const stored =
+      '[{"text":"Webhook retries drop the second delivery.",' +
+      '"source":"Support ticket","sentiment":"negative",' +
+      '"createdAt":"2026-08-14T00:00:00Z"}]';
+
+    expect(shapeQuotes(stored)).toEqual([
+      {
+        id: null,
+        text: 'Webhook retries drop the second delivery.',
+        source: 'Support ticket',
+        sentiment: 'negative',
+        createdAt: '2026-08-14T00:00:00Z',
+        url: null,
+      },
+    ]);
   });
 
-  it('accepts the alternative envelope keys an export API might use', () => {
-    const one = [{ text: 'a', source: 's' }];
-    expect(shapeQuotes({ results: one })).toHaveLength(1);
-    expect(shapeQuotes({ data: one })).toHaveLength(1);
-    expect(shapeQuotes({ feedbackRecords: one })).toHaveLength(1);
-    expect(shapeQuotes({ items: one })).toHaveLength(1);
-    expect(shapeQuotes(one)).toHaveLength(1);
+  it('tolerates surrounding whitespace and newlines in the textarea', () => {
+    expect(shapeQuotes(`\n\t  ${STORED}  \n`)).toHaveLength(2);
+  });
+
+  it('applies a limit', () => {
+    expect(shapeQuotes(STORED, 1)).toHaveLength(1);
+  });
+
+  it('accepts an already-decoded array', () => {
+    expect(shapeQuotes([{ text: 'already parsed', source: 'Slack' }])).toHaveLength(1);
   });
 
   it('accepts alternative field names for the verbatim text and its origin', () => {
-    const shaped = shapeQuotes({
-      records: [
-        { verbatim: 'from verbatim', channel: 'Zendesk' },
-        { quote: 'from quote', sourceName: 'X' },
-        { body: 'from body', source: { name: 'Nested Source' } },
-      ],
-    });
+    const stored = JSON.stringify([
+      { verbatim: 'from verbatim', channel: 'Zendesk' },
+      { quote: 'from quote', sourceName: 'X' },
+      { body: 'from body', source: { name: 'Nested Source' } },
+    ]);
+    const shaped = shapeQuotes(stored);
     expect(shaped.map(q => q.text)).toEqual(['from verbatim', 'from quote', 'from body']);
     expect(shaped.map(q => q.source)).toEqual(['Zendesk', 'X', 'Nested Source']);
   });
 
-  it('tolerates missing fields by filling safe defaults', () => {
-    expect(shapeQuotes({ records: [{ text: 'bare quote' }] })).toEqual([
+  it('reads a numeric sentiment score stored instead of a label', () => {
+    const stored = JSON.stringify([
+      { text: 'hot', sentimentScore: -0.9 },
+      { text: 'cool', sentimentScore: 0.9 },
+      { text: 'flat', sentimentScore: 0 },
+    ]);
+    expect(shapeQuotes(stored).map(q => q.sentiment)).toEqual([
+      'negative',
+      'positive',
+      'neutral',
+    ]);
+  });
+
+  it('fills safe defaults for entries missing fields', () => {
+    expect(shapeQuotes('[{"text":"bare quote"}]')).toEqual([
       {
         id: null,
         text: 'bare quote',
@@ -192,27 +183,78 @@ describe('shapeQuotes', () => {
     ]);
   });
 
-  it('drops entries that carry no usable text', () => {
-    const shaped = shapeQuotes({
-      records: [
-        { text: '   ' },
-        { source: 'no text at all' },
-        null,
-        'a bare string',
-        42,
-        { text: 'keeper' },
-      ],
-    });
+  it('drops entries that carry no usable text, keeping the rest', () => {
+    const stored = JSON.stringify([
+      { text: '   ' },
+      { source: 'no text at all' },
+      null,
+      'a bare string',
+      42,
+      [],
+      { text: 'keeper' },
+    ]);
+    const shaped = shapeQuotes(stored);
     expect(shaped).toHaveLength(1);
     expect(shaped[0].text).toBe('keeper');
   });
 
-  it('returns an empty array for a malformed payload rather than throwing', () => {
+  /* ---- the malformed cases: all mean "no quotes", none may throw ---- */
+
+  it('treats an empty or whitespace-only property as no quotes', () => {
+    expect(shapeQuotes('')).toEqual([]);
+    expect(shapeQuotes('   ')).toEqual([]);
+    expect(shapeQuotes('\n\t  \n')).toEqual([]);
+  });
+
+  it('treats an absent property as no quotes', () => {
     expect(shapeQuotes(null)).toEqual([]);
     expect(shapeQuotes(undefined)).toEqual([]);
-    expect(shapeQuotes('nope')).toEqual([]);
-    expect(shapeQuotes({})).toEqual([]);
-    expect(shapeQuotes({ records: 'not an array' })).toEqual([]);
+  });
+
+  it('treats invalid JSON as no quotes rather than throwing', () => {
+    expect(shapeQuotes('not json at all')).toEqual([]);
+    expect(shapeQuotes('[{"text": "truncated mid-sy')).toEqual([]);
+    expect(shapeQuotes('[{text: "unquoted key"}]')).toEqual([]);
+    expect(shapeQuotes("[{'text':'single quotes'}]")).toEqual([]);
+    expect(shapeQuotes('[{"text":"trailing comma"},]')).toEqual([]);
+    expect(shapeQuotes('<html>an error page</html>')).toEqual([]);
+  });
+
+  it('treats a JSON object where an array was expected as no quotes', () => {
+    expect(shapeQuotes('{"text":"a single quote, not wrapped in an array"}')).toEqual([]);
+    expect(shapeQuotes('{"quotes":[{"text":"wrapped in an envelope"}]}')).toEqual([]);
+    expect(shapeQuotes('{}')).toEqual([]);
+  });
+
+  it('treats a JSON primitive as no quotes', () => {
+    expect(shapeQuotes('"just a string"')).toEqual([]);
+    expect(shapeQuotes('42')).toEqual([]);
+    expect(shapeQuotes('true')).toEqual([]);
+    expect(shapeQuotes('null')).toEqual([]);
+  });
+
+  it('never throws, whatever the property holds', () => {
+    const junk: unknown[] = [
+      '',
+      '   ',
+      null,
+      undefined,
+      0,
+      false,
+      {},
+      { records: [] },
+      'undefined',
+      '[',
+      ']',
+      '[[[]]]',
+      '[null,null]',
+      Symbol('nope'),
+      () => 'nope',
+    ];
+    for (const value of junk) {
+      expect(() => shapeQuotes(value)).not.toThrow();
+      expect(Array.isArray(shapeQuotes(value))).toBe(true);
+    }
   });
 });
 
@@ -251,42 +293,5 @@ describe('summariseSentiment', () => {
   it('breaks a tie deterministically in favour of negative feedback', () => {
     expect(summariseSentiment([q('positive'), q('negative')]).dominant).toBe('negative');
     expect(summariseSentiment([q('positive'), q('neutral')]).dominant).toBe('positive');
-  });
-});
-
-describe('getEnterpretQuotes', () => {
-  it('calls Enterpret with bearer auth and shapes the response', async () => {
-    const fetchMock = stubFetch({
-      records: [{ text: 'Docs are wrong', source: 'Slack', sentiment: 'NEGATIVE' }],
-    });
-
-    const quotes = await getEnterpretQuotes('ent_key', 'OAuth friction', 3);
-
-    expect(quotes).toHaveLength(1);
-    expect(quotes[0].sentiment).toBe('negative');
-
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain('enterpret.com');
-    expect(init.method).toBe('POST');
-    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer ent_key');
-    expect(JSON.parse(init.body as string)).toMatchObject({ limit: 3 });
-    expect(init.body as string).toContain('OAuth friction');
-  });
-
-  it('throws on a transport failure, like the other API clients', async () => {
-    stubFetch({ message: 'nope' }, false, 500);
-    await expect(getEnterpretQuotes('ent_key', 'theme')).rejects.toThrow(/Enterpret API HTTP error/);
-  });
-
-  it('short-circuits without a network call when the theme is blank', async () => {
-    const fetchMock = stubFetch({});
-    expect(await getEnterpretQuotes('ent_key', '   ')).toEqual([]);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('throws a clear error when called without an API key', async () => {
-    const fetchMock = stubFetch({});
-    await expect(getEnterpretQuotes('', 'theme')).rejects.toThrow(/Enterpret API key/);
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

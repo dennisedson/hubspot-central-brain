@@ -1,54 +1,59 @@
 /**
- * Enterpret client.
+ * Enterpret data helpers.
  *
  * Enterpret is the voice-of-the-developer system that produces the friction
- * themes stored on `content_piece.enterpret_theme`. This client turns a theme
- * back into the underlying developer quotes so a writer can see the actual
- * words behind the theme they are writing about.
+ * themes stored on `content_piece.enterpret_theme`. This module turns the data
+ * stored alongside that theme into the developer quotes a writer sees on the
+ * record, so they can read the actual words behind the theme they are writing
+ * about.
  *
  * ---------------------------------------------------------------------------
- * NOT YET CONFIGURED
+ * THERE IS NO NETWORK CALL HERE — AND THAT IS THE DESIGN
  * ---------------------------------------------------------------------------
- * `ENTERPRET_API_KEY` is deliberately NOT declared in
- * `src/app/functions/EnterpretInsightsApi-hsmeta.json`. Declaring a secret that
- * does not exist in the portal fails the project deploy, so the app ships today
- * with the key absent and `isEnterpretConfigured()` returning false — a normal,
- * first-class state, never an error.
+ * An earlier version of this file called the Enterpret HTTP API live from the
+ * `EnterpretInsightsApi` app function. That path has been removed outright, for
+ * two reasons that are not going to change:
  *
- * TO ACTIVATE, once the secret exists in the portal
- * (`hs secrets add ENTERPRET_API_KEY`):
+ *   1. NO API KEY IS OBTAINABLE. We do not have permission to create an
+ *      Enterpret API key, so there is no credential to put in `secretKeys` and
+ *      nothing to authenticate a live call with. The endpoint the old code used
+ *      was also never publicly documented — it was an assumption modelled on
+ *      Enterpret's MCP `find_user_quote` capability, and it could not be
+ *      verified against a real account.
  *
- *   in src/app/functions/EnterpretInsightsApi-hsmeta.json change
- *     "secretKeys": ["HS_ACCESS_TOKEN"]
- *   to
- *     "secretKeys": ["HS_ACCESS_TOKEN", "ENTERPRET_API_KEY"]
- *
- * That is the whole change. No code edit is required.
+ *   2. MCP CANNOT BE REACHED FROM HUBSPOT'S RUNTIME. Enterpret is connected to
+ *      an AI assistant over MCP from a developer machine. A deployed HubSpot
+ *      serverless function lives in a different runtime behind a different
+ *      trust boundary; it has no MCP client, no session, and no route to that
+ *      server. A function cannot "just call MCP".
  *
  * ---------------------------------------------------------------------------
- * ABOUT THE ENDPOINT SHAPE
+ * THE STORED-PROPERTY MODEL
  * ---------------------------------------------------------------------------
- * Enterpret's only publicly documented HTTP surface is the bulk Export API
- * (`POST https://api.enterpret.com/export/external/v2/export`, bearer auth),
- * which returns signed CSV file URLs — far too heavy for a CRM card. The
- * per-theme verbatim lookup used here mirrors the `find_user_quote` capability
- * exposed by Enterpret's MCP server, but its REST equivalent is NOT publicly
- * documented and could NOT be verified.
+ * Enterpret data reaches HubSpot out-of-band instead. Over MCP, an assistant
+ * pulls the verbatims for a theme and batch-writes them onto the record:
  *
- * The request shape below is therefore an assumption. It is contained in
- * exactly one place — `requestQuotes()` plus the two constants above it — so
- * correcting it later is a small, local edit. Everything else in this file is
- * pure, unit-tested and tolerant of field-name variation, so a differently
- * named-but-similar response still shapes correctly.
+ *     enterpret_theme        string    the friction theme
+ *     enterpret_quote_count  number    how many verbatims Enterpret has
+ *     enterpret_quotes       string    a JSON array of quote objects (textarea)
+ *
+ * `enterpret_quotes` holds text like:
+ *
+ *     [{"text":"...","source":"Developer Slack","sentiment":"negative",
+ *       "createdAt":"2026-08-14T00:00:00Z"}]
+ *
+ * At render time the app function does one thing: read those properties. No
+ * key to rotate, no third-party latency on a card render, and no failure mode
+ * beyond "the record has no data yet".
+ *
+ * BECAUSE THE WRITER IS A BATCH SYNC, NOT AN API CONTRACT, the stored string is
+ * treated as untrusted input. `shapeQuotes` is total: empty, whitespace, null,
+ * invalid JSON, a JSON object where an array was expected, and entries missing
+ * fields all mean "no quotes" — never an exception. Everything in this file is
+ * pure and unit-tested, so a card can never break on a bad sync.
  */
 
-/** Base URL for the Enterpret HTTP API. */
-const ENTERPRET_API_BASE = 'https://api.enterpret.com';
-
-/** ASSUMED path for the per-theme verbatim query. See the file header. */
-const QUOTES_PATH = '/external/v2/feedback-records/query';
-
-/** How many quotes to pull when the caller does not say. */
+/** How many quotes to surface when the caller does not say. */
 const DEFAULT_QUOTE_LIMIT = 5;
 
 /** Above/below this score a numeric sentiment counts as positive/negative. */
@@ -57,14 +62,14 @@ const SENTIMENT_SCORE_THRESHOLD = 0.15;
 export type EnterpretSentiment = 'positive' | 'negative' | 'neutral';
 
 export interface EnterpretQuote {
-  /** Enterpret's feedback record id, when the response carries one. */
+  /** Enterpret's feedback record id, when the stored entry carries one. */
   id: string | null;
   /** The verbatim developer quote. Always non-empty — blanks are dropped. */
   text: string;
   /** Where the feedback came from, e.g. "GitHub Discussions". */
   source: string;
   sentiment: EnterpretSentiment;
-  /** ISO timestamp as Enterpret returned it, or null if absent. */
+  /** ISO timestamp as the sync stored it, or null if absent. */
   createdAt: string | null;
   /** Deep link back to the source record, or null if absent. */
   url: string | null;
@@ -77,21 +82,6 @@ export interface SentimentSummary {
   neutral: number;
   /** null only when there are no quotes at all. */
   dominant: EnterpretSentiment | null;
-}
-
-/* -------------------------------------------------------------------------- */
-/* Configuration                                                              */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Whether an Enterpret API key is available to this runtime.
- *
- * False is the expected state today and is never an error: callers should fall
- * back to the theme and quote count already stored on the CRM record.
- */
-export function isEnterpretConfigured(): boolean {
-  const key = process.env.ENTERPRET_API_KEY;
-  return typeof key === 'string' && key.trim().length > 0;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -132,7 +122,7 @@ export function parseQuoteCount(raw: string | null | undefined): number | null {
 }
 
 /**
- * Coerce whatever Enterpret calls sentiment into our three labels. Accepts a
+ * Coerce whatever the sync wrote for sentiment into our three labels. Accepts a
  * label in any casing or a numeric score; anything unrecognised is neutral so
  * an unexpected value can never break the card.
  */
@@ -162,7 +152,7 @@ function extractSource(raw: Record<string, unknown>): string {
   return 'Unknown source';
 }
 
-/** One raw entry to one quote, or null when there is no usable verbatim text. */
+/** One stored entry to one quote, or null when there is no usable verbatim. */
 function toQuote(raw: unknown): EnterpretQuote | null {
   if (!isRecord(raw)) return null;
 
@@ -179,28 +169,43 @@ function toQuote(raw: unknown): EnterpretQuote | null {
   };
 }
 
-/** Envelope keys an Enterpret-shaped response might wrap its rows in. */
-const LIST_KEYS = ['records', 'results', 'data', 'feedbackRecords', 'feedback_records', 'items', 'quotes'];
+/**
+ * Decode the stored `enterpret_quotes` property into raw entries.
+ *
+ * The property is a textarea written by a batch sync, so every degenerate value
+ * is expected traffic rather than an error: absent, empty, whitespace, and
+ * unparseable text all decode to no entries, as does valid JSON that is not an
+ * array (an object, a number, a bare string). Nothing here throws.
+ *
+ * An already-decoded array is passed through, which keeps the function usable
+ * from a caller that has parsed the property itself.
+ */
+function decodeStoredQuotes(stored: unknown): unknown[] {
+  if (Array.isArray(stored)) return stored;
+  if (typeof stored !== 'string') return [];
 
-/** Locate the row array inside a response envelope we cannot fully predict. */
-function extractList(payload: unknown): unknown[] {
-  if (Array.isArray(payload)) return payload;
-  if (!isRecord(payload)) return [];
-  for (const key of LIST_KEYS) {
-    const value = payload[key];
-    if (Array.isArray(value)) return value;
+  const trimmed = stored.trim();
+  if (trimmed.length === 0) return [];
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return [];
   }
-  return [];
+  return Array.isArray(parsed) ? parsed : [];
 }
 
 /**
- * Turn a raw Enterpret response into quotes. Total-loss tolerant: a malformed
- * payload yields an empty list rather than an exception, so a shape change at
- * Enterpret degrades the card instead of breaking it.
+ * Turn the stored `enterpret_quotes` JSON string into quotes.
+ *
+ * Total-loss tolerant by design: a malformed or half-written property yields an
+ * empty list rather than an exception, so a bad sync degrades the card to its
+ * "not synced yet" state instead of breaking it.
  */
-export function shapeQuotes(payload: unknown, limit = DEFAULT_QUOTE_LIMIT): EnterpretQuote[] {
+export function shapeQuotes(stored: unknown, limit = DEFAULT_QUOTE_LIMIT): EnterpretQuote[] {
   const quotes: EnterpretQuote[] = [];
-  for (const entry of extractList(payload)) {
+  for (const entry of decodeStoredQuotes(stored)) {
     const quote = toQuote(entry);
     if (quote) quotes.push(quote);
     if (quotes.length >= limit) break;
@@ -230,49 +235,4 @@ export function summariseSentiment(quotes: EnterpretQuote[]): SentimentSummary {
     summary[label] > summary[best] ? label : best,
   );
   return summary;
-}
-
-/* -------------------------------------------------------------------------- */
-/* Network (the only unverified part — keep it small)                         */
-/* -------------------------------------------------------------------------- */
-
-/**
- * The single HTTP call in this module. Throws on transport failure, matching
- * the error style of `linear-client.ts`; callers isolate that with
- * `Promise.allSettled` so one bad integration never fails a whole response.
- */
-async function requestQuotes(apiKey: string, theme: string, limit: number): Promise<unknown> {
-  const response = await fetch(`${ENTERPRET_API_BASE}${QUOTES_PATH}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      filter: { reason: theme },
-      limit,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Enterpret API HTTP error: ${response.status} ${response.statusText}`);
-  }
-  return response.json();
-}
-
-/** Fetch the developer quotes behind a friction theme. */
-export async function getEnterpretQuotes(
-  apiKey: string,
-  theme: string,
-  limit: number = DEFAULT_QUOTE_LIMIT,
-): Promise<EnterpretQuote[]> {
-  if (!apiKey || apiKey.trim().length === 0) {
-    throw new Error('Enterpret API key is missing');
-  }
-
-  const normalisedTheme = normaliseTheme(theme);
-  if (!normalisedTheme) return [];
-
-  const payload = await requestQuotes(apiKey.trim(), normalisedTheme, limit);
-  return shapeQuotes(payload, limit);
 }

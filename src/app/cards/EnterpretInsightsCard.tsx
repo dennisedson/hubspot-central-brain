@@ -29,12 +29,18 @@ interface SentimentSummary {
   dominant: Sentiment | null;
 }
 
+/**
+ * What `enterpret_insights_api` returns. Every field comes from properties on
+ * the record — the theme, the count, and the quotes batch-synced into
+ * `enterpret_quotes` — so the card renders whatever the last sync wrote and
+ * never waits on a third party.
+ */
 interface InsightsPayload {
-  configured: boolean;
   theme: string | null;
   quoteCount: number | null;
   quotes: Quote[];
   sentiment: SentimentSummary | null;
+  /** Part of the handler contract; there is no external call left to fail. */
   errors: { enterpret: string | null };
 }
 
@@ -70,8 +76,8 @@ function plural(count: number, word: string): string {
 }
 
 /**
- * The theme + stored count header. Shown in every state that has a theme, so
- * the card says something concrete whether or not Enterpret is connected.
+ * The theme + stored count header. Shown in both states that have a theme, so
+ * the card says something concrete whether or not quotes have been synced yet.
  */
 function ThemeHeader({ theme, quoteCount }: { theme: string; quoteCount: number | null }) {
   return (
@@ -168,62 +174,44 @@ const Card = ({ context }: { context: { crm: { objectId: string | number } } }) 
   }
   if (!data) return null;
 
-  // State 1 — no theme on the record. A clean empty state, not an error.
-  if (!data.theme) {
+  const hasQuotes = data.quotes.length > 0;
+
+  // State 1 — quotes have been synced. The theme, the mix, and the verbatims.
+  if (hasQuotes) {
     return (
-      <Flex direction="column" gap="small">
-        <Text format={{ fontWeight: 'bold' }}>No friction theme yet</Text>
+      <Flex direction="column" gap="medium">
+        {data.theme && <ThemeHeader theme={data.theme} quoteCount={data.quoteCount} />}
+        {data.sentiment && <SentimentLine sentiment={data.sentiment} />}
+        {data.quotes.map((quote, index) => (
+          <QuoteRow key={quote.id ?? `${index}`} quote={quote} showDivider={index > 0} />
+        ))}
+      </Flex>
+    );
+  }
+
+  // State 2 — a theme, but no quotes on the record yet. A finished state: the
+  // stored theme and count carry real information on their own.
+  if (data.theme) {
+    return (
+      <Flex direction="column" gap="medium">
+        <ThemeHeader theme={data.theme} quoteCount={data.quoteCount} />
+        <Divider />
         <Text>
-          Set the Enterpret Theme property on this record to tie it to a developer friction
-          theme. The quotes driving that theme will show up here.
+          Developer quotes appear here once Enterpret data is synced to this record.
         </Text>
       </Flex>
     );
   }
 
-  // State 2 — Enterpret is not connected. This is today's default, and it is a
-  // finished state: the stored theme and count still carry real information.
-  if (!data.configured) {
-    return (
-      <Flex direction="column" gap="medium">
-        <ThemeHeader theme={data.theme} quoteCount={data.quoteCount} />
-        <Divider />
-        <Flex direction="column" gap="extra-small">
-          <Flex direction="row" gap="small" align="center">
-            <Tag>Enterpret not connected</Tag>
-          </Flex>
-          <Text>
-            This theme and its quote count came from Enterpret when the record was created.
-            Connect Enterpret to this app and the individual developer quotes behind the theme
-            will be listed here, alongside their source and sentiment.
-          </Text>
-        </Flex>
-      </Flex>
-    );
-  }
-
-  // State 3 — connected. Show the summary and the verbatims.
+  // State 3 — nothing on the record at all. A clean empty state, not an error.
   return (
-    <Flex direction="column" gap="medium">
-      <ThemeHeader theme={data.theme} quoteCount={data.quoteCount} />
-
-      {data.errors.enterpret && (
-        <Alert title="Enterpret is unavailable right now" variant="warning">
-          <Text>
-            Showing the theme and count stored on this record. {data.errors.enterpret}
-          </Text>
-        </Alert>
-      )}
-
-      {data.sentiment && <SentimentLine sentiment={data.sentiment} />}
-
-      {!data.errors.enterpret && data.quotes.length === 0 && (
-        <Text>Enterpret has no quotes filed under this theme yet.</Text>
-      )}
-
-      {data.quotes.map((quote, index) => (
-        <QuoteRow key={quote.id ?? `${index}`} quote={quote} showDivider={index > 0} />
-      ))}
+    <Flex direction="column" gap="small">
+      <Text format={{ fontWeight: 'bold' }}>No friction theme yet</Text>
+      <Text>
+        Set the Enterpret Theme property on this record to tie it to a developer friction
+        theme. Once the quotes behind that theme are synced, they will be listed here with
+        their source and sentiment.
+      </Text>
     </Flex>
   );
 };

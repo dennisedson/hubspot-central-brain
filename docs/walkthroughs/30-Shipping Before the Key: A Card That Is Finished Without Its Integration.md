@@ -1,5 +1,7 @@
 ## 🎬 YouTube Episode Guide: Shipping Before the Key — A Card That Is Finished Without Its Integration
 
+> **Superseded (2026-09-03, issue #12).** The key never arrived — we have no permission to create one, and Enterpret is reached over MCP, which a deployed HubSpot function cannot use. The live-fetch path described below was deleted; quotes are now batch-synced into `content_piece.enterpret_quotes` and simply read. See episode 36, "Delete the Integration". The technique here — absence of configuration as a first-class state — still stands on its own.
+
 **🎯 Core Learning Objective:**
 "By the end of this video, you will know how to build and deploy a third-party integration *before you have the API key* — an app function that treats 'not configured' as a normal success state, a client whose single unverified HTTP call is quarantined away from fully-tested pure logic, and a CRM card that looks deliberate and finished in all three of its states."
 

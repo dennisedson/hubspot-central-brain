@@ -25,6 +25,8 @@ export interface ContentProperties {
   topic_tags?: string;
   enterpret_theme?: string;
   enterpret_quote_count?: string;
+  /** JSON array of quote objects, batch-synced from Enterpret out-of-band. */
+  enterpret_quotes?: string;
   notes?: string;
   social_post_draft?: string;
   social_published_at?: string;
