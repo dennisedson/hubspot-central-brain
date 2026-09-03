@@ -13,7 +13,7 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
 /**
- * A meeting as it comes back from `/crm/v3/objects/meetings` — id plus raw properties.
+ * A meeting as it comes back from `/crm/objects/2026-03/meetings` — id plus raw properties.
  *
  * Documentation only: this module is deliberately I/O-free and builds no URL. The
  * request itself is made by MeetingIntelligenceApi via `objectBatchReadPath` in

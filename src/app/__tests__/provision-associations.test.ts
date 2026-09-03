@@ -137,13 +137,13 @@ describe('existingDefinitionsRequest', () => {
   it('reads the association labels for the pairing', () => {
     expect(existingDefinitionsRequest(contentToVideo)).toEqual({
       method: 'GET',
-      url: `https://api.hubapi.com/crm/v4/associations/${CONTENT}/${VIDEO}/labels`,
+      url: `https://api.hubapi.com/crm/associations/2026-03/${CONTENT}/${VIDEO}/labels`,
     });
   });
 
   it('uses the same object type on both sides for a self-referential pairing', () => {
     expect(existingDefinitionsRequest(contentToContent).url).toBe(
-      `https://api.hubapi.com/crm/v4/associations/${CONTENT}/${CONTENT}/labels`,
+      `https://api.hubapi.com/crm/associations/2026-03/${CONTENT}/${CONTENT}/labels`,
     );
   });
 });
@@ -164,7 +164,7 @@ describe('definitionRequest', () => {
   it('creates a self-referential pairing through the v4 labels endpoint', () => {
     expect(definitionRequest(contentToContent)).toEqual({
       method: 'POST',
-      url: `https://api.hubapi.com/crm/v4/associations/${CONTENT}/${CONTENT}/labels`,
+      url: `https://api.hubapi.com/crm/associations/2026-03/${CONTENT}/${CONTENT}/labels`,
       body: { name: 'cb_related_content', label: 'Related Content' },
     });
   });
@@ -172,7 +172,7 @@ describe('definitionRequest', () => {
   it('creates the video pairing with its own distinct name', () => {
     expect(definitionRequest(videoToVideo)).toEqual({
       method: 'POST',
-      url: `https://api.hubapi.com/crm/v4/associations/${VIDEO}/${VIDEO}/labels`,
+      url: `https://api.hubapi.com/crm/associations/2026-03/${VIDEO}/${VIDEO}/labels`,
       body: { name: 'cb_related_video', label: 'Related Video' },
     });
   });
@@ -438,7 +438,7 @@ describe('ensureAssociationDefinitions', () => {
     await ensureAssociationDefinitions('tok', [contentToContent]);
 
     expect(calls.find(c => c.method === 'POST')).toEqual({
-      url: `https://api.hubapi.com/crm/v4/associations/${CONTENT}/${CONTENT}/labels`,
+      url: `https://api.hubapi.com/crm/associations/2026-03/${CONTENT}/${CONTENT}/labels`,
       method: 'POST',
       body: { name: 'cb_related_content', label: 'Related Content' },
     });

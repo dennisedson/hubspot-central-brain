@@ -9,32 +9,38 @@
  * shortly after `2026-03`. With version strings scattered across call sites,
  * every bump was an N-file change; here it is a one-line change per family.
  *
- * TWO FAMILIES LIVE HERE, ON PURPOSE
- * ----------------------------------
- * 1. LEGACY builders (`objectPath`, `propertiesPath`, `schemasPath`,
- *    `pipelinesPath`, the association builders) still emit `/crm/v3/` and
- *    `/crm/v4/` because that is exactly what the portal is called with today.
- *    Each is tagged `migrate to dated per issue #14` — grep that phrase to find
- *    everything still awaiting migration.
- * 2. DATED builders (`datedObjectPath`, `datedObjectSearchPath`) emit
- *    `/crm/objects/${HS_API_VERSION}/...`. The Fellow → Projects sync already
- *    runs on these.
+ * MIGRATION STATE
+ * ---------------
+ * Everything is on dated paths EXCEPT schemas. Verified 2026-09-03 by calling
+ * both surfaces against a live portal and diffing the response shapes:
  *
- * MIGRATING A FAMILY
+ *     objects       /crm/objects/2026-03/{type}            list/single/search/batch  200, identical
+ *     associations  /crm/objects/2026-03/{t}/{id}/associations/{t}   GET 200, PUT 201, DELETE 204
+ *     assoc labels  /crm/associations/2026-03/{a}/{b}/labels          200, identical
+ *     properties    /crm/properties/2026-03/{type}                    200, identical
+ *     pipelines     /crm/pipelines/2026-03/{type}                     200, identical
+ *     schemas       NO DATED EQUIVALENT — /crm/schemas/2026-03,
+ *                   /crm/schemas/2026-03/{type} and
+ *                   /crm/custom-objects/2026-03/schemas all return 404
+ *
+ * Note associations hang off the OBJECTS family, not the associations one:
+ * `/crm/v4/objects/{t}/{id}/associations/{t}` became
+ * `/crm/objects/2026-03/{t}/{id}/associations/{t}`. The `/crm/associations/`
+ * family covers label definitions only. Guessing that from the v4 shape would
+ * have been wrong, which is why each family was probed rather than inferred.
+ *
+ * MIGRATING THE REST
  * ------------------
- * Change the family's prefix constant below to the dated shape, update the
- * matching expectations in `src/app/__tests__/hs-api.test.ts`, and every call
- * site moves with it.
+ * Change the family's prefix constant below, update the matching expectations
+ * in `src/app/__tests__/hs-api.test.ts`, and every call site moves with it.
+ * The objects flip on 2026-09-02 was one line; it moved 20 call sites and
+ * failed 56 URL assertions, each naming its old and new string. The remaining
+ * families moved the same way on 2026-09-03, producing 43 more.
  *
- * The CRM objects family was migrated this way on 2026-09-02:
- *
- *     const OBJECTS_V3 = '/crm/v3/objects';  ->  const OBJECTS_V3 = OBJECTS_DATED;
- *
- * That one line moved 20 call sites and failed 56 URL assertions, each naming
- * its old and new string — which is the audit trail you want before deploying.
- * Still legacy: properties, schemas, pipelines, and both association families.
- * Their dated paths are NOT yet confirmed from HubSpot docs — read them per
- * endpoint before flipping, do not infer them from the objects pattern.
+ * Do NOT flip a family on the strength of the pattern alone. Call both
+ * surfaces first and diff the responses — a dated version is a new API
+ * version, so response shapes can change, and CI cannot catch it because
+ * these functions deploy without ever calling the API.
  *
  * The test file is the checklist: a builder cannot be flipped without its
  * assertion failing first, which is what makes the blast radius visible.
@@ -75,24 +81,29 @@ export const HS_API_VERSION = '2026-03';
 /** Dated prefix. Already in production for the Fellow -> Projects sync. */
 const OBJECTS_DATED = `/crm/objects/${HS_API_VERSION}`;
 
-/** To migrate the CRM objects family: change this to `OBJECTS_DATED`. */
-// LEGACY v3 — migrate to dated per issue #14
+/** MIGRATED 2026-09-02. Verified live: list, single, search, batch/read all
+ *  return identical response shapes on v3 and dated. */
 const OBJECTS_V3 = OBJECTS_DATED;
 
-// LEGACY v4 — migrate to dated per issue #14
-const ASSOCIATION_OBJECTS_V4 = '/crm/v4/objects';
+/** MIGRATED 2026-09-03. Associations hang off the OBJECTS family, not the
+ *  associations one. Verified live: GET 200 with identical shape, PUT 201,
+ *  DELETE 204 on `/crm/objects/2026-03/{type}/{id}/associations/{type}`. */
+const ASSOCIATION_OBJECTS_V4 = OBJECTS_DATED;
 
-// LEGACY v4 — migrate to dated per issue #14
-const ASSOCIATIONS_V4 = '/crm/v4/associations';
+/** MIGRATED 2026-09-03. Verified live: labels GET returns identical shape. */
+const ASSOCIATIONS_V4 = `/crm/associations/${HS_API_VERSION}`;
 
-// LEGACY v3 — migrate to dated per issue #14
-const PROPERTIES_V3 = '/crm/v3/properties';
+/** MIGRATED 2026-09-03. Verified live: identical shape on both surfaces. */
+const PROPERTIES_V3 = `/crm/properties/${HS_API_VERSION}`;
 
+/** STILL LEGACY — no dated equivalent exists yet. Verified 2026-09-03: all of
+ *  /crm/schemas/2026-03, /crm/schemas/2026-03/{type} and
+ *  /crm/custom-objects/2026-03/schemas return 404. Recheck on a later version. */
 // LEGACY v3 — migrate to dated per issue #14
 const SCHEMAS_V3 = '/crm/v3/schemas';
 
-// LEGACY v3 — migrate to dated per issue #14
-const PIPELINES_V3 = '/crm/v3/pipelines';
+/** MIGRATED 2026-09-03. Verified live: identical shape on both surfaces. */
+const PIPELINES_V3 = `/crm/pipelines/${HS_API_VERSION}`;
 
 // ---------------------------------------------------------------------------
 // CRM objects

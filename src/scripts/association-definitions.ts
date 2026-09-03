@@ -13,7 +13,7 @@
  * TWO CREATION ROUTES, ON PURPOSE
  * -------------------------------
  * Self-referential pairings (content ↔ content, video ↔ video) take
- * `POST /crm/v4/associations/{type}/{type}/labels`, which creates a LABELED
+ * `POST /crm/associations/2026-03/{type}/{type}/labels`, which creates a LABELED
  * definition. This works — a custom object can be associated with itself — but
  * only through the label: no unlabeled/default definition exists between a
  * custom object and itself, so `PUT …/associations/default/…` is a dead end and
@@ -60,7 +60,7 @@ export type { AssociationLabelsResponse };
 /**
  * How a definition is created, and therefore what counts as provisioned.
  *
- * - `labels` — `POST /crm/v4/associations/{a}/{b}/labels`, a labeled definition
+ * - `labels` — `POST /crm/associations/2026-03/{a}/{b}/labels`, a labeled definition
  *   the app associates through by typeId.
  * - `schema` — `POST /crm/v3/schemas/{a}/associations`, the unlabeled one.
  */

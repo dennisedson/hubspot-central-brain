@@ -8,7 +8,7 @@
  * custom object type — content to content, video to video. That works, but only
  * through a LABELED association:
  *
- *     PUT /crm/v4/objects/{type}/{fromId}/associations/{type}/{toId}
+ *     PUT /crm/objects/2026-03/{type}/{fromId}/associations/{type}/{toId}
  *     [{ "associationCategory": "USER_DEFINED", "associationTypeId": 99 }]
  *
  * There is no unlabeled/default definition between a custom object and itself,
@@ -18,7 +18,7 @@
  *
  * THE NAME COLLISION
  * ------------------
- * `POST /crm/v4/associations/{type}/{type}/labels` rejects the obvious name:
+ * `POST /crm/associations/2026-03/{type}/{type}/labels` rejects the obvious name:
  *
  *     name: "content_piece_to_content_piece"
  *     -> 400 Association definition name 'content_piece_to_content_piece'
@@ -34,7 +34,7 @@
  * ----------------------
  * "Related Content" is typeId 99 on the dev portal. It will be a different
  * number on staging and prod. Nothing here hardcodes one: callers read
- * `GET /crm/v4/associations/{type}/{type}/labels` and match on the name/label
+ * `GET /crm/associations/2026-03/{type}/{type}/labels` and match on the name/label
  * they provisioned, which is exactly what `findAssociationTypeId` does.
  *
  * Pure and I/O-free so both the app function and the provisioning script can
@@ -73,7 +73,7 @@ export const SELF_ASSOCIATION_LABELS: Record<'content' | 'video', AssociationLab
   video: RELATED_VIDEO_LABEL,
 };
 
-/** One entry of a `GET /crm/v4/associations/{from}/{to}/labels` response. */
+/** One entry of a `GET /crm/associations/2026-03/{from}/{to}/labels` response. */
 export interface AssociationTypeSpec {
   typeId?: number;
   category?: string;

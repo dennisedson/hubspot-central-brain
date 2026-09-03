@@ -12,11 +12,11 @@ import { main } from '../functions/AssociateRelatedContent';
  * itself, so `PUT …/associations/default/…` can never work here. The handler now
  * associates through the LABELED definition:
  *
- *   PUT /crm/v4/objects/{type}/{fromId}/associations/{type}/{toId}
+ *   PUT /crm/objects/2026-03/{type}/{fromId}/associations/{type}/{toId}
  *   [{ "associationCategory": "USER_DEFINED", "associationTypeId": 99 }]
  *
  * The typeId is per-portal, so it is read from
- * `GET /crm/v4/associations/{type}/{type}/labels` at call time — once per
+ * `GET /crm/associations/2026-03/{type}/{type}/labels` at call time — once per
  * invocation, reused for every winner. A portal with no such label must come
  * back 200 `not_provisioned`, never a non-2xx: a non-2xx makes HubSpot retry and
  * eventually park the workflow enrollment.
@@ -31,17 +31,17 @@ const SOURCE_URL =
   'https://api.hubapi.com/crm/objects/2026-03/2-67505887/4201?properties=title,topic_tags,enterpret_theme';
 const SEARCH_URL = 'https://api.hubapi.com/crm/objects/2026-03/2-67505887/search';
 const LABELS_URL =
-  'https://api.hubapi.com/crm/v4/associations/2-67505887/2-67505887/labels';
+  'https://api.hubapi.com/crm/associations/2026-03/2-67505887/2-67505887/labels';
 const assocUrl = (toId: string) =>
-  `https://api.hubapi.com/crm/v4/objects/2-67505887/4201/associations/2-67505887/${toId}`;
+  `https://api.hubapi.com/crm/objects/2026-03/2-67505887/4201/associations/2-67505887/${toId}`;
 
 const VIDEO_SOURCE_URL =
   'https://api.hubapi.com/crm/objects/2026-03/2-67505890/7001?properties=title,tags';
 const VIDEO_SEARCH_URL = 'https://api.hubapi.com/crm/objects/2026-03/2-67505890/search';
 const VIDEO_LABELS_URL =
-  'https://api.hubapi.com/crm/v4/associations/2-67505890/2-67505890/labels';
+  'https://api.hubapi.com/crm/associations/2026-03/2-67505890/2-67505890/labels';
 const VIDEO_ASSOC_URL =
-  'https://api.hubapi.com/crm/v4/objects/2-67505890/7001/associations/2-67505890/7002';
+  'https://api.hubapi.com/crm/objects/2026-03/2-67505890/7001/associations/2-67505890/7002';
 
 /**
  * The dev portal's real answer for content ↔ content: the label on typeId 99

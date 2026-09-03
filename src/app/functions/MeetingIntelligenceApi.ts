@@ -55,7 +55,7 @@ function authHeaders(token: string) {
 /**
  * List the ids of `toObjectType` records associated with a contact.
  *
- * CRM v4 associations: GET /crm/v4/objects/{fromObjectType}/{id}/associations/{toObjectType}
+ * CRM associations: GET /crm/objects/2026-03/{fromObjectType}/{id}/associations/{toObjectType}
  * responds with `{ results: [{ toObjectId, associationTypes }] }`. `toObjectType`
  * accepts a standard object name ("meetings") or a custom objectTypeId ("2-1234").
  */

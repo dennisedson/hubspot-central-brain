@@ -77,13 +77,13 @@ describe('objectBatchReadPath', () => {
 describe('association paths', () => {
   it('lists associations from one record to an object type', () => {
     expect(associationListPath('contacts', '551', 'meetings')).toBe(
-      '/crm/v4/objects/contacts/551/associations/meetings',
+      '/crm/objects/2026-03/contacts/551/associations/meetings',
     );
   });
 
   it('builds the default (unlabeled) association path between two records', () => {
     expect(defaultAssociationPath('2-67505887', '10', '2-67505887', '20')).toBe(
-      '/crm/v4/objects/2-67505887/10/associations/default/2-67505887/20',
+      '/crm/objects/2026-03/2-67505887/10/associations/default/2-67505887/20',
     );
   });
 
@@ -92,7 +92,7 @@ describe('association paths', () => {
     // defaultAssociationPath minus the `default` segment — the association type
     // travels in the body instead.
     expect(labeledAssociationPath('2-67505887', '10', '2-67505887', '20')).toBe(
-      '/crm/v4/objects/2-67505887/10/associations/2-67505887/20',
+      '/crm/objects/2026-03/2-67505887/10/associations/2-67505887/20',
     );
   });
 
@@ -110,19 +110,19 @@ describe('association paths', () => {
 
   it('builds the batch create path between two object types', () => {
     expect(associationBatchCreatePath('projects', 'contacts')).toBe(
-      '/crm/v4/associations/projects/contacts/batch/create',
+      '/crm/associations/2026-03/projects/contacts/batch/create',
     );
   });
 });
 
 describe('propertiesPath', () => {
   it('builds the property collection path for an object type', () => {
-    expect(propertiesPath('2-67505887')).toBe('/crm/v3/properties/2-67505887');
+    expect(propertiesPath('2-67505887')).toBe('/crm/properties/2026-03/2-67505887');
   });
 
   it('builds a single property path when a name is given', () => {
     expect(propertiesPath('2-67505887', 'linear_id')).toBe(
-      '/crm/v3/properties/2-67505887/linear_id',
+      '/crm/properties/2026-03/2-67505887/linear_id',
     );
   });
 });
@@ -137,11 +137,11 @@ describe('schemasPath', () => {
 
 describe('pipelinesPath', () => {
   it('builds the pipeline collection path for an object type', () => {
-    expect(pipelinesPath('projects')).toBe('/crm/v3/pipelines/projects');
+    expect(pipelinesPath('projects')).toBe('/crm/pipelines/2026-03/projects');
   });
 
   it('builds a single pipeline path when a pipeline id is given', () => {
-    expect(pipelinesPath('2-67505887', 'pipe-1')).toBe('/crm/v3/pipelines/2-67505887/pipe-1');
+    expect(pipelinesPath('2-67505887', 'pipe-1')).toBe('/crm/pipelines/2026-03/2-67505887/pipe-1');
   });
 });
 
@@ -169,25 +169,28 @@ describe('dated builders (already migrated)', () => {
  * migration is readable from the test output rather than from grep.
  */
 describe('migration status (issue #14)', () => {
+  // Only schemas remains. Verified 2026-09-03 that no dated equivalent exists:
+  // /crm/schemas/2026-03, /crm/schemas/2026-03/{type} and
+  // /crm/custom-objects/2026-03/schemas all return 404.
   const legacyBuilders: Array<[string, string]> = [
-    ['associationListPath', associationListPath('contacts', '5', 'meetings')],
-    ['defaultAssociationPath', defaultAssociationPath('2-1', '5', '2-1', '6')],
-    ['labeledAssociationPath', labeledAssociationPath('2-1', '5', '2-1', '6')],
-    ['associationBatchCreatePath', associationBatchCreatePath('projects', 'contacts')],
-    ['propertiesPath', propertiesPath('2-1')],
     ['schemasPath', schemasPath()],
-    ['pipelinesPath', pipelinesPath('2-1')],
   ];
 
+  // Every builder below was flipped only after calling BOTH surfaces against a
+  // live portal and diffing the response shapes. Objects moved 2026-09-02;
+  // associations, properties and pipelines moved 2026-09-03.
   const datedBuilders: Array<[string, string]> = [
-    // Migrated 2026-09-02: the objects family moved with a one-line change to
-    // OBJECTS_V3. The 56 failing URL assertions that produced were the audit
-    // trail confirming every call site moved with it.
     ['objectPath', objectPath('2-1', '5')],
     ['objectSearchPath', objectSearchPath('2-1')],
     ['objectBatchReadPath', objectBatchReadPath('2-1')],
     ['datedObjectPath', datedObjectPath('projects', '1')],
     ['datedObjectSearchPath', datedObjectSearchPath('projects')],
+    ['associationListPath', associationListPath('contacts', '5', 'meetings')],
+    ['defaultAssociationPath', defaultAssociationPath('2-1', '5', '2-1', '6')],
+    ['labeledAssociationPath', labeledAssociationPath('2-1', '5', '2-1', '6')],
+    ['associationBatchCreatePath', associationBatchCreatePath('projects', 'contacts')],
+    ['propertiesPath', propertiesPath('2-1')],
+    ['pipelinesPath', pipelinesPath('2-1')],
   ];
 
   it.each(legacyBuilders)(
@@ -198,8 +201,10 @@ describe('migration status (issue #14)', () => {
     },
   );
 
-  it.each(datedBuilders)('%s is ALREADY DATED — emits /crm/objects/<version>/', (_name, path) => {
-    expect(path.startsWith(`/crm/objects/${HS_API_VERSION}/`)).toBe(true);
+  // Dated paths are /crm/<family>/<version>/... — the version sits after the
+  // family segment, which is the whole shape change from /crm/vN/<family>/.
+  it.each(datedBuilders)('%s is DATED — emits /crm/<family>/<version>/', (_name, path) => {
+    expect(path).toMatch(new RegExp(`^/crm/[a-z-]+/${HS_API_VERSION}/`));
     expect(path).not.toMatch(/\/crm\/v[34]\//);
   });
 
@@ -216,13 +221,13 @@ describe('migration status (issue #14)', () => {
 describe('association definition builders', () => {
   it('associationLabelsPath is still on legacy v4', () => {
     expect(associationLabelsPath('2-67505887', '2-67505887')).toBe(
-      '/crm/v4/associations/2-67505887/2-67505887/labels',
+      '/crm/associations/2026-03/2-67505887/2-67505887/labels',
     );
   });
 
   it('associationLabelsPath handles a cross-type pairing', () => {
     expect(associationLabelsPath('2-67505887', '2-67505890')).toBe(
-      '/crm/v4/associations/2-67505887/2-67505890/labels',
+      '/crm/associations/2026-03/2-67505887/2-67505890/labels',
     );
   });
 
