@@ -152,7 +152,7 @@ describe('definitionRequest', () => {
   it('creates a cross-type pairing through the v3 schema associations endpoint', () => {
     expect(definitionRequest(contentToVideo)).toEqual({
       method: 'POST',
-      url: `https://api.hubapi.com/crm/v3/schemas/${CONTENT}/associations`,
+      url: `https://api.hubapi.com/crm-object-schemas/2026-03/schemas/${CONTENT}/associations`,
       body: {
         fromObjectTypeId: CONTENT,
         toObjectTypeId: VIDEO,
@@ -411,7 +411,7 @@ describe('ensureAssociationDefinitions', () => {
 
     const post = calls.find(c => c.method === 'POST');
     expect(post).toEqual({
-      url: `https://api.hubapi.com/crm/v3/schemas/${CONTENT}/associations`,
+      url: `https://api.hubapi.com/crm-object-schemas/2026-03/schemas/${CONTENT}/associations`,
       method: 'POST',
       body: {
         fromObjectTypeId: CONTENT,

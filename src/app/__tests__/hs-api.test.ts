@@ -130,8 +130,8 @@ describe('propertiesPath', () => {
 describe('schemasPath', () => {
   it('builds the schemas path with no trailing query string', () => {
     // Callers append their own `?limit=100`.
-    expect(schemasPath()).toBe('/crm/v3/schemas');
-    expect(`${schemasPath()}?limit=100`).toBe('/crm/v3/schemas?limit=100');
+    expect(schemasPath()).toBe('/crm-object-schemas/2026-03/schemas');
+    expect(`${schemasPath()}?limit=100`).toBe('/crm-object-schemas/2026-03/schemas?limit=100');
   });
 });
 
@@ -169,12 +169,10 @@ describe('dated builders (already migrated)', () => {
  * migration is readable from the test output rather than from grep.
  */
 describe('migration status (issue #14)', () => {
-  // Only schemas remains. Verified 2026-09-03 that no dated equivalent exists:
-  // /crm/schemas/2026-03, /crm/schemas/2026-03/{type} and
-  // /crm/custom-objects/2026-03/schemas all return 404.
-  const legacyBuilders: Array<[string, string]> = [
-    ['schemasPath', schemasPath()],
-  ];
+  // All families are now on dated paths. Schemas uses a different root:
+  // /crm-object-schemas/2026-03/schemas (not /crm/<family>/2026-03).
+  // Verified 2026-09-03 from the spec JSON provided by the user.
+  const legacyBuilders: Array<[string, string]> = [];
 
   // Every builder below was flipped only after calling BOTH surfaces against a
   // live portal and diffing the response shapes. Objects moved 2026-09-02;
@@ -233,7 +231,7 @@ describe('association definition builders', () => {
 
   it('schemaAssociationsPath is on the dated 2026-03 surface', () => {
     expect(schemaAssociationsPath('2-67505887')).toBe(
-      '/crm/v3/schemas/2-67505887/associations',
+      '/crm-object-schemas/2026-03/schemas/2-67505887/associations',
     );
   });
 });

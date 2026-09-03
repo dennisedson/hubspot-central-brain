@@ -19,9 +19,7 @@
  *     assoc labels  /crm/associations/2026-03/{a}/{b}/labels          200, identical
  *     properties    /crm/properties/2026-03/{type}                    200, identical
  *     pipelines     /crm/pipelines/2026-03/{type}                     200, identical
- *     schemas       NO DATED EQUIVALENT — /crm/schemas/2026-03,
- *                   /crm/schemas/2026-03/{type} and
- *                   /crm/custom-objects/2026-03/schemas all return 404
+ *     schemas       /crm-object-schemas/2026-03/schemas  (different root — verified from spec JSON 2026-09-03)
  *
  * Note associations hang off the OBJECTS family, not the associations one:
  * `/crm/v4/objects/{t}/{id}/associations/{t}` became
@@ -96,11 +94,10 @@ const ASSOCIATIONS_V4 = `/crm/associations/${HS_API_VERSION}`;
 /** MIGRATED 2026-09-03. Verified live: identical shape on both surfaces. */
 const PROPERTIES_V3 = `/crm/properties/${HS_API_VERSION}`;
 
-/** STILL LEGACY — no dated equivalent exists yet. Verified 2026-09-03: all of
- *  /crm/schemas/2026-03, /crm/schemas/2026-03/{type} and
- *  /crm/custom-objects/2026-03/schemas return 404. Recheck on a later version. */
-// LEGACY v3 — migrate to dated per issue #14
-const SCHEMAS_V3 = '/crm/v3/schemas';
+/** MIGRATED 2026-09-03. Dated path uses a different root than all other CRM
+ *  families: `/crm-object-schemas/2026-03/schemas` (not `/crm/v3/schemas`).
+ *  Verified by the spec at https://developers.hubspot.com/docs/specs/2026-03/crm-schemas-v2026-03.json */
+const SCHEMAS_DATED = `/crm-object-schemas/${HS_API_VERSION}/schemas`;
 
 /** MIGRATED 2026-09-03. Verified live: identical shape on both surfaces. */
 const PIPELINES_V3 = `/crm/pipelines/${HS_API_VERSION}`;
@@ -235,9 +232,8 @@ export function propertiesPath(objectType: string, propertyName?: string): strin
 }
 
 /** All custom object schemas in the portal. Callers append `?limit=…`. */
-// LEGACY v3 — migrate to dated per issue #14
 export function schemasPath(): string {
-  return SCHEMAS_V3;
+  return SCHEMAS_DATED;
 }
 
 /**
@@ -253,16 +249,14 @@ export function schemasPath(): string {
  * of THIS endpoint only — a custom object can be associated with itself, via a
  * labeled definition created through `associationLabelsPath`.
  */
-// LEGACY v3 — migrate to dated per issue #14
 export function schemaAssociationsPath(objectType: string): string {
-  return `${SCHEMAS_V3}/${objectType}/associations`;
+  return `${SCHEMAS_DATED}/${objectType}/associations`;
 }
 
 /**
  * Every pipeline for an object type (`pipelineId` omitted) or one pipeline
  * with its stages (`pipelineId` given).
  */
-// LEGACY v3 — migrate to dated per issue #14
 export function pipelinesPath(objectType: string, pipelineId?: string): string {
   return pipelineId === undefined
     ? `${PIPELINES_V3}/${objectType}`
