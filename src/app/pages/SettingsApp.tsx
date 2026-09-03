@@ -135,7 +135,7 @@ function KanbanColumn({ stage, records }: { stage: PipelineStage; records: Conte
   );
 }
 
-function PipelineBoard({ onShowSettings, onShowChangelog }: { onShowSettings: () => void; onShowChangelog: () => void }) {
+function PipelineBoard({ portalId, onShowSettings, onShowChangelog }: { portalId: number; onShowSettings: () => void; onShowChangelog: () => void }) {
   const [data, setData] = useState<ContentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +146,7 @@ function PipelineBoard({ onShowSettings, onShowChangelog }: { onShowSettings: ()
     setLoading(true);
     setError(null);
     hubspot
-      .serverless('content_data_api', { parameters: {} })
+      .serverless('content_data_api', { parameters: { portalId: String(portalId) } })
       .then((result: { statusCode: number; body: string }) => {
         if (result.statusCode === 200) {
           setData(JSON.parse(result.body) as ContentData);
@@ -407,20 +407,24 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
 
 // --- Changelog component ---
 
-const CHANGELOG_STAGES = ['Identified', 'Drafting', 'Reviewing', 'Published'];
-
-function ChangelogManager({ onBack }: { onBack: () => void }) {
+function ChangelogManager({ portalId, onBack }: { portalId: number; onBack: () => void }) {
   const [records, setRecords] = useState<ContentRecord[]>([]);
+  const [stages, setStages] = useState<PipelineStage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     hubspot
-      .serverless('content_data_api', { parameters: {} })
+      .serverless('content_data_api', {
+        parameters: { portalId: String(portalId), pipeline: 'changelog' },
+      })
       .then((result: { statusCode: number; body: string }) => {
         if (result.statusCode === 200) {
           const data = JSON.parse(result.body) as ContentData;
-          setRecords(data.records.filter(r => r.contentType.toLowerCase() === 'changelog'));
+          // The API now filters to the changelog pipeline and returns THAT
+          // pipeline's stages, so no client-side content_type filtering.
+          setRecords(data.records);
+          setStages(data.stages);
         } else {
           const parsed = JSON.parse(result.body) as { error?: string };
           setError(parsed.error ?? 'Failed to load changelog data');
@@ -459,12 +463,13 @@ function ChangelogManager({ onBack }: { onBack: () => void }) {
         <Button onClick={onBack} variant="secondary" size="sm">← Back</Button>
       </Flex>
       <Flex direction="column" gap="medium">
-        {CHANGELOG_STAGES.map(stage => {
-          const stageRecords = records.filter(r => r.pipelineStage === stage);
+        {stages.map(stage => {
+          // Match on stage.id — r.pipelineStage is a HubSpot stage ID, never a label.
+          const stageRecords = records.filter(r => r.pipelineStage === stage.id);
           return (
-            <Box key={stage}>
+            <Box key={stage.id}>
               <Flex justify="between" align="center">
-                <Text format={{ fontWeight: 'bold' }}>{stage}</Text>
+                <Text format={{ fontWeight: 'bold' }}>{stage.label}</Text>
                 <Tag variant="default">{String(stageRecords.length)}</Tag>
               </Flex>
               <Divider />
@@ -495,10 +500,11 @@ function App({ portalId }: { portalId: number }) {
     return <SettingsPage portalId={portalId} onBack={() => setView('pipeline')} />;
   }
   if (view === 'changelog') {
-    return <ChangelogManager onBack={() => setView('pipeline')} />;
+    return <ChangelogManager portalId={portalId} onBack={() => setView('pipeline')} />;
   }
   return (
     <PipelineBoard
+      portalId={portalId}
       onShowSettings={() => setView('settings')}
       onShowChangelog={() => setView('changelog')}
     />

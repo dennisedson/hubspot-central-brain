@@ -18,8 +18,14 @@ interface ContentRecord {
 }
 
 interface ContentDataContext {
-  accountId: number;
-  body?: Record<string, string>;
+  accountId?: number;
+  parameters?: Record<string, string | undefined>;
+  query?: Record<string, string | undefined>;
+  body?: Record<string, string | undefined>;
+}
+
+function param(ctx: ContentDataContext, key: string): string | undefined {
+  return ctx.parameters?.[key] ?? ctx.query?.[key] ?? ctx.body?.[key];
 }
 
 export async function main(context: ContentDataContext): Promise<{ statusCode: number; body: string }> {
@@ -28,15 +34,23 @@ export async function main(context: ContentDataContext): Promise<{ statusCode: n
     return { statusCode: 500, body: JSON.stringify({ error: 'No HubSpot access token' }) };
   }
 
+  // hubspot.serverless() from a page or card does not populate context.accountId;
+  // callers pass portalId explicitly. Same fallback as AppSettingsApi.
+  const portalId = context.accountId ?? parseInt(param(context, 'portalId') ?? '0', 10);
+
   let config;
   try {
-    config = getPortalConfig(context.accountId);
+    config = getPortalConfig(portalId);
   } catch {
-    return { statusCode: 500, body: JSON.stringify({ error: `No portal config for ${context.accountId}` }) };
+    return { statusCode: 500, body: JSON.stringify({ error: `No portal config for ${portalId}` }) };
   }
 
   const { objectTypeId, pipelines } = config.content;
-  const pipelineId = pipelines.content.pipelineId;
+  // content_piece spans two pipelines. Callers pick one; the stages returned and
+  // the records returned must come from the SAME pipeline, or the caller ends up
+  // matching stage ids against another pipeline's stages and shows nothing.
+  const requested = param(context, 'pipeline') === 'changelog' ? 'changelog' : 'content';
+  const pipelineId = pipelines[requested].pipelineId;
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
@@ -46,7 +60,9 @@ export async function main(context: ContentDataContext): Promise<{ statusCode: n
       method: 'POST',
       headers,
       body: JSON.stringify({
-        filterGroups: [],
+        filterGroups: [
+          { filters: [{ propertyName: 'hs_pipeline', operator: 'EQ', value: pipelineId }] },
+        ],
         properties: ['title', 'content_type', 'hs_pipeline_stage', 'target_date', 'linear_issue_url'],
         sorts: [{ propertyName: 'hs_lastmodifieddate', direction: 'DESCENDING' }],
         limit: 100,
