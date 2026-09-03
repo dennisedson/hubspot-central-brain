@@ -1,5 +1,8 @@
 # Vault template
 
+**New to Obsidian? Read [SETUP.md](SETUP.md) first** — it walks through installing it, what a vault
+actually is, and the folder-name trap. This file covers the conventions.
+
 A skeleton for the Obsidian vault described in the strategy doc, §6 "Obsidian + Cowork Layer".
 Copy it to wherever the vault lives — it is version-controlled here because the vault sits on a
 different machine from this repo, and Cowork on another again.
