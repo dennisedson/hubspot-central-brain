@@ -417,14 +417,18 @@ async function main() {
     if (summary) {
       console.log(`\nUpdating "${name}" (id=${summary.id})...`);
       const full = await hs(token, 'GET', `/automation/v4/flows/${summary.id}`);
-      // Strip server-set read-only fields — PUT rejects them with 400.
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { id, createdAt, updatedAt, insertedAt, createdBy, updatedBy, createdById, updatedById, portalId: _portalId, status, ...writable } = full;
-      const result = await hs(token, 'PUT', `/automation/v4/flows/${full.id}`, {
-        ...writable,
+      // Build an explicit minimal update — never spread the GET response, which
+      // contains server-set read-only fields that cause a 400 if echoed back.
+      const updatePayload: Record<string, unknown> = {
+        name: full.name,
+        isEnabled: full.isEnabled,
+        objectTypeId: full.objectTypeId,
+        startActionId: full.startActionId,
+        enrollmentCriteria: full.enrollmentCriteria,
         actions: (payload as Record<string, unknown>).actions,
         revisionId: full.revisionId,
-      });
+      };
+      const result = await hs(token, 'PUT', `/automation/v4/flows/${full.id}`, updatePayload);
       console.log(`  ✓ Updated id=${result.id} (isEnabled=${full.isEnabled} preserved)`);
     } else {
       console.log(`\nCreating "${name}"...`);
