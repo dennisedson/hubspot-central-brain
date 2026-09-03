@@ -135,7 +135,7 @@ function KanbanColumn({ stage, records }: { stage: PipelineStage; records: Conte
   );
 }
 
-function PipelineBoard({ onShowSettings }: { onShowSettings: () => void }) {
+function PipelineBoard({ onShowSettings, onShowChangelog }: { onShowSettings: () => void; onShowChangelog: () => void }) {
   const [data, setData] = useState<ContentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -214,6 +214,7 @@ function PipelineBoard({ onShowSettings }: { onShowSettings: () => void }) {
         <Flex align="center" gap="small">
           <Text>{visibleCount} of {data.total} records</Text>
           <Button onClick={loadData} variant="secondary" size="sm">Refresh</Button>
+          <Button onClick={onShowChangelog} variant="secondary" size="sm">📋 Changelog</Button>
           <Button onClick={onShowSettings} variant="secondary" size="sm">⚙ Settings</Button>
         </Flex>
       </Flex>
@@ -404,16 +405,104 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
   );
 }
 
+// --- Changelog component ---
+
+const CHANGELOG_STAGES = ['Identified', 'Drafting', 'Reviewing', 'Published'];
+
+function ChangelogManager({ onBack }: { onBack: () => void }) {
+  const [records, setRecords] = useState<ContentRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    hubspot
+      .serverless('content_data_api', { parameters: {} })
+      .then((result: { statusCode: number; body: string }) => {
+        if (result.statusCode === 200) {
+          const data = JSON.parse(result.body) as ContentData;
+          setRecords(data.records.filter(r => r.contentType.toLowerCase() === 'changelog'));
+        } else {
+          const parsed = JSON.parse(result.body) as { error?: string };
+          setError(parsed.error ?? 'Failed to load changelog data');
+        }
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : 'Failed to load changelog data');
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <Flex justify="center" align="center">
+        <LoadingSpinner label="Loading changelog..." />
+      </Flex>
+    );
+  }
+
+  if (error) {
+    return (
+      <Flex direction="column" gap="medium">
+        <Alert title="Failed to load changelog" variant="error">
+          <Text>{error}</Text>
+        </Alert>
+        <Button onClick={onBack} variant="secondary">← Back</Button>
+      </Flex>
+    );
+  }
+
+  return (
+    <Box>
+      <PageTitle>Changelog Manager</PageTitle>
+      <Flex justify="between" align="center">
+        <Heading>Changelog Manager</Heading>
+        <Button onClick={onBack} variant="secondary" size="sm">← Back</Button>
+      </Flex>
+      <Flex direction="column" gap="medium">
+        {CHANGELOG_STAGES.map(stage => {
+          const stageRecords = records.filter(r => r.pipelineStage === stage);
+          return (
+            <Box key={stage}>
+              <Flex justify="between" align="center">
+                <Text format={{ fontWeight: 'bold' }}>{stage}</Text>
+                <Tag variant="default">{String(stageRecords.length)}</Tag>
+              </Flex>
+              <Divider />
+              {stageRecords.length === 0 ? (
+                <Text variant="microcopy">No items</Text>
+              ) : (
+                stageRecords.map(record => (
+                  <Box key={record.id}>
+                    <Text>{record.title}</Text>
+                  </Box>
+                ))
+              )}
+            </Box>
+          );
+        })}
+      </Flex>
+    </Box>
+  );
+}
+
 // --- Root app ---
 
-type View = 'pipeline' | 'settings';
+type View = 'pipeline' | 'settings' | 'changelog';
 
 function App({ portalId }: { portalId: number }) {
   const [view, setView] = useState<View>('pipeline');
   if (view === 'settings') {
     return <SettingsPage portalId={portalId} onBack={() => setView('pipeline')} />;
   }
-  return <PipelineBoard onShowSettings={() => setView('settings')} />;
+  if (view === 'changelog') {
+    return <ChangelogManager onBack={() => setView('pipeline')} />;
+  }
+  return (
+    <PipelineBoard
+      onShowSettings={() => setView('settings')}
+      onShowChangelog={() => setView('changelog')}
+    />
+  );
 }
 
 hubspot.extend<'pages'>(({ context }) => {
