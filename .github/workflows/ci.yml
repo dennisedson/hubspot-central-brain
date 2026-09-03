@@ -32,6 +32,12 @@ jobs:
       - name: Test
         run: npm test
 
+      # UI extension directories carry their own tsconfig and toolchain, so the
+      # root typecheck cannot see them. Without these, card and page .tsx files
+      # are only validated at `hs project upload` — after a push. (#6)
+      - name: Typecheck UI extensions
+        run: npm run typecheck:cards && npm run typecheck:pages && npm run typecheck:settings
+
   validate:
     name: HubSpot Dry-Run Validate
     runs-on: ubuntu-latest
