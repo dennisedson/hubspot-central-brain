@@ -50,7 +50,11 @@ async function main() {
       ],
       associatedObjects: [],
     });
-    objectTypeId = schema.objectTypeId!;
+    if (!schema.objectTypeId) {
+      console.error('Schema created but objectTypeId was not returned.');
+      process.exit(1);
+    }
+    objectTypeId = schema.objectTypeId;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('already exists') || msg.includes('OBJECT_TYPE_EXISTS')) {
