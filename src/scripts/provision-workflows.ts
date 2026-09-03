@@ -417,8 +417,11 @@ async function main() {
     if (summary) {
       console.log(`\nUpdating "${name}" (id=${summary.id})...`);
       const full = await hs(token, 'GET', `/automation/v4/flows/${summary.id}`);
+      // Strip server-set read-only fields — PUT rejects them with 400.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { id, createdAt, updatedAt, insertedAt, createdBy, updatedBy, createdById, updatedById, portalId: _portalId, status, ...writable } = full;
       const result = await hs(token, 'PUT', `/automation/v4/flows/${full.id}`, {
-        ...full,
+        ...writable,
         actions: (payload as Record<string, unknown>).actions,
         revisionId: full.revisionId,
       });
