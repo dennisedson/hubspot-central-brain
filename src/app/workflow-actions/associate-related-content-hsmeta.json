@@ -2,7 +2,7 @@
   "uid": "associate_related_content",
   "type": "workflow-action",
   "config": {
-    "actionUrl": "${ASSOCIATE_RELATED_CONTENT_URL}",
+    "actionUrl": "https://51869810.hs-sites.com/hs/serverless/associate-related-content",
     "isPublished": true,
     "supportedClients": [{ "client": "WORKFLOWS" }],
     "objectTypes": [],

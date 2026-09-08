@@ -2,7 +2,7 @@
   "uid": "generate_social_draft_v1",
   "type": "workflow-action",
   "config": {
-    "actionUrl": "${GENERATE_SOCIAL_DRAFT_URL}",
+    "actionUrl": "https://51869810.hs-sites.com/hs/serverless/generate-social-draft",
     "isPublished": true,
     "supportedClients": [{ "client": "WORKFLOWS" }],
     "objectTypes": [],
