@@ -1,0 +1,73 @@
+{
+  "uid": "breeze_meeting_router_tool",
+  "type": "workflow-action",
+  "config": {
+    "actionUrl": "https://51869810.hs-sites.com/hs/serverless/breeze-meeting-router",
+    "isPublished": false,
+    "supportedClients": [
+      {
+        "client": "AGENTS",
+        "toolType": "TAKE_ACTION",
+        "llmConfig": {
+          "actionDescription": "Use this tool to route meeting action items into the right systems. Given a meeting summary and a list of action items (one per line), it classifies each item as: a content idea (creates a HubSpot content_piece record in Idea stage), a Linear task suggestion (engineering/dev work), or a HubSpot task suggestion (general follow-up). Use this after a meeting when the user says 'route these action items', 'process my meeting notes', 'create content ideas from this meeting', or provides a list of follow-ups. The meetingSummary provides context but is not required. The actionItems should be provided as a newline-separated list. Only content ideas are automatically created in HubSpot; Linear and HubSpot tasks are returned as suggestions for the user to create manually."
+        }
+      }
+    ],
+    "inputFields": [
+      {
+        "typeDefinition": {
+          "name": "meetingSummary",
+          "type": "string",
+          "fieldType": "textarea"
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "actionItems",
+          "type": "string",
+          "fieldType": "textarea"
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      }
+    ],
+    "outputFields": [
+      {
+        "typeDefinition": { "name": "contentIdeasCreated", "type": "string", "externalOptions": false }
+      },
+      {
+        "typeDefinition": { "name": "hubspotTasksSuggested", "type": "string", "externalOptions": false }
+      },
+      {
+        "typeDefinition": { "name": "linearTasksSuggested", "type": "string", "externalOptions": false }
+      },
+      {
+        "typeDefinition": { "name": "routingSummary", "type": "string", "externalOptions": false }
+      }
+    ],
+    "labels": {
+      "en": {
+        "actionName": "Route Meeting Action Items",
+        "appDisplayName": "Central Brain",
+        "actionDescription": "Classifies meeting action items and auto-creates HubSpot content_piece records for content ideas.",
+        "actionCardContent": "Route meeting action items",
+        "inputFieldLabels": {
+          "meetingSummary": "Meeting Summary",
+          "actionItems": "Action Items"
+        },
+        "inputFieldDescriptions": {
+          "meetingSummary": "Brief summary of what the meeting was about. Used as context for new content record notes. Optional.",
+          "actionItems": "List of action items from the meeting, one per line. Bullet points and numbering are stripped automatically."
+        },
+        "outputFieldLabels": {
+          "contentIdeasCreated": "Content Ideas Created",
+          "hubspotTasksSuggested": "HubSpot Tasks Suggested",
+          "linearTasksSuggested": "Linear Tasks Suggested",
+          "routingSummary": "Routing Summary"
+        }
+      }
+    }
+  }
+}

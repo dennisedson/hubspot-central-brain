@@ -1,0 +1,58 @@
+{
+  "uid": "breeze_friction_finder_tool",
+  "type": "workflow-action",
+  "config": {
+    "actionUrl": "https://51869810.hs-sites.com/hs/serverless/breeze-friction-finder",
+    "isPublished": false,
+    "supportedClients": [
+      {
+        "client": "AGENTS",
+        "toolType": "GET_DATA",
+        "llmConfig": {
+          "actionDescription": "Use this tool to discover what developer friction themes exist in your HubSpot content records and identify coverage gaps. It aggregates content pieces that have an Enterpret friction theme set, ranks them by developer demand (quote count), and identifies themes with high demand but few content pieces. Use this when the user asks: 'what developer pain points do we have content for?', 'which friction themes are underserved?', 'what are developers struggling with?', 'show me the Enterpret theme coverage', or 'where are the content gaps?'. Note: this reads themes already synced into HubSpot via the Enterpret MCP sync runbook — it does not query Enterpret directly."
+        }
+      }
+    ],
+    "inputFields": [
+      {
+        "typeDefinition": {
+          "name": "limit",
+          "type": "number",
+          "fieldType": "number"
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      }
+    ],
+    "outputFields": [
+      {
+        "typeDefinition": { "name": "themes", "type": "string", "externalOptions": false }
+      },
+      {
+        "typeDefinition": { "name": "coverageGaps", "type": "string", "externalOptions": false }
+      },
+      {
+        "typeDefinition": { "name": "themeCount", "type": "string", "externalOptions": false }
+      }
+    ],
+    "labels": {
+      "en": {
+        "actionName": "Find Developer Friction Themes",
+        "appDisplayName": "Central Brain",
+        "actionDescription": "Aggregates Enterpret friction themes from content records, ranked by developer demand, with coverage gap analysis.",
+        "actionCardContent": "Find friction themes (top {{limit}})",
+        "inputFieldLabels": {
+          "limit": "Max Themes to Return"
+        },
+        "inputFieldDescriptions": {
+          "limit": "Maximum number of themes to return, ranked by developer quote count. Default 15, max 30."
+        },
+        "outputFieldLabels": {
+          "themes": "Friction Themes",
+          "coverageGaps": "Coverage Gaps",
+          "themeCount": "Total Theme Count"
+        }
+      }
+    }
+  }
+}

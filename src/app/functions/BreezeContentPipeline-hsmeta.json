@@ -1,0 +1,12 @@
+{
+  "uid": "breeze_content_pipeline",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/BreezeContentPipeline.js",
+    "endpoint": {
+      "path": "breeze-content-pipeline",
+      "methods": ["POST"]
+    },
+    "secretKeys": ["HS_ACCESS_TOKEN", "PRIVATE_APP_ACCESS_TOKEN"]
+  }
+}

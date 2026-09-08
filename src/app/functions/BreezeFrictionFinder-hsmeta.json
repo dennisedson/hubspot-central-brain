@@ -1,0 +1,12 @@
+{
+  "uid": "breeze_friction_finder",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/BreezeFrictionFinder.js",
+    "endpoint": {
+      "path": "breeze-friction-finder",
+      "methods": ["POST"]
+    },
+    "secretKeys": ["HS_ACCESS_TOKEN", "PRIVATE_APP_ACCESS_TOKEN"]
+  }
+}

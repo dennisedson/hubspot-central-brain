@@ -1,0 +1,12 @@
+{
+  "uid": "breeze_meeting_router",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/BreezeMeetingRouter.js",
+    "endpoint": {
+      "path": "breeze-meeting-router",
+      "methods": ["POST"]
+    },
+    "secretKeys": ["HS_ACCESS_TOKEN", "PRIVATE_APP_ACCESS_TOKEN"]
+  }
+}

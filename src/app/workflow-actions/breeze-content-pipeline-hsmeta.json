@@ -1,0 +1,73 @@
+{
+  "uid": "breeze_content_pipeline_tool",
+  "type": "workflow-action",
+  "config": {
+    "actionUrl": "https://51869810.hs-sites.com/hs/serverless/breeze-content-pipeline",
+    "isPublished": false,
+    "supportedClients": [
+      {
+        "client": "AGENTS",
+        "toolType": "GET_DATA",
+        "llmConfig": {
+          "actionDescription": "Use this tool to query the HubSpot content pipeline and see what content is in each stage. Returns a formatted list of all active content pieces grouped by pipeline stage (Idea, Outline, Drafting, Editing, Review, Published). Use this when the user asks questions like 'what content is in review?', 'what am I working on?', 'show me the content pipeline', 'what's overdue?', or 'what content is in drafting?'. Optionally filter by pipeline ('content' for the main content pipeline, 'changelog' for changelog entries) and by stage name. If no pipeline is specified, defaults to the content pipeline. Results include title, content type, and target date for each record."
+        }
+      }
+    ],
+    "inputFields": [
+      {
+        "typeDefinition": {
+          "name": "pipeline",
+          "type": "enumeration",
+          "fieldType": "select",
+          "options": [
+            { "value": "content", "label": "Content Pipeline" },
+            { "value": "changelog", "label": "Changelog Pipeline" }
+          ]
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "stageFilter",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      }
+    ],
+    "outputFields": [
+      {
+        "typeDefinition": { "name": "pipelineSummary", "type": "string", "externalOptions": false }
+      },
+      {
+        "typeDefinition": { "name": "recordCount", "type": "string", "externalOptions": false }
+      },
+      {
+        "typeDefinition": { "name": "pipeline", "type": "string", "externalOptions": false }
+      }
+    ],
+    "labels": {
+      "en": {
+        "actionName": "Query Content Pipeline",
+        "appDisplayName": "Central Brain",
+        "actionDescription": "Returns the current state of the content or changelog pipeline, grouped by stage.",
+        "actionCardContent": "Query {{pipeline}} pipeline",
+        "inputFieldLabels": {
+          "pipeline": "Pipeline",
+          "stageFilter": "Stage Name Filter"
+        },
+        "inputFieldDescriptions": {
+          "pipeline": "Which pipeline to query: 'content' (blog posts, tutorials, videos) or 'changelog' (changelog entries). Defaults to content.",
+          "stageFilter": "Optional: filter to stages whose name contains this text (e.g. 'review', 'drafting'). Leave blank for all active stages."
+        },
+        "outputFieldLabels": {
+          "pipelineSummary": "Pipeline Summary",
+          "recordCount": "Total Records",
+          "pipeline": "Pipeline Queried"
+        }
+      }
+    }
+  }
+}
