@@ -3,7 +3,7 @@
   "type": "workflow-action",
   "config": {
     "actionUrl": "https://51869810.hs-sites.com/hs/serverless/breeze-meeting-router",
-    "isPublished": false,
+    "isPublished": true,
     "objectTypes": [],
     "supportedClients": [
       {
