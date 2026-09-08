@@ -14,7 +14,7 @@ So Enterpret data is written into HubSpot out-of-band, and the card reads what's
 ## What you need on the work machine
 
 - Enterpret MCP connected to Claude
-- A HubSpot private-app token for the target portal — `HUBSPOT_<PORTAL>_SERVICE_KEY` from this repo's `.env`
+- HubSpot MCP connector connected to Claude (handles auth — no token needed)
 
 ## Target fields
 
@@ -51,34 +51,23 @@ On the **Content Piece** custom object:
 
 ## Paste this into Claude on the work machine
 
-> I have Enterpret connected over MCP and a HubSpot private-app token in `$HS_TOKEN`.
+> I have both Enterpret and HubSpot connected over MCP.
 >
-> For the HubSpot **dev** portal (51869810), custom object `2-67505887`:
+> 1. Use the HubSpot MCP to fetch all records of the **content_piece** custom object, requesting properties `title` and `enterpret_theme`.
+> 2. For each record that has a non-empty `enterpret_theme`, use the Enterpret MCP to find developer quotes backing that theme. Take at most 5, most recent first.
+> 3. Write them back using the HubSpot MCP — patch each record with:
+>    - `enterpret_quotes`: a **stringified** JSON array of quote objects (each with `text`, `source`, `sentiment`, `createdAt`)
+>    - `enterpret_quote_count`: the count as a string
 >
-> 1. Read all records, requesting properties `title`, `enterpret_theme`:
->    ```
->    GET https://api.hubapi.com/crm/objects/2026-03/2-67505887?limit=100&properties=title,enterpret_theme
->    Authorization: Bearer $HS_TOKEN
->    ```
-> 2. For each record that has a non-empty `enterpret_theme`, query Enterpret over MCP for the developer quotes backing that theme. Take at most 5, most recent first.
-> 3. Write them back, one PATCH per record:
->    ```
->    PATCH https://api.hubapi.com/crm/objects/2026-03/2-67505887/{recordId}
->    Authorization: Bearer $HS_TOKEN
->    Content-Type: application/json
->
->    {"properties":{
->       "enterpret_quotes":"<JSON array as a STRING>",
->       "enterpret_quote_count":"<count>"
->    }}
->    ```
->    `enterpret_quotes` is a textarea, so the JSON array must be **stringified** — a JSON string containing JSON, not a nested object.
+>    `enterpret_quotes` is a textarea property, so the JSON array must be a string, not a nested object.
 >
 > Skip records with no theme. Don't overwrite `enterpret_quotes` with an empty array if Enterpret returns nothing — leave the existing value alone. Report how many records you updated and how many you skipped.
 
-Then swap the portal ID and objectTypeId from the table for staging and prod.
+The HubSpot connector is already scoped to your portal — no token or portal ID needed. For staging/prod, reconnect the HubSpot connector to the target portal before running.
 
 ## Checking it worked
+
+Ask the HubSpot MCP to fetch a specific `content_piece` record by ID and return `enterpret_theme`, `enterpret_quote_count`, and `enterpret_quotes`. Or use curl if you have a token handy:
 
 ```bash
 curl -s -H "Authorization: Bearer $HS_TOKEN" \
