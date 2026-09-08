@@ -23,9 +23,36 @@ interface PipelineStage {
   metadata?: { isClosed?: string };
 }
 
+/** HubSpot CRM search page size. The handler does not paginate; see the
+ *  truncation note it appends when `total` exceeds this. */
+const PAGE_SIZE = 100;
+
 interface CrmRecord {
   id: string;
   properties: Record<string, string | null>;
+}
+
+/**
+ * Render a target date, or nothing at all if it will not parse.
+ *
+ * HubSpot date properties come back as `YYYY-MM-DD` on some surfaces and as an
+ * epoch-millisecond string on others; `new Date("1735689600000")` is an
+ * Invalid Date, so numeric strings are parsed as numbers. Anything still
+ * unparseable renders as empty rather than putting the literal text
+ * "Invalid Date" into the agent's context. Dates are formatted in UTC because
+ * that is how HubSpot stores them — without it the day slips in negative
+ * offsets.
+ */
+function formatTargetDate(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const when = /^\d+$/.test(raw) ? new Date(Number(raw)) : new Date(raw);
+  if (Number.isNaN(when.getTime())) return '';
+  const formatted = when.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+  return ` (target: ${formatted})`;
 }
 
 export async function main(context: BreezeContentPipelineContext): Promise<{ statusCode: number; body: string }> {
@@ -65,7 +92,7 @@ export async function main(context: BreezeContentPipelineContext): Promise<{ sta
         ],
         properties: ['title', 'content_type', 'hs_pipeline_stage', 'target_date', 'linear_issue_url'],
         sorts: [{ propertyName: 'hs_pipeline_stage', direction: 'ASCENDING' }],
-        limit: 100,
+        limit: PAGE_SIZE,
         after: '0',
       }),
     }),
@@ -100,16 +127,23 @@ export async function main(context: BreezeContentPipelineContext): Promise<{ sta
     if (recordsByStage[stageId] !== undefined) {
       const title = r.properties.title ?? 'Untitled';
       const type = r.properties.content_type ? ` [${r.properties.content_type}]` : '';
-      const date = r.properties.target_date
-        ? ` (target: ${new Date(r.properties.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`
-        : '';
+      const date = formatTargetDate(r.properties.target_date);
       recordsByStage[stageId].push(`${title}${type}${date}`);
     }
   }
 
-  const totalRecords = search.results.length;
+  // The header must count only what is actually listed below. `results.length`
+  // is every record the search returned, including the closed and archived
+  // stages that `visibleStages` deliberately drops — reporting that as the
+  // "active" count overstated the pipeline by every published record in it.
+  const visibleStageIds = new Set(visibleStages.map(s => s.id));
+  const shownCount = search.results.filter(r =>
+    visibleStageIds.has(r.properties.hs_pipeline_stage ?? ''),
+  ).length;
+
   const label = requestedPipeline.charAt(0).toUpperCase() + requestedPipeline.slice(1);
-  const lines: string[] = [`${label} Pipeline — ${totalRecords} active record${totalRecords !== 1 ? 's' : ''}\n`];
+  const scope = stageFilter ? `matching "${stageFilter}"` : 'active';
+  const lines: string[] = [`${label} Pipeline — ${shownCount} ${scope} record${shownCount !== 1 ? 's' : ''}\n`];
 
   for (const stage of visibleStages) {
     const records = recordsByStage[stage.id] ?? [];
@@ -126,10 +160,21 @@ export async function main(context: BreezeContentPipelineContext): Promise<{ sta
   // Surface any records in stages outside the visible set (e.g. archived)
   const hiddenCount = search.results.filter(r => {
     const stageLabel = stageIndex.get(r.properties.hs_pipeline_stage ?? '');
-    return !visibleStages.find(s => s.id === r.properties.hs_pipeline_stage) && stageLabel;
+    return !visibleStageIds.has(r.properties.hs_pipeline_stage ?? '') && stageLabel;
   }).length;
   if (hiddenCount > 0 && !stageFilter) {
     lines.push(`\n(${hiddenCount} record${hiddenCount !== 1 ? 's' : ''} in closed/archived stages not shown)`);
+  }
+
+  // The search is capped at PAGE_SIZE with no pagination. Say so when the cap
+  // bites: an agent given a silently truncated list answers "what is in
+  // review?" confidently and wrongly.
+  const matched = search.total ?? search.results.length;
+  if (matched > search.results.length) {
+    lines.push(
+      `\n(truncated: showing the first ${search.results.length} of ${matched} records in this pipeline — ` +
+      'narrow the request with a stage filter for a complete list)',
+    );
   }
 
   return {
@@ -137,7 +182,7 @@ export async function main(context: BreezeContentPipelineContext): Promise<{ sta
     body: JSON.stringify({
       outputFields: {
         pipelineSummary: lines.join('\n'),
-        recordCount: String(totalRecords),
+        recordCount: String(shownCount),
         pipeline: requestedPipeline,
       },
     }),
