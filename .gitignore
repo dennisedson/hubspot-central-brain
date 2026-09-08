@@ -29,7 +29,6 @@ Thumbs.db
 
 # Editor
 .vscode/settings.json
-src/app/settings/package-lock.json
 src/app/settings/node_modules/
 src/app/functions/package-lock.json
 src/app/pages/package-lock.json
