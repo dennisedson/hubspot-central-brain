@@ -36,19 +36,32 @@ const LINEAR_KEYWORDS = [
   'feature', 'ticket', 'linear', 'engineer', 'dev',
 ];
 
+/**
+ * Match a keyword on WORD BOUNDARIES, never as a bare substring.
+ *
+ * `lower.includes(k)` looked reasonable until the short keywords started
+ * matching inside ordinary words: 'pr' hit "Priya" and "approve", 'ci' hit
+ * "decision", 'dev' hit "device", 'test' hit "latest". Every one of those
+ * follow-ups was silently routed to Linear. Multi-word keywords such as
+ * "pull request" still match, because \b anchors only the outer edges.
+ */
+function matchesKeyword(lower: string, keyword: string): boolean {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`\\b${escaped}\\b`).test(lower);
+}
+
 function classify(item: string): { category: ItemCategory; reason: string } {
-  const lower = item.toLowerCase();
-
-  const contentScore = CONTENT_KEYWORDS.filter(k => lower.includes(k)).length;
-  const linearScore = LINEAR_KEYWORDS.filter(k => lower.includes(k)).length;
-
   if (item.trim().length < 5) return { category: 'skip', reason: 'too short to classify' };
 
-  if (contentScore > 0 && contentScore >= linearScore) {
-    return { category: 'content_idea', reason: `matched: ${CONTENT_KEYWORDS.filter(k => lower.includes(k)).slice(0, 2).join(', ')}` };
+  const lower = item.toLowerCase();
+  const contentHits = CONTENT_KEYWORDS.filter(k => matchesKeyword(lower, k));
+  const linearHits = LINEAR_KEYWORDS.filter(k => matchesKeyword(lower, k));
+
+  if (contentHits.length > 0 && contentHits.length >= linearHits.length) {
+    return { category: 'content_idea', reason: `matched: ${contentHits.slice(0, 2).join(', ')}` };
   }
-  if (linearScore > 0) {
-    return { category: 'linear_task', reason: `matched: ${LINEAR_KEYWORDS.filter(k => lower.includes(k)).slice(0, 2).join(', ')}` };
+  if (linearHits.length > 0) {
+    return { category: 'linear_task', reason: `matched: ${linearHits.slice(0, 2).join(', ')}` };
   }
   return { category: 'hubspot_task', reason: 'general follow-up' };
 }
@@ -70,7 +83,7 @@ async function createContentIdea(
         notes,
         hs_pipeline: pipelineId,
         hs_pipeline_stage: stageId,
-        content_type: 'blog post',
+        content_type: 'blog_post',
       },
     }),
   });
