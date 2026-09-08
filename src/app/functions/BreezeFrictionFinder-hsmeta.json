@@ -7,6 +7,6 @@
       "path": "breeze-friction-finder",
       "methods": ["POST"]
     },
-    "secretKeys": ["HS_ACCESS_TOKEN", "PRIVATE_APP_ACCESS_TOKEN"]
+    "secretKeys": ["HS_ACCESS_TOKEN"]
   }
 }

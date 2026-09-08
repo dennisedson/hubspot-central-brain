@@ -4,6 +4,7 @@
   "config": {
     "actionUrl": "https://51869810.hs-sites.com/hs/serverless/breeze-meeting-router",
     "isPublished": false,
+    "objectTypes": [],
     "supportedClients": [
       {
         "client": "AGENTS",
