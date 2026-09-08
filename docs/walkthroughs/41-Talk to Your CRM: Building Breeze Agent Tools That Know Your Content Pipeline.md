@@ -13,9 +13,9 @@
     1.  **The function file** (`BreezeContentPipeline.ts`) — Read `context.body.inputFields` for inputs and `context.accountId ?? context.body.origin?.portalId` for the portal ID. Query CRM objects, group by pipeline stage, return a text summary in `outputFields`. Every value must be a string — no objects, no arrays.
     2.  **The function hsmeta** (`BreezeContentPipeline-hsmeta.json`) — Standard `app-function` config with `endpoint.path` and `secretKeys`. Do NOT include `PRIVATE_APP_ACCESS_TOKEN` — it's a reserved keyword. Use `HS_ACCESS_TOKEN` only.
     3.  **The workflow action hsmeta** (`breeze-content-pipeline-hsmeta.json`) — Set `supportedClients[0].client: "AGENTS"`, `toolType: "GET_DATA"` (or `TAKE_ACTION` for write operations), and write a clear `actionDescription` — this is the prompt the AI reads. Add `"objectTypes": []` — required field even when empty. Set `actionUrl` to your project's public endpoint URL.
-    4.  **The TAKE_ACTION pattern** (`BreezeMeetingRouter.ts`) — For tools that write data, use `toolType: "TAKE_ACTION"`. Classify input, call the HubSpot CRM API to create records, return a human-readable summary of what was done.
+    4.  **The TAKE_ACTION pattern** (`BreezeMeetingRouter.ts`) — For tools that write data, use `toolType: "TAKE_ACTION"`. Classify input, call the HubSpot CRM API to create records, return a human-readable summary of what was done. Two traps worth showing on screen: any `content_type` you write must be one of the provisioned enum options (`blog_post`, not `blog post`, or HubSpot 400s every create while your tool still returns 200), and keyword matching needs word boundaries — `"...".includes("pr")` matches "Priya".
 
-*   **Testing & Wrap-up (8:00 - 10:00):** After deploying with `hs project upload`, go to HubSpot → Automation → Workflows → Custom actions. Your new tools appear there. For agent testing, install the "Developer Tool Testing Agent" from the HubSpot Marketplace — it lets you call your tools directly from the AI assistant with custom inputs. Verify the `outputFields` come back as strings and the `actionDescription` triggers correctly. Wrap up: you now have an AI assistant that can query your content pipeline, find friction theme coverage gaps, and route meeting notes into HubSpot — all without leaving the chat.
+*   **Testing & Wrap-up (8:00 - 10:00):** After deploying with `hs project upload`, go to HubSpot → Automation → Workflows → Custom actions. Your new tools appear there. For agent testing, install the "Developer Tool Testing Agent" from the HubSpot Marketplace — it lets you call your tools directly from the AI assistant with custom inputs. Verify the `outputFields` come back as strings and the `actionDescription` triggers correctly. Then write handler tests — these tools return 200 even when every CRM write inside them failed, so a green deploy proves nothing; assert the exact request bodies instead. Wrap up: you now have an AI assistant that can query your content pipeline, find friction theme coverage gaps, and route meeting notes into HubSpot — all without leaving the chat.
 
 **💻 Screen-Ready Code Snippets:**
 
@@ -26,7 +26,7 @@
   "type": "workflow-action",
   "config": {
     "actionUrl": "https://YOUR_PORTAL_ID.hs-sites.com/hs/serverless/breeze-content-pipeline",
-    "isPublished": false,
+    "isPublished": true,
     "objectTypes": [],
     "supportedClients": [
       {
