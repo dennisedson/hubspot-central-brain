@@ -16,6 +16,10 @@ interface BreezeFrictionFinderContext {
   accountId: number;
 }
 
+/** HubSpot CRM search page size. The handler does not paginate; see the
+ *  truncation note it appends when `total` exceeds this. */
+const PAGE_SIZE = 100;
+
 interface CrmRecord {
   id: string;
   properties: Record<string, string | null>;
@@ -62,7 +66,7 @@ export async function main(context: BreezeFrictionFinderContext): Promise<{ stat
       ],
       properties: ['title', 'enterpret_theme', 'enterpret_quote_count', 'hs_pipeline_stage', 'content_type'],
       sorts: [{ propertyName: 'enterpret_quote_count', direction: 'DESCENDING' }],
-      limit: 100,
+      limit: PAGE_SIZE,
       after: '0',
     }),
   });
@@ -81,10 +85,10 @@ export async function main(context: BreezeFrictionFinderContext): Promise<{ stat
     const quoteCount = parseInt(r.properties.enterpret_quote_count ?? '0', 10) || 0;
     const title = r.properties.title ?? 'Untitled';
 
-    if (!themeMap.has(theme)) {
-      themeMap.set(theme, { theme, quoteCount, contentCount: 0, titles: [] });
-    }
-    const entry = themeMap.get(theme)!;
+    const existing = themeMap.get(theme);
+    const entry = existing ?? { theme, quoteCount: 0, contentCount: 0, titles: [] };
+    if (!existing) themeMap.set(theme, entry);
+
     entry.contentCount += 1;
     entry.quoteCount = Math.max(entry.quoteCount, quoteCount);
     if (entry.titles.length < 3) {
@@ -112,8 +116,12 @@ export async function main(context: BreezeFrictionFinderContext): Promise<{ stat
     };
   }
 
-  // Format themes as readable text
-  const themeLines: string[] = [`Developer Friction Themes (${themes.length} themes across ${search.results.length} content records):\n`];
+  // Format themes as readable text. `themes` is capped at `limit`, so the
+  // header names both numbers rather than implying the list is everything.
+  const shownOf = themes.length < themeMap.size ? ` of ${themeMap.size}` : '';
+  const themeLines: string[] = [
+    `Developer Friction Themes (${themes.length}${shownOf} themes across ${search.results.length} content records):\n`,
+  ];
   for (const t of themes) {
     const coverage = t.contentCount === 1
       ? '1 piece'
@@ -130,6 +138,16 @@ export async function main(context: BreezeFrictionFinderContext): Promise<{ stat
     for (const g of coverageGaps) {
       gapLines.push(`• ${g.theme} — ${g.quoteCount} quotes, only ${g.contentCount} content piece`);
     }
+  }
+
+  // The search is capped at PAGE_SIZE with no pagination. Say so when the cap
+  // bites, so a partial aggregate is never read as the whole picture.
+  const matched = search.total ?? search.results.length;
+  if (matched > search.results.length) {
+    themeLines.push(
+      `\n(truncated: aggregated from the first ${search.results.length} of ${matched} themed content records, ` +
+      'ranked by quote count — themes below that cut-off are not represented)',
+    );
   }
 
   return {
