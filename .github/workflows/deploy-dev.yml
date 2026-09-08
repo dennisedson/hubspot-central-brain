@@ -31,14 +31,12 @@ jobs:
       - name: Build functions
         run: npm run build
 
-      - name: Set sync function URLs
-        run: |
-          sed -i 's|${SYNC_TO_LINEAR_URL}|https://51869810.hs-sites.com/hs/serverless/sync-to-linear|g' src/app/workflow-actions/sync-to-linear-hsmeta.json
-          sed -i 's|${SYNC_TO_ASANA_URL}|https://51869810.hs-sites.com/hs/serverless/sync-to-asana|g' src/app/workflow-actions/sync-to-asana-hsmeta.json
-          sed -i 's|${ASANA_POLL_URL}|https://51869810.hs-sites.com/hs/serverless/asana-poll|g' src/app/workflow-actions/asana-poll-hsmeta.json
-          sed -i 's|${ASSOCIATE_RELATED_CONTENT_URL}|https://51869810.hs-sites.com/hs/serverless/associate-related-content|g' src/app/workflow-actions/associate-related-content-hsmeta.json
-          sed -i 's|${GENERATE_SOCIAL_DRAFT_URL}|https://51869810.hs-sites.com/hs/serverless/generate-social-draft|g' src/app/workflow-actions/generate-social-draft-hsmeta.json
-
+      # Rewrites every workflow-action actionUrl to this portal and FAILS the
+      # deploy if any is left pointing elsewhere. The per-file seds this
+      # replaced matched ${...} placeholders that no longer exist, so they
+      # silently no-opped and shipped dev URLs to staging and prod.
+      - name: Point workflow action URLs at this portal
+        run: .github/scripts/set-action-urls.sh 51869810
 
       - name: Install HubSpot CLI
         uses: HubSpot/hubspot-project-actions/install-hubspot-cli@v1.1.0

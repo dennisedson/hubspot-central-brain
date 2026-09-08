@@ -2,7 +2,7 @@
   "name": "hubspot-central-brain",
   "version": "0.1.0",
   "private": true,
-  "description": "HubSpot Central Brain — hub-and-spoke system for developer advocacy",
+  "description": "HubSpot Central Brain \u2014 hub-and-spoke system for developer advocacy",
   "scripts": {
     "lint": "eslint 'src/**/*.{ts,tsx}'",
     "lint:fix": "eslint 'src/**/*.{ts,tsx}' --fix",
@@ -26,8 +26,8 @@
     "dev": "hs project dev",
     "upload": "npm run build && hs project upload",
     "upload:dev": "npm run build && hs project upload --account=Dev-HubSpot-Brain",
-    "upload:staging": "npm run build && hs project upload --account=Dennis-Staging",
-    "upload:prod": "npm run build && hs project upload --account=DevRelTeamHub"
+    "upload:staging": "npm run build && .github/scripts/upload-to-portal.sh 51869787 Dennis-Staging",
+    "upload:prod": "npm run build && .github/scripts/upload-to-portal.sh 22047910 DevRelTeamHub"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
