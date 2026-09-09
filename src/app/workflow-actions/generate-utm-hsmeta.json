@@ -1,0 +1,113 @@
+{
+  "uid": "generate_utm_v1",
+  "type": "workflow-action",
+  "config": {
+    "actionUrl": "https://51869810.hs-sites.com/hs/serverless/video-attribution",
+    "isPublished": true,
+    "supportedClients": [{ "client": "WORKFLOWS" }],
+    "objectTypes": [],
+    "inputFields": [
+      {
+        "typeDefinition": {
+          "name": "objectId",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "isRequired": true
+      },
+      {
+        "typeDefinition": {
+          "name": "destinationUrl",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["STATIC_VALUE", "OBJECT_PROPERTY"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "campaignName",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["STATIC_VALUE", "OBJECT_PROPERTY"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "utmMedium",
+          "type": "enumeration",
+          "fieldType": "select",
+          "options": [
+            { "value": "video_description", "label": "Video Description" },
+            { "value": "video_card", "label": "YouTube Card" },
+            { "value": "end_screen", "label": "End Screen" },
+            { "value": "pinned_comment", "label": "Pinned Comment" }
+          ]
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "force",
+          "type": "enumeration",
+          "fieldType": "select",
+          "options": [
+            { "value": "false", "label": "No — skip videos that already have a link" },
+            { "value": "true", "label": "Yes — regenerate the link" }
+          ]
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      }
+    ],
+    "outputFields": [
+      {
+        "typeDefinition": { "name": "attributionStatus", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "utmLink", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "campaign", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "medium", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "reason", "type": "string", "fieldType": "text" }
+      }
+    ],
+    "labels": {
+      "en": {
+        "actionName": "Generate Video UTM Link",
+        "appDisplayName": "Central Brain",
+        "actionDescription": "Builds a UTM-tracked link from the video's Website URL and Campaign Name once it reaches the published stage, and writes it to the UTM Link property",
+        "actionCardContent": "Generate UTM link for {{objectId}}",
+        "inputFieldLabels": {
+          "objectId": "Video Record ID",
+          "destinationUrl": "Destination URL",
+          "campaignName": "Campaign Name",
+          "utmMedium": "Link Placement",
+          "force": "Regenerate Existing Link"
+        },
+        "inputFieldDescriptions": {
+          "objectId": "The Record ID (hs_object_id) of the Video to build a tracked link for",
+          "destinationUrl": "The landing page the link should point at. Leave blank to use the video's Website URL property.",
+          "campaignName": "The campaign this video's traffic belongs to. Leave blank to use the video's Campaign Name property.",
+          "utmMedium": "Where the link will be placed. Becomes utm_medium. Defaults to Video Description.",
+          "force": "By default a video that already has a UTM Link is skipped, because that string is already pasted into a published description. Choose Yes to rebuild it, and to run before the video reaches the published stage."
+        },
+        "outputFieldLabels": {
+          "attributionStatus": "Attribution Status",
+          "utmLink": "UTM Link",
+          "campaign": "Campaign Slug",
+          "medium": "Link Placement",
+          "reason": "Reason"
+        }
+      }
+    }
+  }
+}

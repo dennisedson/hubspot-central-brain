@@ -1,0 +1,17 @@
+{
+  "uid": "youtube_auth",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/YouTubeAuth.js",
+    "endpoint": {
+      "path": "youtube-auth",
+      "methods": ["GET", "POST"]
+    },
+    "secretKeys": [
+      "YOUTUBE_CLIENT_ID",
+      "YOUTUBE_CLIENT_SECRET",
+      "YOUTUBE_REFRESH_TOKEN",
+      "HS_ACCESS_TOKEN"
+    ]
+  }
+}

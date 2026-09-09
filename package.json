@@ -22,6 +22,7 @@
     "patch:unique-property": "tsx src/scripts/patch-unique-property.ts",
     "provision:workflows": "tsx src/scripts/provision-workflows.ts",
     "provision:fellow-sync": "tsx src/scripts/provision-fellow-sync.ts",
+    "provision:youtube-config": "tsx src/scripts/provision-youtube-config.ts",
     "provision:associations": "tsx src/scripts/provision-associations.ts",
     "provision:enterpret-quotes": "tsx src/scripts/provision-enterpret-quotes.ts",
     "provision:property-descriptions": "tsx src/scripts/provision-property-descriptions.ts",
