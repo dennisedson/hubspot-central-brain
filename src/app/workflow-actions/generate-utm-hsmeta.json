@@ -4,7 +4,11 @@
   "config": {
     "actionUrl": "https://51869810.hs-sites.com/hs/serverless/video-attribution",
     "isPublished": true,
-    "supportedClients": [{ "client": "WORKFLOWS" }],
+    "supportedClients": [
+      {
+        "client": "WORKFLOWS"
+      }
+    ],
     "objectTypes": [],
     "inputFields": [
       {
@@ -13,7 +17,9 @@
           "type": "string",
           "fieldType": "text"
         },
-        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "supportedValueTypes": [
+          "OBJECT_PROPERTY"
+        ],
         "isRequired": true
       },
       {
@@ -22,7 +28,9 @@
           "type": "string",
           "fieldType": "text"
         },
-        "supportedValueTypes": ["STATIC_VALUE", "OBJECT_PROPERTY"],
+        "supportedValueTypes": [
+          "OBJECT_PROPERTY"
+        ],
         "isRequired": false
       },
       {
@@ -31,7 +39,9 @@
           "type": "string",
           "fieldType": "text"
         },
-        "supportedValueTypes": ["STATIC_VALUE", "OBJECT_PROPERTY"],
+        "supportedValueTypes": [
+          "OBJECT_PROPERTY"
+        ],
         "isRequired": false
       },
       {
@@ -40,13 +50,27 @@
           "type": "enumeration",
           "fieldType": "select",
           "options": [
-            { "value": "video_description", "label": "Video Description" },
-            { "value": "video_card", "label": "YouTube Card" },
-            { "value": "end_screen", "label": "End Screen" },
-            { "value": "pinned_comment", "label": "Pinned Comment" }
+            {
+              "value": "video_description",
+              "label": "Video Description"
+            },
+            {
+              "value": "video_card",
+              "label": "YouTube Card"
+            },
+            {
+              "value": "end_screen",
+              "label": "End Screen"
+            },
+            {
+              "value": "pinned_comment",
+              "label": "Pinned Comment"
+            }
           ]
         },
-        "supportedValueTypes": ["STATIC_VALUE"],
+        "supportedValueTypes": [
+          "STATIC_VALUE"
+        ],
         "isRequired": false
       },
       {
@@ -55,29 +79,57 @@
           "type": "enumeration",
           "fieldType": "select",
           "options": [
-            { "value": "false", "label": "No — skip videos that already have a link" },
-            { "value": "true", "label": "Yes — regenerate the link" }
+            {
+              "value": "false",
+              "label": "No \u2014 skip videos that already have a link"
+            },
+            {
+              "value": "true",
+              "label": "Yes \u2014 regenerate the link"
+            }
           ]
         },
-        "supportedValueTypes": ["STATIC_VALUE"],
+        "supportedValueTypes": [
+          "STATIC_VALUE"
+        ],
         "isRequired": false
       }
     ],
     "outputFields": [
       {
-        "typeDefinition": { "name": "attributionStatus", "type": "string", "fieldType": "text" }
+        "typeDefinition": {
+          "name": "attributionStatus",
+          "type": "string",
+          "fieldType": "text"
+        }
       },
       {
-        "typeDefinition": { "name": "utmLink", "type": "string", "fieldType": "text" }
+        "typeDefinition": {
+          "name": "utmLink",
+          "type": "string",
+          "fieldType": "text"
+        }
       },
       {
-        "typeDefinition": { "name": "campaign", "type": "string", "fieldType": "text" }
+        "typeDefinition": {
+          "name": "campaign",
+          "type": "string",
+          "fieldType": "text"
+        }
       },
       {
-        "typeDefinition": { "name": "medium", "type": "string", "fieldType": "text" }
+        "typeDefinition": {
+          "name": "medium",
+          "type": "string",
+          "fieldType": "text"
+        }
       },
       {
-        "typeDefinition": { "name": "reason", "type": "string", "fieldType": "text" }
+        "typeDefinition": {
+          "name": "reason",
+          "type": "string",
+          "fieldType": "text"
+        }
       }
     ],
     "labels": {
