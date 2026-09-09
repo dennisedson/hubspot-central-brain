@@ -18,6 +18,8 @@ npm test            # Vitest
 npm run validate    # all of the above + the three UI-extension typechecks
 ```
 
+> Setting this up as an operator rather than a developer? [`docs/OPERATOR-GUIDE.md`](docs/OPERATOR-GUIDE.md) walks the whole journey — portal, vault, Cowork, YouTube auth — and says which layers do not work yet.
+
 ## Setup (first run against a portal)
 
 `hs project upload` deploys the app, but it does **not** create the data model the
@@ -45,6 +47,7 @@ PORTAL=dev npm run provision:app-settings     # App Settings object
 PORTAL=dev npm run provision:asana-property   # asana_task_url on Content + Changelog
 PORTAL=dev npm run provision:asana-sync-token # needs App Settings to exist
 PORTAL=dev npm run provision:fellow-sync      # needs App Settings to exist
+PORTAL=dev npm run provision:youtube-config   # needed before YouTube auth
 PORTAL=dev npm run provision:enterpret-quotes # enterpret_quotes on Content
 PORTAL=dev npm run provision:property-descriptions  # run last — describes the rest
 ```
