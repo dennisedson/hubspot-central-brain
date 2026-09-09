@@ -77,6 +77,15 @@ Related Content action 4xxs on every association call.
 The deployed functions read secrets from HubSpot, **not** from your `.env`. Ten exist; the
 first four are required for the working system, the rest gate specific features.
 
+> **All ten must exist before the app will deploy.** A secret named in a function's hsmeta
+> but absent from the portal fails the *deploy*, not the build — and it fails the whole
+> deploy, so one missing secret blocks every component. That is what happened on build #225.
+>
+> **`YOUTUBE_REFRESH_TOKEN` is a chicken-and-egg**: `youtube_auth` requires it, but
+> `youtube_auth` is what produces it. Create it now with a placeholder value (`pending`),
+> deploy, run the authorisation, then replace it with the real token. The code has a
+> `pending_secret` connection state for exactly this window.
+
 ```bash
 hs app secret add HS_ACCESS_TOKEN        # 21 functions — nothing works without it
 hs app secret add LINEAR_API_KEY         # 3
@@ -87,7 +96,7 @@ hs app secret add FELLOW_API_KEY         # Fellow sync
 hs app secret add ANTHROPIC_API_KEY      # Video AI suggestions
 hs app secret add YOUTUBE_CLIENT_ID      # ┐
 hs app secret add YOUTUBE_CLIENT_SECRET  # ├ Video — see §4
-hs app secret add YOUTUBE_REFRESH_TOKEN  # ┘
+hs app secret add YOUTUBE_REFRESH_TOKEN  # ┘ placeholder first — see above
 ```
 
 ### 1.4 Deploy, then finish the wiring
@@ -277,3 +286,5 @@ Do not spend an afternoon on these expecting a result.
 | YouTube says disconnected after connecting | `provision:youtube-config` not run |
 | `serverless-execution` logs are empty | Wrong log stream — use `serverless-gateway-execution` |
 | Agent tool returns UNAUTHORIZED | Known, unresolved — §6 |
+| Build succeeds, deploy fails on a secret | The secret is named in an hsmeta but absent from the portal. Create it, even as a placeholder — one missing secret fails the entire deploy |
+| Cannot deploy `youtube_auth` without a refresh token | Chicken-and-egg — create `YOUTUBE_REFRESH_TOKEN` as `pending`, authorise, then replace it |
