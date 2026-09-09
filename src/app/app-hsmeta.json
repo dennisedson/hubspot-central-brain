@@ -27,7 +27,11 @@
         "https://api.fellow.app",
         "https://51869810.hs-sites.com/hs/serverless/settings-api",
         "https://51869787.hs-sites.com/hs/serverless/settings-api",
-        "https://22047910.hs-sites.com/hs/serverless/settings-api"
+        "https://22047910.hs-sites.com/hs/serverless/settings-api",
+        "https://oauth2.googleapis.com",
+        "https://www.googleapis.com",
+        "https://youtubeanalytics.googleapis.com",
+        "https://api.anthropic.com"
       ],
       "iframe": [],
       "img": []
