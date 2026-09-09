@@ -35,6 +35,16 @@
  * failed 56 URL assertions, each naming its old and new string. The remaining
  * families moved the same way on 2026-09-03, producing 43 more.
  *
+ * FINDING 2026-09-09 (issue #8): `2026-09` HAS SHIPPED — 2026-09-08. The docs'
+ * "latest" reference is now titled "2026-09 API reference" and renders these
+ * paths as `/crm/objects/2026-09/...`. NOT bumped here: that is a separate
+ * decision, and 2026-09 carries a breaking change — admin-configured
+ * validation rules (conditional required properties, record creator settings,
+ * association permissions) are enforced on ALL CRM write paths, so writes that
+ * pass on 2026-03 can start erroring.
+ *   https://developers.hubspot.com/changelog/crm-api-write-validation-enforcement
+ *   https://developers.hubspot.com/docs/api-reference/latest/overview
+ *
  * Do NOT flip a family on the strength of the pattern alone. Call both
  * surfaces first and diff the responses — a dated version is a new API
  * version, so response shapes can change, and CI cannot catch it because
@@ -96,7 +106,10 @@ const PROPERTIES_V3 = `/crm/properties/${HS_API_VERSION}`;
 
 /** MIGRATED 2026-09-03. Dated path uses a different root than all other CRM
  *  families: `/crm-object-schemas/2026-03/schemas` (not `/crm/v3/schemas`).
- *  Verified by the spec at https://developers.hubspot.com/docs/specs/2026-03/crm-schemas-v2026-03.json */
+ *  Verified by the spec at https://developers.hubspot.com/docs/specs/2026-03/crm-schemas-v2026-03.json
+ *  NOTE 2026-09-09: that spec URL now 404s, so the citation no longer backs the
+ *  claim. The path itself was verified live on 2026-09-03 and is unchanged —
+ *  this flags a dead link, not a suspect path. */
 const SCHEMAS_DATED = `/crm-object-schemas/${HS_API_VERSION}/schemas`;
 
 /** MIGRATED 2026-09-03. Verified live: identical shape on both surfaces. */
@@ -125,7 +138,26 @@ export function objectSearchPath(objectType: string): string {
   return `${OBJECTS_V3}/${objectType}/search`;
 }
 
-/** Read many records of one object type by id in a single call (POST). */
+/**
+ * Read many records of one object type by id in a single call (POST).
+ *
+ * DOC-CONFIRMED 2026-09-09 (issue #8). The request body is
+ *
+ *     { "properties": ["hs_meeting_title", …], "inputs": [{ "id": "7891023" }] }
+ *
+ * with optional `propertiesWithHistory` and `idProperty` (the latter only when
+ * looking records up by a custom unique property instead of record id).
+ * `inputs` and `properties` are documented on the generic object surface, and
+ * `inputs[].id` is required.
+ *   https://developers.hubspot.com/docs/api-reference/latest/crm/using-object-apis
+ *   https://developers.hubspot.com/docs/api-reference/crm-contacts-v3/batch/post-crm-v3-objects-contacts-batch-read
+ *
+ * Caveat kept deliberately: the meetings reference page still only links to
+ * batch read without restating the body, so the confirmation is the generic
+ * `{objectTypeId}` object surface (which meetings is served by), not a
+ * meetings-specific page. POST is required despite this being a read — the ids
+ * travel in the body to dodge GET URL length limits.
+ */
 // LEGACY v3 — migrate to dated per issue #14
 export function objectBatchReadPath(objectType: string): string {
   return `${OBJECTS_V3}/${objectType}/batch/read`;
@@ -150,6 +182,23 @@ export function associationListPath(
 
 /**
  * Create the *default* (unlabeled) association between two records (PUT).
+ *
+ * DOC-CONFIRMED 2026-09-09 (issue #8) — the path shape only. Two official
+ * pages spell out this exact segment order, both rendering it on the dated
+ * objects family (they show `2026-09`; the version segment here is whatever
+ * `HS_API_VERSION` is pinned to):
+ *
+ *     PUT /crm/objects/{version}/{fromObjectType}/{fromObjectId}/associations/default/{toObjectType}/{toObjectId}
+ *
+ *   https://developers.hubspot.com/docs/api-reference/crm-associations-v4/guide
+ *   https://developers.hubspot.com/docs/api-reference/latest/crm/associations/associate-records/guide
+ *
+ * STILL INFERRED — the prerequisite below is NOT doc-confirmed. Checked both
+ * pages on 2026-09-09: neither states that a default/unlabeled association
+ * definition must already exist between the two types, nor documents the error
+ * when it does not. The claim comes from portal behaviour, not the docs, and
+ * stays marked as such until someone confirms it against a live portal.
+ *
  * Requires a default association definition to exist between the two types.
  */
 // LEGACY v4 — migrate to dated per issue #14
