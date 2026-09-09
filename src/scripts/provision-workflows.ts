@@ -173,6 +173,40 @@ interface WorkflowDef {
     return result;
   }
 
+interface FlowAction {
+  actionId: string;
+  actionTypeId: string;
+  fields: Record<string, unknown>;
+}
+
+// nextAvailableActionId is the id HubSpot hands to the next action added in the
+// UI, and the API validates it against the actions in the same body. It is always
+// one past the highest actionId, as a string.
+function nextAvailableActionId(actions: FlowAction[]): string {
+  const highest = actions.reduce((max, a) => Math.max(max, Number(a.actionId) || 0), 0);
+  return String(highest + 1);
+}
+
+// HubSpot stores fields on a custom action that buildWorkflow() never sets: every
+// custom action whose definition does not opt out with `requiresObject: false`
+// gets an `hs_target_object` field (default "{{ enrolled_object }}"), the target
+// object selector. The server fills those in on create, so they only exist on the
+// live flow. Because PUT replaces the whole actions array, they have to be copied
+// back or the update silently resets a target object someone picked in the UI.
+// Matched on actionId AND actionTypeId so a reordered flow cannot copy the wrong
+// action's selection.
+function carryOverServerActionFields(built: FlowAction[], live: FlowAction[]): FlowAction[] {
+  return built.map(action => {
+    const match = live.find(l => l.actionId === action.actionId && l.actionTypeId === action.actionTypeId);
+    if (!match) return action;
+    const inherited: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(match.fields ?? {})) {
+      if (key.startsWith('hs_') && !(key in action.fields)) inherited[key] = value;
+    }
+    return { ...action, fields: { ...action.fields, ...inherited } };
+  });
+}
+
 function buildWorkflow(def: WorkflowDef) {
   const actionSlots: Array<{ actionTypeId: string; fields: Record<string, unknown> }> = [];
 
@@ -409,34 +443,48 @@ async function main() {
   const objectTypeId = config.content.objectTypeId;
 
   // Upsert helper: creates via POST or updates via PUT.
-  // On update: only replaces actions — preserves isEnabled, enrollmentCriteria (schedules),
-  // and all other live operational state so re-running never disrupts enabled workflows.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // On update: only replaces actions — preserves isEnabled, enrollmentCriteria and
+  // all other live operational state so re-running never disrupts enabled workflows.
+  // The recurring schedule is its own top-level field, `enrollmentSchedule` (e.g.
+  // {"type":"DAILY","timeOfDay":{"hour":17,"minute":0}}), NOT part of
+  // enrollmentCriteria — the daily poll workflows carry one, set by hand in the UI,
+  // and only a full-replace body keeps it.
   async function upsertWorkflow(name: string, payload: Record<string, unknown>): Promise<void> {
     const summary = await findExistingWorkflow(token, name);
     if (summary) {
       console.log(`\nUpdating "${name}" (id=${summary.id})...`);
       const full = await hs(token, 'GET', `/automation/v4/flows/${summary.id}`);
-      // Build an explicit minimal update — never spread the GET response, which
-      // contains server-set read-only fields that cause a 400 if echoed back.
+
+      // PUT /automation/v4/flows/{id} is a FULL REPLACE, not a patch: per HubSpot's
+      // docs, "any existing data retrieved from the GET request, not included in the
+      // PUT request, will be omitted from the updated workflow." An abridged body is
+      // therefore not a smaller update, it is a request to delete every field left
+      // out — which is what the generic 400 "Invalid request to flow update"
+      // (FLOW_UPDATE_BAD_REQUEST) was reporting. Notably `flowType` and
+      // `nextAvailableActionId` were being dropped, and both appear in the docs' own
+      // PUT example.
+      //
+      // The documented recipe is: GET the flow, drop createdAt / updatedAt /
+      // dataSources (echoing those back is what trips validation), change only what
+      // you mean to change, and send everything else straight back — `id`, `type`,
+      // `flowType` and `revisionId` included.
+      // https://developers.hubspot.com/docs/reference/api/automation/create-manage-workflows
+      const writable = { ...full };
+      delete writable.createdAt;
+      delete writable.updatedAt;
+      delete writable.dataSources;
+
+      const built = (payload.actions ?? []) as FlowAction[];
+      const actions = carryOverServerActionFields(built, (full.actions ?? []) as FlowAction[]);
+
       const updatePayload: Record<string, unknown> = {
-        name: full.name,
-        isEnabled: full.isEnabled,
-        // Required by the v4 flows API on PUT — without it the call 400s with
-        // "Some required fields were not set: [type]". Returned by GET, never
-        // changes, so carry it straight through.
-        type: full.type,
-        objectTypeId: full.objectTypeId,
-        startActionId: full.startActionId,
-        // KNOWN BROKEN (2026-09-09): with `type` present the call still 400s,
-        // now with the generic "Invalid request to flow update". Carrying the
-        // whole GET response through minus createdAt/updatedAt/id fails the same
-        // way, so the rejected part is the `actions` payload this script builds,
-        // not the top-level field set. Creating a NEW flow (POST) is unaffected;
-        // only updating an existing one fails. Until this is resolved, workflow
-        // changes on an already-provisioned portal must be made in the UI.
-        enrollmentCriteria: full.enrollmentCriteria,
-        actions: (payload as Record<string, unknown>).actions,
+        ...writable,
+        // The only intentional change. startActionId and nextAvailableActionId have
+        // to move with it: both index into the actions array we just replaced, so a
+        // stale value from the GET can point at an action id that no longer exists.
+        actions,
+        startActionId: (payload.startActionId as string | undefined) ?? full.startActionId,
+        nextAvailableActionId: nextAvailableActionId(actions),
         revisionId: full.revisionId,
       };
       const result = await hs(token, 'PUT', `/automation/v4/flows/${full.id}`, updatePayload);
