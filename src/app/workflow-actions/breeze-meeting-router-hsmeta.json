@@ -7,6 +7,9 @@
     "objectTypes": [],
     "supportedClients": [
       {
+        "client": "WORKFLOWS"
+      },
+      {
         "client": "AGENTS",
         "toolType": "TAKE_ACTION",
         "llmConfig": {
