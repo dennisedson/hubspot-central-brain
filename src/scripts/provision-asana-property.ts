@@ -39,8 +39,8 @@ async function addPropertyIfMissing(
 }
 
 async function main() {
-  const { personalKey } = loadEnv();
-  const client = new Client({ accessToken: personalKey });
+  const { token } = loadEnv();
+  const client = new Client({ accessToken: token });
 
   console.log('Looking up custom object schemas...');
   const schemas = await (client.crm.schemas.coreApi as any).getAll(false);

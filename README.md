@@ -87,6 +87,12 @@ PORTAL=dev npm run provision:workflows        # reads the deployed action defini
 PORTAL=dev npm run provision:asana-webhook <function-url>
 ```
 
+> **Known broken (2026-09-09):** on a portal whose workflows already exist,
+> `provision:workflows` fails with `400 Invalid request to flow update`. Creating
+> workflows on a fresh portal (POST) is unaffected — only updating existing ones.
+> Until it's fixed, edit existing workflows in the HubSpot UI.
+
+
 ### 5. Obsidian vault (optional)
 
 The thinking/drafting layer is a plain folder of markdown. See

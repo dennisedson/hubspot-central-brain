@@ -35,7 +35,13 @@ async function main() {
 
   const schemas = await hs(token, 'GET', `${schemasPath()}?limit=100`);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const appSettings = (schemas.results ?? []).find((s: any) => s.name === 'app_configs' || s.name === 'app_settings');
+  const schemaList = schemas.results ?? [];
+  // Prefer the canonical name explicitly. A single find() across both names
+  // returns whichever the API happens to list first, which lets a stray
+  // app_settings shadow the app_configs the deployed app actually reads.
+  const appSettings =
+    schemaList.find((s: any) => s.name === 'app_configs') ??
+    schemaList.find((s: any) => s.name === 'app_settings');
 
   if (!appSettings) {
     console.error('Could not find app_configs/app_settings object — has this portal been provisioned? Run npm run provision:app-settings first.');

@@ -422,8 +422,19 @@ async function main() {
       const updatePayload: Record<string, unknown> = {
         name: full.name,
         isEnabled: full.isEnabled,
+        // Required by the v4 flows API on PUT — without it the call 400s with
+        // "Some required fields were not set: [type]". Returned by GET, never
+        // changes, so carry it straight through.
+        type: full.type,
         objectTypeId: full.objectTypeId,
         startActionId: full.startActionId,
+        // KNOWN BROKEN (2026-09-09): with `type` present the call still 400s,
+        // now with the generic "Invalid request to flow update". Carrying the
+        // whole GET response through minus createdAt/updatedAt/id fails the same
+        // way, so the rejected part is the `actions` payload this script builds,
+        // not the top-level field set. Creating a NEW flow (POST) is unaffected;
+        // only updating an existing one fails. Until this is resolved, workflow
+        // changes on an already-provisioned portal must be made in the UI.
         enrollmentCriteria: full.enrollmentCriteria,
         actions: (payload as Record<string, unknown>).actions,
         revisionId: full.revisionId,
