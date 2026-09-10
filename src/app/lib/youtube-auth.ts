@@ -164,9 +164,23 @@ function requireGoogleCredentials(): GoogleCredentials {
 }
 
 /** The stored refresh token, or null when the secret has not been set yet. */
+/**
+ * Values that mean "this secret exists only so the project would deploy".
+ *
+ * YOUTUBE_REFRESH_TOKEN is circular: youtube_auth requires the secret to exist
+ * before it will deploy, and youtube_auth is what produces the real value. The
+ * documented bootstrap is to create it with a placeholder, authorise, then
+ * replace it. Without this guard the placeholder is a non-empty string and so
+ * reads as a genuine token — the callback would report `connected` while no API
+ * call could possibly succeed, and the sync would try to refresh using the
+ * literal word "pending" and surface Google's error instead of ours.
+ */
+const PLACEHOLDER_TOKENS = new Set(['pending', 'placeholder', 'changeme', 'todo', 'none', 'tbd']);
+
 export function readRefreshToken(): string | null {
-  const token = process.env.YOUTUBE_REFRESH_TOKEN;
-  return token ? token : null;
+  const token = process.env.YOUTUBE_REFRESH_TOKEN?.trim();
+  if (!token) return null;
+  return PLACEHOLDER_TOKENS.has(token.toLowerCase()) ? null : token;
 }
 
 // ---------------------------------------------------------------------------

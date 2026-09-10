@@ -7,6 +7,7 @@ import {
   exchangeCodeForTokens,
   getChannelInfo,
   getYouTubeAccessToken,
+  readRefreshToken,
   refreshAccessToken,
   resetAccessTokenCache,
   revokeRefreshToken,
@@ -668,5 +669,40 @@ describe('YouTubeAuth — disconnect', () => {
     const res = await main(disconnectContext());
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body).revoked).toBe(false);
+  });
+});
+
+describe('readRefreshToken — placeholder bootstrap', () => {
+  const original = process.env.YOUTUBE_REFRESH_TOKEN;
+  afterEach(() => {
+    if (original === undefined) delete process.env.YOUTUBE_REFRESH_TOKEN;
+    else process.env.YOUTUBE_REFRESH_TOKEN = original;
+  });
+
+  it('returns a real token unchanged', () => {
+    process.env.YOUTUBE_REFRESH_TOKEN = '1//0gReAlLoOkInGtOkEn';
+    expect(readRefreshToken()).toBe('1//0gReAlLoOkInGtOkEn');
+  });
+
+  it('treats the documented placeholder as absent', () => {
+    // The secret must exist for youtube_auth to deploy, but "pending" is not a
+    // credential. Reading it as one would report `connected` while every call fails.
+    process.env.YOUTUBE_REFRESH_TOKEN = 'pending';
+    expect(readRefreshToken()).toBeNull();
+  });
+
+  it.each(['PENDING', 'Placeholder', 'changeme', 'TODO', 'none', 'tbd', '  pending  '])(
+    'treats %j as absent too',
+    (value) => {
+      process.env.YOUTUBE_REFRESH_TOKEN = value;
+      expect(readRefreshToken()).toBeNull();
+    },
+  );
+
+  it('treats unset and empty as absent', () => {
+    delete process.env.YOUTUBE_REFRESH_TOKEN;
+    expect(readRefreshToken()).toBeNull();
+    process.env.YOUTUBE_REFRESH_TOKEN = '   ';
+    expect(readRefreshToken()).toBeNull();
   });
 });
