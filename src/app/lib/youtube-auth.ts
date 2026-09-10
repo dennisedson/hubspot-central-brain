@@ -80,6 +80,8 @@ export const YOUTUBE_CONFIG_PROPERTIES = {
   channelTitle: 'youtube_channel_title',
   status: 'youtube_connection_status',
   lastSync: 'youtube_last_sync',
+  subscriptionStatus: 'youtube_subscription_status',
+  subscriptionExpires: 'youtube_subscription_expires',
 } as const;
 
 /** Every property this module reads off `app_configs`, in read order. */

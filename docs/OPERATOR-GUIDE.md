@@ -275,7 +275,12 @@ Do not spend an afternoon on these expecting a result.
 - **`provision:workflows` on an already-provisioned portal** — creating workflows on a fresh
   portal is fine; updating existing ones has a fix that has not yet been run against a live
   portal. Edit existing workflows in the UI until it is confirmed.
-- **The whole Video layer** is untested against live credentials. It is written, not proven.
+- **YouTube push notifications** are blocked by the platform, not by missing work.
+  HubSpot's serverless gateway accepts only `application/json` bodies and YouTube's
+  WebSub hub sends `application/atom+xml`, so notifications are rejected with 415
+  before any code runs. Subscription and hub verification both work, which makes
+  it worse: a subscription verifies, looks established, and delivers nothing.
+  Metrics update on the daily poll only.
 
 ---
 

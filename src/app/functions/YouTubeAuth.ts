@@ -24,6 +24,7 @@
  */
 
 import { getPortalConfig } from '../lib/portal-config';
+import { isRenewalDue, leaseExpiryFrom, requestSubscription } from '../lib/youtube-websub';
 import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 import {
   YOUTUBE_CONFIG_PROPERTIES,
@@ -237,6 +238,77 @@ async function handleCallback(ctx: YouTubeAuthContext, clientSecret: string, hsT
 
 /** `status`. Cheap by design — stored state plus "is the secret set", no call
  *  to Google, so a card can render it on every open. */
+/**
+ * Start or renew the WebSub subscription for the connected channel.
+ *
+ * Re-subscribing IS renewal — there is no separate call, the lease is simply
+ * extended. So this is safe to run on a daily schedule, and `force` exists only
+ * to re-subscribe before the renewal window opens.
+ *
+ * The hub verifies asynchronously, so a 202 means "accepted", not "active". The
+ * status recorded here is `pending` until the hub's challenge reaches
+ * youtube-webhook and is echoed back — claiming `active` on a 202 would report
+ * a subscription that may never verify.
+ */
+async function handleSubscribe(
+  objectTypeId: string,
+  hsToken: string,
+  portalId: number,
+  force: boolean,
+) {
+  let record: AppConfigRecord | null;
+  try {
+    record = await findAppConfigRecord(objectTypeId, hsToken);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return json(502, { error: 'Could not read app_configs', detail });
+  }
+
+  const props = record?.properties ?? {};
+  const channelId = props[YOUTUBE_CONFIG_PROPERTIES.channelId] ?? null;
+  if (!channelId) {
+    return json(409, { error: 'No channel connected — authorise before subscribing' });
+  }
+
+  const expires = props[YOUTUBE_CONFIG_PROPERTIES.subscriptionExpires] ?? null;
+  if (!force && !isRenewalDue(expires)) {
+    return json(200, {
+      skipped: true,
+      reason: 'subscription is not due for renewal',
+      channelId,
+      expiresAt: expires,
+    });
+  }
+
+  const result = await requestSubscription(channelId, portalId);
+  if (!result.accepted) {
+    return json(502, {
+      error: 'The WebSub hub rejected the subscription request',
+      status: result.status,
+      detail: result.body.slice(0, 300),
+    });
+  }
+
+  const expiresAt = leaseExpiryFrom();
+  try {
+    await writeYouTubeConfig(objectTypeId, hsToken, {
+      [YOUTUBE_CONFIG_PROPERTIES.subscriptionStatus]: 'pending',
+      [YOUTUBE_CONFIG_PROPERTIES.subscriptionExpires]: expiresAt,
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return json(502, { error: 'Subscribed, but could not record it on app_configs', detail });
+  }
+
+  return json(200, {
+    ok: true,
+    channelId,
+    status: 'pending',
+    expiresAt,
+    note: 'The hub verifies asynchronously; status becomes active once it calls youtube-webhook.',
+  });
+}
+
 async function handleStatus(objectTypeId: string, hsToken: string) {
   let record: AppConfigRecord | null;
   try {
@@ -342,6 +414,9 @@ export async function main(context: YouTubeAuthContext): Promise<{ statusCode: n
   }
   if (action === 'disconnect') {
     return handleDisconnect(objectTypeId, hsToken);
+  }
+  if (action === 'subscribe') {
+    return handleSubscribe(objectTypeId, hsToken, portalId, param(context, 'force') === 'true');
   }
 
   return json(400, { error: `Unknown action: ${action}` });

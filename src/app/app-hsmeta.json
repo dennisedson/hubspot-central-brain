@@ -31,7 +31,8 @@
         "https://oauth2.googleapis.com",
         "https://www.googleapis.com",
         "https://youtubeanalytics.googleapis.com",
-        "https://api.anthropic.com"
+        "https://api.anthropic.com",
+        "https://pubsubhubbub.appspot.com"
       ],
       "iframe": [],
       "img": []

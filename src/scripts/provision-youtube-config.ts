@@ -54,6 +54,8 @@ const PROPERTIES = [
   { name: 'youtube_channel_title', label: 'YouTube Channel Title' },
   { name: 'youtube_connection_status', label: 'YouTube Connection Status' },
   { name: 'youtube_last_sync', label: 'YouTube Last Sync' },
+  { name: 'youtube_subscription_status', label: 'YouTube Subscription Status' },
+  { name: 'youtube_subscription_expires', label: 'YouTube Subscription Expires' },
 ];
 
 async function ensureProperty(
