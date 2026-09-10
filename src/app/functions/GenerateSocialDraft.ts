@@ -14,6 +14,7 @@ const READ_PROPERTIES = [
 
 interface GenerateSocialDraftContext {
   accountId?: number;
+  params?: Record<string, unknown>;
   parameters?: Record<string, unknown>;
   query?: Record<string, unknown>;
   body?: Record<string, unknown> & { inputFields?: Record<string, unknown> };
@@ -31,6 +32,7 @@ function str(value: unknown): string | undefined {
  */
 function param(ctx: GenerateSocialDraftContext, key: string): string | undefined {
   return (
+    str(Array.isArray(ctx.params?.[key]) ? (ctx.params?.[key] as unknown[])[0] : ctx.params?.[key]) ??
     str(ctx.parameters?.[key]) ??
     str(ctx.query?.[key]) ??
     str(ctx.body?.[key]) ??

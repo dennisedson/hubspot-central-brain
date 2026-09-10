@@ -4,13 +4,19 @@ import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 
 interface SettingsContext {
   accountId?: number;
+  params?: Record<string, string | string[] | undefined>;
   parameters?: Record<string, string | undefined>;
   query?: Record<string, string | undefined>;
   body?: Record<string, string | undefined>;
 }
 
 function param(ctx: SettingsContext, key: string): string | undefined {
-  return ctx.parameters?.[key] ?? ctx.query?.[key] ?? ctx.body?.[key];
+  // HubSpot delivers URL query params in `params`, and their values are
+  // ARRAYS, not strings — reading one straight through yields e.g. ["status"],
+  // which compares unequal to "status" and has no .split().
+  const q = ctx.params?.[key];
+  const fromQuery = Array.isArray(q) ? q[0] : q;
+  return fromQuery ?? ctx.parameters?.[key] ?? ctx.query?.[key] ?? ctx.body?.[key];
 }
 
 interface LinearTeam {

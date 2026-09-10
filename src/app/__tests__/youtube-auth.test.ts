@@ -706,3 +706,45 @@ describe('readRefreshToken — placeholder bootstrap', () => {
     expect(readRefreshToken()).toBeNull();
   });
 });
+
+describe('query params arrive in context.params as arrays', () => {
+  /**
+   * HubSpot delivers URL query parameters under `context.params`, and each
+   * value is an ARRAY. The handler previously read `parameters` / `query` /
+   * `body` — none of which HubSpot populates for a URL GET — so `action` and
+   * the OAuth `code` were invisible in production while every unit test passed,
+   * because the tests supplied the shape the code expected rather than the one
+   * HubSpot sends. Reading a value straight through is equally wrong: ["status"]
+   * is not "status", and it has no .split() for the signed state.
+   */
+  it('routes an action delivered as a single-element array', async () => {
+    const res = await main({
+      accountId: 51869810,
+      params: { action: ['status'] },
+    } as unknown as Parameters<typeof main>[0]);
+    // Reaches the status handler rather than falling through to authorize.
+    // fetch is unmocked here, so the status path fails at its app_configs read —
+    // which is itself the proof that routing worked. The assertion that matters
+    // is that it did NOT return an authUrl.
+    expect(res.body).not.toContain('authUrl');
+    expect(res.body).toContain('app_configs');
+  });
+
+  it('reaches the OAuth callback when code arrives as an array', async () => {
+    const res = await main({
+      accountId: 51869810,
+      params: { code: ['TESTCODE'], state: ['bogus'] },
+    } as unknown as Parameters<typeof main>[0]);
+    // A forged state must be rejected — but only the callback can reject it,
+    // so this asserts the callback was reached at all.
+    expect(res.body).toContain('Invalid or missing state');
+  });
+
+  it('still accepts a plain string, for card-invoked callers', async () => {
+    const res = await main({
+      accountId: 51869810,
+      params: { action: 'status' },
+    } as unknown as Parameters<typeof main>[0]);
+    expect(res.body).not.toContain('authUrl');
+  });
+});
