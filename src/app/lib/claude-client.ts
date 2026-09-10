@@ -28,7 +28,7 @@
  * is always "hand them to a human" — belongs to the caller.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
 
 // ---------------------------------------------------------------------------
 // Model + request options
@@ -541,12 +541,68 @@ export interface ClaudeClient {
   };
 }
 
+/** Anthropic's Messages endpoint, and the API version header it requires. */
+const ANTHROPIC_MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
+const ANTHROPIC_VERSION = '2023-06-01';
+
+function reasonForStatus(status: number): ClaudeFailureReason {
+  if (status === 401 || status === 403) return 'auth_failed';
+  if (status === 429) return 'rate_limited';
+  if (status === 400) return 'bad_request';
+  return 'api_error';
+}
+
+/**
+ * A fetch-backed client, deliberately not the official SDK.
+ *
+ * The SDK imports fine inside a HubSpot serverless function — a request with a
+ * missing recordId still returns our own 400 — but the runtime dies the moment
+ * it actually issues a request: HTTP 502 with HubSpot's HTML error page, in
+ * 0.6s, before any of our error handling runs. Too fast to be a timeout, and
+ * not catchable, so the handler cannot degrade gracefully.
+ *
+ * Raw fetch is also what every other client in this codebase uses
+ * (linear-client, asana-client, fellow-client), so this is the house pattern
+ * rather than an exception. The SDK is still imported for its types, which cost
+ * nothing at runtime.
+ */
 export function createClaudeClient(): ClaudeClient {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new ClaudeError('no_api_key', 'ANTHROPIC_API_KEY is not configured');
   }
-  return new Anthropic({ apiKey, timeout: CLAUDE_TIMEOUT_MS, maxRetries: 1 });
+
+  return {
+    messages: {
+      async create(body: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message> {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), CLAUDE_TIMEOUT_MS);
+        try {
+          const res = await fetch(ANTHROPIC_MESSAGES_URL, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': ANTHROPIC_VERSION,
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
+          const text = await res.text();
+          if (!res.ok) {
+            throw new ClaudeError(
+              reasonForStatus(res.status),
+              `Anthropic ${res.status}: ${text.slice(0, 300)}`,
+              res.status,
+            );
+          }
+          return JSON.parse(text) as Anthropic.Message;
+        } finally {
+          clearTimeout(timer);
+        }
+      },
+    },
+  };
 }
 
 function firstTextBlock(message: Anthropic.Message): string {
@@ -558,20 +614,14 @@ function firstTextBlock(message: Anthropic.Message): string {
 
 /** Most-specific-first, so retryable and non-retryable failures stay distinct. */
 function toClaudeError(err: unknown): ClaudeError {
+  // The fetch client classifies HTTP failures itself and throws a ClaudeError,
+  // so status mapping lives there rather than here. What reaches this point is
+  // an abort or a genuine transport failure.
   if (err instanceof ClaudeError) return err;
-  if (err instanceof Anthropic.AuthenticationError) {
-    return new ClaudeError('auth_failed', 'Anthropic rejected the API key', err.status);
-  }
-  if (err instanceof Anthropic.RateLimitError) {
-    return new ClaudeError('rate_limited', 'Anthropic rate limit reached', err.status);
-  }
-  if (err instanceof Anthropic.BadRequestError) {
-    return new ClaudeError('bad_request', `Anthropic rejected the request: ${err.message}`, err.status);
-  }
-  if (err instanceof Anthropic.APIError) {
-    return new ClaudeError('api_error', `Anthropic API error: ${err.message}`, err.status);
-  }
   const message = err instanceof Error ? err.message : String(err);
+  if (err instanceof Error && err.name === 'AbortError') {
+    return new ClaudeError('network_error', `Anthropic request timed out after ${CLAUDE_TIMEOUT_MS}ms`);
+  }
   return new ClaudeError('network_error', `Could not reach Anthropic: ${message}`);
 }
 
