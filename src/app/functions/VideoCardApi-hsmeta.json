@@ -1,0 +1,12 @@
+{
+  "uid": "video_card_api",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/VideoCardApi.js",
+    "endpoint": {
+      "path": "video-card-api",
+      "methods": ["GET", "POST"]
+    },
+    "secretKeys": ["HS_ACCESS_TOKEN"]
+  }
+}
