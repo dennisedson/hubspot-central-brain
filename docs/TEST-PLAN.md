@@ -78,36 +78,39 @@ run against no team and quietly do nothing useful.
 This is the oldest and most exercised path. If anything here fails, treat it as
 a regression rather than a new-feature problem.
 
-### 2.1 Linear issue creates a Content record
+### 2.1 Linear issue creates a Content record — and the Asana task
 
 Tag a Linear issue with the configured label.
 
-**Expect** a Content record appears in HubSpot within a minute, carrying
+More happens here than the name suggests. The webhook creates the record *with a
+pipeline stage already set*, and the sync workflow enrols on any
+`hs_pipeline_stage` change with a known value — which the initial set satisfies.
+So the whole chain fires immediately, without anyone touching a stage.
+
+**Expect** a Content record in HubSpot within a minute, carrying
 `linear_issue_url` and a hidden `linear_issue_id`.
+**Expect** a **task in Asana**, created by that same enrolment.
+**Expect** `asana_task_url` on the HubSpot record. That write-back is a separate
+call after the create, and it is the proof the two are linked.
+**Fail signal** — the record and the Asana task both exist but `asana_task_url`
+is empty. The task was created and never linked, and every later stage change
+will create another one.
 **Where to look on failure** — the gateway stream, for a `linear-webhook`
 execution. No entry at all means the webhook never arrived; an entry with an
 error means it arrived and we rejected it. Those are very different bugs.
 
-### 2.2 Stage change pushes to Linear and creates the Asana task
+### 2.2 Stage change updates both sides
 
 Move that Content record's pipeline stage.
 
-Nothing before this point links an Asana task, and nothing needs to: on the
-first stage change `SyncToAsana` finds no `asana_task_url`, searches Asana by the
-Linear issue URL, finds nothing, and **creates** the task — then writes the URL
-back onto the HubSpot record. So the first run is a create, not an update.
+The link already exists from 2.1, so this is the **update** path.
 
 **Expect** the linked Linear issue's state changes to match.
-**Expect** a **new task in Asana**, in the section mapped to the new stage.
-**Expect** `asana_task_url` to appear on the HubSpot record. This is the proof
-the link was established — without it the task was created but never linked, and
-the next stage change will create a second one.
-**Expect also** the *Linear / Asana Status* card on the record reflects the new
-state.
-
-Then **move the stage a second time**. This run is the update: the same task
-should change section rather than a new task appearing. Two tasks means the
-write-back in the first run failed.
+**Expect** the **same** Asana task moves section — no new task.
+**Expect also** the *Linear / Asana Status* card reflects the new state.
+**Fail signal** — a second Asana task appears. That means `asana_task_url` was
+never written back in 2.1, so the sync could not find the existing task and
+created another.
 
 ### 2.3 Asana change flows back
 
