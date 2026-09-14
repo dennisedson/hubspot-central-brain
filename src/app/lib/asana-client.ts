@@ -71,12 +71,25 @@ export async function updateTaskPipelineStage(
   });
 }
 
+/**
+ * Asana resolves the literal string "me" to the user whose token made the
+ * request. The token here is the operator's own PAT, so an unassigned task
+ * lands on the person the sync is acting for — which is the whole point of a
+ * task appearing in a content factory nobody was told about.
+ *
+ * Passing an explicit gid overrides it, for the day this runs under a service
+ * account and "me" would quietly assign everything to the robot.
+ */
+export const ASANA_SELF = 'me';
+
 export async function createTask(
   apiKey: string,
   projectGid: string,
   name: string,
   customFields: Record<string, string>,
   sectionGid?: string,
+  assignee: string | null = ASANA_SELF,
+  dueOn?: string | null,
 ): Promise<{ gid: string }> {
   const memberships = sectionGid
     ? [{ project: projectGid, section: sectionGid }]
@@ -87,6 +100,8 @@ export async function createTask(
       projects: [projectGid],
       custom_fields: customFields,
       ...(memberships ? { memberships } : {}),
+      ...(assignee ? { assignee } : {}),
+      ...(dueOn ? { due_on: dueOn } : {}),
     },
   });
 }
@@ -135,4 +150,27 @@ export async function getAsanaTask(apiKey: string, taskGid: string): Promise<Asa
     assignee: json.data.assignee?.name ?? null,
     url: json.data.permalink_url,
   };
+}
+
+/**
+ * HubSpot date properties come back either as epoch milliseconds or as an ISO
+ * string depending on how they were written; Asana's `due_on` wants a bare
+ * calendar date. Normalised in UTC deliberately — a target date is a day, not
+ * an instant, and converting through local time moves it by one either side of
+ * midnight.
+ */
+export function toAsanaDueOn(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const when = /^\d+$/.test(raw) ? new Date(Number(raw)) : new Date(raw);
+  if (Number.isNaN(when.getTime())) return null;
+  return when.toISOString().slice(0, 10);
+}
+
+/** Set or clear a task's due date. Passing null clears it. */
+export async function setTaskDueDate(
+  apiKey: string,
+  taskGid: string,
+  dueOn: string | null,
+): Promise<void> {
+  await request(apiKey, 'PUT', `/tasks/${taskGid}`, { data: { due_on: dueOn } });
 }

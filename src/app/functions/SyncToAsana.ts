@@ -1,4 +1,11 @@
-import { findTaskByLinearIssueUrl, updateTaskPipelineStage, createTask } from '../lib/asana-client';
+import { HS_BASE, objectPath } from '../lib/hs-api';
+import {
+  findTaskByLinearIssueUrl,
+  updateTaskPipelineStage,
+  createTask,
+  setTaskDueDate,
+  toAsanaDueOn,
+} from '../lib/asana-client';
 import { hsUpdate } from '../lib/hubspot-client';
 import {
   ASANA_PIPELINE_STAGE_FIELD_GID,
@@ -69,6 +76,26 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
     };
   }
 
+  // The workflow action carries no date field, so read it off the record. A
+  // failure here must not cost us the sync — the due date is an enhancement to
+  // the task, not the reason the task exists.
+  let dueOn: string | null = null;
+  if (recordId) {
+    try {
+      const token = process.env.PRIVATE_APP_ACCESS_TOKEN ?? process.env.HS_ACCESS_TOKEN;
+      const res = await fetch(
+        `${HS_BASE}${objectPath(config.content.objectTypeId, recordId)}?properties=target_date`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (res.ok) {
+        const body = (await res.json()) as { properties?: Record<string, string | null> };
+        dueOn = toAsanaDueOn(body.properties?.target_date);
+      }
+    } catch (err) {
+      console.warn('Could not read target_date; continuing without a due date:', err);
+    }
+  }
+
   try {
     let taskGid: string | null = null;
 
@@ -86,11 +113,28 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
     if (taskGid) {
       await updateTaskPipelineStage(asanaApiKey, taskGid, asanaStageGid);
       console.log(`Updated Asana task ${taskGid} → stage ${asanaStageGid}`);
+      if (dueOn) {
+        // Only pushed when the record has one. Clearing an Asana due date
+        // because HubSpot has none would overwrite a date someone set by hand.
+        try {
+          await setTaskDueDate(asanaApiKey, taskGid, dueOn);
+        } catch (err) {
+          console.warn(`Could not set due date on ${taskGid}:`, err);
+        }
+      }
     } else {
       const customFields: Record<string, string> = { [ASANA_PIPELINE_STAGE_FIELD_GID]: asanaStageGid };
       if (linearIssueUrl) customFields[ASANA_LINEAR_ISSUE_URL_FIELD_GID] = linearIssueUrl;
       const sectionGid = config.asanaSections[objectType] || undefined;
-      const task = await createTask(asanaApiKey, asanaProjectGid, title ?? 'Untitled', customFields, sectionGid || undefined);
+      const task = await createTask(
+        asanaApiKey,
+        asanaProjectGid,
+        title ?? 'Untitled',
+        customFields,
+        sectionGid || undefined,
+        undefined, // assignee: defaults to the token's owner
+        dueOn,
+      );
       taskGid = task.gid;
       console.log(`Created Asana task ${taskGid}`);
     }

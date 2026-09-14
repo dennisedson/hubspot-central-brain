@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { updateTaskPipelineStage, findTaskByLinearIssueUrl, createTask } from '@lib/asana-client';
+import { updateTaskPipelineStage, findTaskByLinearIssueUrl, createTask, toAsanaDueOn } from '@lib/asana-client';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
@@ -87,5 +87,38 @@ describe('createTask', () => {
   it('throws when the API returns a non-ok response', async () => {
     mockError(400);
     await expect(createTask('pat', 'proj', 'title', {})).rejects.toThrow('400');
+  });
+});
+
+describe('toAsanaDueOn', () => {
+  /**
+   * HubSpot date properties come back as epoch milliseconds or as an ISO string
+   * depending on how they were written, and Asana wants a bare calendar date.
+   * Normalised in UTC on purpose: a target date is a day, not an instant, and
+   * routing it through local time moves it by one either side of midnight.
+   */
+  it('converts epoch milliseconds', () => {
+    expect(toAsanaDueOn(String(Date.UTC(2026, 8, 14)))).toBe('2026-09-14');
+  });
+
+  it('accepts an ISO date unchanged', () => {
+    expect(toAsanaDueOn('2026-09-14')).toBe('2026-09-14');
+  });
+
+  it('accepts a full ISO timestamp and keeps the UTC day', () => {
+    expect(toAsanaDueOn('2026-09-14T23:30:00.000Z')).toBe('2026-09-14');
+  });
+
+  it('does not shift the day for a late-UTC instant', () => {
+    // The bug this guards: converting through local time can land on the 13th
+    // or the 15th depending on where the runtime thinks it is.
+    expect(toAsanaDueOn('2026-09-14T00:00:00.000Z')).toBe('2026-09-14');
+  });
+
+  it('returns null for absent or unusable values', () => {
+    expect(toAsanaDueOn(null)).toBeNull();
+    expect(toAsanaDueOn(undefined)).toBeNull();
+    expect(toAsanaDueOn('')).toBeNull();
+    expect(toAsanaDueOn('not a date')).toBeNull();
   });
 });
