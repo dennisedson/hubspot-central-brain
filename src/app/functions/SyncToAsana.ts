@@ -4,6 +4,7 @@ import {
   updateTaskPipelineStage,
   createTask,
   setTaskDueDate,
+  setTaskAssignee,
   toAsanaDueOn,
 } from '../lib/asana-client';
 import { hsUpdate } from '../lib/hubspot-client';
@@ -113,6 +114,18 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
     if (taskGid) {
       await updateTaskPipelineStage(asanaApiKey, taskGid, asanaStageGid);
       console.log(`Updated Asana task ${taskGid} → stage ${asanaStageGid}`);
+
+      // Archived work should leave the assignee's queue. Tagging it Canceled
+      // does not: the task still sits in their My Tasks as a live to-do.
+      // Failing here must not fail the sync — the stage move already landed.
+      if (stageName === 'archived') {
+        try {
+          await setTaskAssignee(asanaApiKey, taskGid, null);
+          console.log(`Unassigned archived Asana task ${taskGid}`);
+        } catch (err) {
+          console.warn(`Could not unassign ${taskGid}:`, err);
+        }
+      }
       if (dueOn) {
         // Only pushed when the record has one. Clearing an Asana due date
         // because HubSpot has none would overwrite a date someone set by hand.
@@ -132,7 +145,7 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
         title ?? 'Untitled',
         customFields,
         sectionGid || undefined,
-        undefined, // assignee: defaults to the token's owner
+        stageName === 'archived' ? null : undefined, // null leaves it unassigned; undefined assigns the token's owner
         dueOn,
       );
       taskGid = task.gid;

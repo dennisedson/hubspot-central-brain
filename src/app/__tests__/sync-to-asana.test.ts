@@ -35,6 +35,9 @@ beforeEach(async () => {
     findTaskByLinearIssueUrl: vi.fn().mockResolvedValue('asana-task-42'),
     updateTaskPipelineStage: vi.fn().mockResolvedValue(undefined),
     createTask: vi.fn().mockResolvedValue({ gid: 'asana-task-new' }),
+    setTaskDueDate: vi.fn().mockResolvedValue(undefined),
+    setTaskAssignee: vi.fn().mockResolvedValue(undefined),
+    toAsanaDueOn: vi.fn().mockReturnValue(null),
   }));
 
   process.env.SYNC_SHARED_SECRET = 'top-secret';
@@ -176,5 +179,45 @@ describe('SyncToAsana.main — error cases', () => {
     const { updateTaskPipelineStage } = await import('@lib/asana-client');
     vi.mocked(updateTaskPipelineStage).mockRejectedValue(new Error('Asana 403'));
     expect((await main(baseCtx)).statusCode).toBe(500);
+  });
+});
+
+describe('SyncToAsana — archived work leaves the assignee queue', () => {
+  /**
+   * Tagging the task Canceled does not remove it from anyone's My Tasks: it sits
+   * there as a live to-do nobody intends to do. Archiving the HubSpot record
+   * should clear the Asana assignee too.
+   */
+  const archivedCtx = {
+    ...baseCtx,
+    body: {
+      ...baseCtx.body,
+      inputFields: { ...baseCtx.body.inputFields, hubspotStage: 'archived' },
+    },
+  };
+
+  it('clears the assignee when the stage is archived', async () => {
+    const { setTaskAssignee } = await import('@lib/asana-client');
+    const result = await main(archivedCtx);
+
+    expect(result.statusCode).toBe(200);
+    expect(setTaskAssignee).toHaveBeenCalledWith('asana-pat-test', 'asana-task-42', null);
+  });
+
+  it('leaves the assignee untouched on every other stage', async () => {
+    // A routine stage change must not quietly take work off someone's list.
+    const { setTaskAssignee } = await import('@lib/asana-client');
+    await main(baseCtx); // hubspotStage: 'published'
+    expect(setTaskAssignee).not.toHaveBeenCalled();
+  });
+
+  it('still reports success when the unassign call fails', async () => {
+    // The stage move already landed; losing the assignee clear must not undo it.
+    const { setTaskAssignee } = await import('@lib/asana-client');
+    vi.mocked(setTaskAssignee).mockRejectedValueOnce(new Error('Asana 403'));
+
+    const result = await main(archivedCtx);
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).outputFields.syncStatus).toBe('success');
   });
 });

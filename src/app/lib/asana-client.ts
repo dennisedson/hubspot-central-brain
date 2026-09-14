@@ -174,3 +174,17 @@ export async function setTaskDueDate(
 ): Promise<void> {
   await request(apiKey, 'PUT', `/tasks/${taskGid}`, { data: { due_on: dueOn } });
 }
+
+/**
+ * Set or clear a task's assignee. Passing null unassigns it.
+ *
+ * Used when work is archived: a cancelled task sitting in someone's Asana
+ * queue is a false to-do, and the tag alone does not remove it from their list.
+ */
+export async function setTaskAssignee(
+  apiKey: string,
+  taskGid: string,
+  assignee: string | null,
+): Promise<void> {
+  await request(apiKey, 'PUT', `/tasks/${taskGid}`, { data: { assignee } });
+}
