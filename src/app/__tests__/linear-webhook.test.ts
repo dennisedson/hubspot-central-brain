@@ -251,3 +251,82 @@ describe('LinearWebhook.main', () => {
     });
   });
 });
+
+describe('LinearWebhook — unassignment archives the HubSpot record', () => {
+  /**
+   * Previously an excluded issue was skipped outright, which left the record
+   * frozen at its last synced stage: sitting in the pipeline, looking live, no
+   * longer tracking anything, and returning 200 throughout. Archiving makes the
+   * divergence visible. Reassignment restores it through the normal upsert,
+   * which writes the mapped stage and lifts it back out of Archived.
+   */
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('archives the record when the assignee no longer matches "mine"', async () => {
+    const { readAppSettings: mockSettings, archiveContentByLinearId: mockArchive, upsertContent: mockUpsert } =
+      await import('@lib/hubspot-client');
+    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
+    vi.mocked(mockArchive).mockResolvedValue({ id: '123', action: 'updated' });
+
+    const ctx = {
+      ...baseCtx,
+      body: { ...baseCtx.body, data: { ...baseCtx.body.data, assignee: { id: 'user-other', name: 'Bob' } } },
+    };
+    const result = await main(ctx);
+    const body = JSON.parse(result.body);
+
+    expect(result.statusCode).toBe(200);
+    expect(body.action).toBe('archived');
+    expect(body.reason).toBe('not assigned to configured user');
+    expect(mockArchive).toHaveBeenCalledOnce();
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it('archives when the issue is unassigned entirely under "assigned"', async () => {
+    const { readAppSettings: mockSettings, archiveContentByLinearId: mockArchive } =
+      await import('@lib/hubspot-client');
+    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'assigned', linearAssigneeId: '' });
+    vi.mocked(mockArchive).mockResolvedValue({ id: '123', action: 'updated' });
+
+    const body = JSON.parse((await main(baseCtx)).body); // baseCtx has no assignee
+    expect(body.action).toBe('archived');
+    expect(body.reason).toBe('no assignee');
+  });
+
+  it('does not archive an issue nothing ever tracked', async () => {
+    // No record means nothing to set aside — this must stay a quiet skip rather
+    // than becoming noise on every issue assigned to someone else.
+    const { readAppSettings: mockSettings, archiveContentByLinearId: mockArchive } =
+      await import('@lib/hubspot-client');
+    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
+    vi.mocked(mockArchive).mockResolvedValue(null);
+
+    const ctx = {
+      ...baseCtx,
+      body: { ...baseCtx.body, data: { ...baseCtx.body.data, assignee: { id: 'user-other', name: 'Bob' } } },
+    };
+    const body = JSON.parse((await main(ctx)).body);
+    expect(body.skipped).toBe(true);
+    expect(body.action).toBeUndefined();
+  });
+
+  it('reassignment goes through the normal upsert, which un-archives it', async () => {
+    const { readAppSettings: mockSettings, archiveContentByLinearId: mockArchive, upsertContent: mockUpsert } =
+      await import('@lib/hubspot-client');
+    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
+
+    const ctx = {
+      ...baseCtx,
+      body: { ...baseCtx.body, data: { ...baseCtx.body.data, assignee: { id: 'user-me', name: 'Me' } } },
+    };
+    const result = await main(ctx);
+
+    expect(JSON.parse(result.body).ok).toBe(true);
+    expect(mockArchive).not.toHaveBeenCalled();
+    // upsertContent writes the stage mapped from the Linear state, which is what
+    // moves the record back out of Archived.
+    expect(mockUpsert).toHaveBeenCalledOnce();
+  });
+});
