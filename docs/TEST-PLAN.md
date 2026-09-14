@@ -89,6 +89,11 @@ So the whole chain fires immediately, without anyone touching a stage.
 
 **Expect** a Content record in HubSpot within a minute, carrying
 `linear_issue_url` and a hidden `linear_issue_id`.
+**Expect the stage to match the Linear state, not to start at Idea.** The
+webhook maps it on creation: Backlog → Idea, Todo → Outline, In Progress →
+Drafting, In Review → Review, Done → Published, Canceled → Archived. An issue
+in Todo therefore appears in **Outline**, which is correct. Anything unmapped
+falls back to Idea.
 **Expect** a **task in Asana**, created by that same enrolment.
 **Expect** `asana_task_url` on the HubSpot record. That write-back is a separate
 call after the create, and it is the proof the two are linked.
