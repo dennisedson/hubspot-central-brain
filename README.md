@@ -18,7 +18,7 @@ npm test            # Vitest
 npm run validate    # all of the above + the three UI-extension typechecks
 ```
 
-> Setting this up as an operator rather than a developer? [`docs/OPERATOR-GUIDE.md`](docs/OPERATOR-GUIDE.md) walks the whole journey — portal, vault, Cowork, YouTube auth — and says which layers do not work yet.
+> Setting this up as an operator rather than a developer? [`docs/OPERATOR-GUIDE.md`](docs/OPERATOR-GUIDE.md) walks the whole journey — portal, vault, Cowork, YouTube auth — and says which layers do not work yet. To verify it afterwards, [`docs/TEST-PLAN.md`](docs/TEST-PLAN.md) is a test script with recorded expected results and a do-not-file list.
 
 ## Setup (first run against a portal)
 
