@@ -88,14 +88,26 @@ Tag a Linear issue with the configured label.
 execution. No entry at all means the webhook never arrived; an entry with an
 error means it arrived and we rejected it. Those are very different bugs.
 
-### 2.2 Stage change pushes to Linear and Asana
+### 2.2 Stage change pushes to Linear and creates the Asana task
 
 Move that Content record's pipeline stage.
 
-**Expect** the linked Linear issue's state changes to match, and the Asana task
-updates.
+Nothing before this point links an Asana task, and nothing needs to: on the
+first stage change `SyncToAsana` finds no `asana_task_url`, searches Asana by the
+Linear issue URL, finds nothing, and **creates** the task — then writes the URL
+back onto the HubSpot record. So the first run is a create, not an update.
+
+**Expect** the linked Linear issue's state changes to match.
+**Expect** a **new task in Asana**, in the section mapped to the new stage.
+**Expect** `asana_task_url` to appear on the HubSpot record. This is the proof
+the link was established — without it the task was created but never linked, and
+the next stage change will create a second one.
 **Expect also** the *Linear / Asana Status* card on the record reflects the new
 state.
+
+Then **move the stage a second time**. This run is the update: the same task
+should change section rather than a new task appearing. Two tasks means the
+write-back in the first run failed.
 
 ### 2.3 Asana change flows back
 
