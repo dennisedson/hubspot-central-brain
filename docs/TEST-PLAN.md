@@ -149,6 +149,31 @@ Insights*.
 **Expect** Enterpret Insights to be empty or say it has no data — see 7.3. That
 is correct behaviour, not a failure.
 
+### 2.5 Unassignment archives the record, reassignment restores it
+
+Only applies when `assignee_filter` is `mine` or `assigned` — on `all` nothing is
+ever excluded. Yours is `mine`.
+
+In Linear, **unassign yourself** from the issue (or reassign it to someone else).
+
+**Expect** the HubSpot record moves to the **Archived** stage within a minute.
+**Why** — it would otherwise sit in the pipeline at its last synced stage,
+looking live while it had quietly stopped tracking. Archived makes that visible.
+
+Then **reassign yourself**.
+
+**Expect** the record returns to the stage mapped from the Linear state — *not*
+to wherever it sat before. Archived is a stage, not a delete, and the normal
+upsert writes the mapped stage on the way back. An issue in `Todo` returns to
+**Outline**.
+
+**Not a bug** — archiving by hand while the issue is still assigned to you does
+not stick. The next Linear update pulls it back out: Linear remains the source
+of truth for stage.
+
+**Changelog records are skipped, not archived.** That pipeline has no Archived
+stage to move to.
+
 ---
 
 ## 3. Video — connection
