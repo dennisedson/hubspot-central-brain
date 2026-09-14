@@ -114,15 +114,26 @@ created another.
 
 ### 2.3 Asana change flows back
 
-Change the task's section in Asana. The poll runs daily at 17:00, so either
-wait or trigger it:
+Change the task's section in Asana, then trigger the poll. It needs the **App
+Config record's id** — that record is where the Asana sync token lives:
 
 ```bash
 curl -s -X POST https://51869810.hs-sites.com/hs/serverless/asana-poll \
-  -H 'Content-Type: application/json' -d '{}'
+  -H 'Content-Type: application/json' \
+  -d '{"hs_object_id":"60786952492"}'
 ```
 
-**Expect** the HubSpot record's stage updates to match.
+**Expect** `{"outputFields":{"syncStatus":"success","processed":"N"}}`, and the
+HubSpot record's stage updates to match.
+
+**Expect `processed: 0` on the first run, whatever you changed.** Asana's Events
+API answers an unknown sync token with a fresh token and *no history*, and
+`asana_sync_token` on the App Config record is currently empty — so the first
+poll only establishes the token. Change the section again, poll again, and the
+second run reports it. This is not a bug and it will look exactly like one.
+
+**Fail signal** — `400 Missing hs_object_id`. The body was empty. The poll reads
+and writes its sync token on that record and cannot run without it.
 
 ### 2.4 Cards render on a Content record
 
@@ -225,6 +236,8 @@ Press **Sync metrics**.
 
 **Expect** a spinner, then a note like "Updated 1 of 1 video record(s)", and the
 stats refresh in place.
+**Note** — this button syncs **every** Video record on the portal, not just this
+one. The count reflects that: with three records it reads "Updated 3 of 3".
 **Expect the button disabled** when the record has no `youtube_video_id`, or
 when YouTube is not connected. Both are deliberate.
 
@@ -256,15 +269,18 @@ Follow [`vault-template/SETUP.md`](../vault-template/SETUP.md).
 **Expect** the vault named exactly `Dev- Central-Brain` — hyphen after `Dev`,
 space before `Central`. The prompts build `obsidian://` links against that name;
 anything else silently breaks every link.
-**Expect** folders `daily/`, `meetings/`, `content/`, `changelogs/` to look empty
-(the `.gitkeep` files are hidden dotfiles).
+**Expect** seven folders: `daily/`, `meetings/`, `content/`, `changelogs/`,
+`references/`, `templates/` and `prompts/`. The first five look empty — their
+`.gitkeep` files are hidden dotfiles.
 
 ### 6.2 Templates insert
 
 **Settings → Core plugins → Templates**, folder set to `templates`. Then
 `Cmd+P` → *Insert template*.
 
-**Expect** frontmatter including `hubspot_object` and `hubspot_portal`.
+**Expect** frontmatter with `hubspot_object`, `hubspot_id`, `hubspot_portal`,
+`hubspot_pipeline` and `content_type`. `hubspot_id` is empty until the record
+exists — that pair is what ties the note to a CRM record.
 
 ### 6.3 Cowork reads the vault
 
