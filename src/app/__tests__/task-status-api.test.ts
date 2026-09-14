@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { main } from '../functions/TaskStatusApi';
+import { main, taskGidFromUrl } from '../functions/TaskStatusApi';
 
 /**
  * Handler tests for TaskStatusApi.
@@ -33,7 +33,7 @@ const ASANA_TASK_ID = '1209876543210';
 // --- the exact URLs this handler must call -------------------------------
 const RECORD_URL =
   'https://api.hubapi.com/crm/objects/2026-03/2-67505887/4201' +
-  '?properties=linear_issue_id,asana_task_id,hs_pipeline,hs_pipeline_stage';
+  '?properties=linear_issue_id,asana_task_id,asana_task_url,hs_pipeline,hs_pipeline_stage';
 const LINEAR_URL = 'https://api.linear.app/graphql';
 const ASANA_URL =
   'https://app.asana.com/api/1.0/tasks/1209876543210' +
@@ -485,5 +485,33 @@ describe('TaskStatusApi.main — status codes', () => {
     const res = await main({ accountId: TEST_PORTAL_ID, query: { objectId: OBJECT_ID }, body: {} });
     expect(res.statusCode).toBe(200);
     expect(mockFetch.mock.calls[0][0]).toBe(RECORD_URL);
+  });
+});
+
+describe('taskGidFromUrl — the linkage the card was missing', () => {
+  /**
+   * SyncToAsana writes back asana_task_url and never asana_task_id. TaskStatusApi
+   * read only the id, so a correctly linked record — URL present, id empty —
+   * rendered "Not linked to Asana." Found during the 2.x test run on a record
+   * whose Asana Task URL was plainly populated on screen.
+   */
+  it('pulls the gid from a real task URL', () => {
+    expect(taskGidFromUrl('https://app.asana.com/0/1217881318437204/1218459621830511')).toBe(
+      '1218459621830511',
+    );
+  });
+
+  it('tolerates a query string, a fragment and a trailing slash', () => {
+    expect(taskGidFromUrl('https://app.asana.com/0/123/456/')).toBe('456');
+    expect(taskGidFromUrl('https://app.asana.com/0/123/456?focus=true')).toBe('456');
+    expect(taskGidFromUrl('https://app.asana.com/0/123/456#activity')).toBe('456');
+  });
+
+  it('returns null rather than guessing when there is no gid', () => {
+    // A non-numeric tail is a list or board view, not a task.
+    expect(taskGidFromUrl('https://app.asana.com/0/123/list')).toBeNull();
+    expect(taskGidFromUrl('')).toBeNull();
+    expect(taskGidFromUrl(null)).toBeNull();
+    expect(taskGidFromUrl(undefined)).toBeNull();
   });
 });

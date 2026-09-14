@@ -34,6 +34,13 @@ function reason(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Last path segment of an Asana task URL, e.g. .../0/<projectGid>/<taskGid>. */
+export function taskGidFromUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const gid = url.split('?')[0].split('#')[0].replace(/\/+$/, '').split('/').pop();
+  return gid && /^\d+$/.test(gid) ? gid : null;
+}
+
 export async function main(context: TaskStatusContext) {
   const token = process.env.PRIVATE_APP_ACCESS_TOKEN ?? process.env.HS_ACCESS_TOKEN;
   const objectId = param(context, 'objectId');
@@ -46,7 +53,7 @@ export async function main(context: TaskStatusContext) {
   if (!portalId) return json(400, { error: 'portalId is required' });
 
   const config = getPortalConfig(portalId);
-  const props = ['linear_issue_id', 'asana_task_id', 'hs_pipeline', 'hs_pipeline_stage'];
+  const props = ['linear_issue_id', 'asana_task_id', 'asana_task_url', 'hs_pipeline', 'hs_pipeline_stage'];
   const url = `${HS_BASE}${objectPath(config.content.objectTypeId, objectId)}?properties=${props.join(',')}`;
 
   const recordRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -56,7 +63,11 @@ export async function main(context: TaskStatusContext) {
   const record = await recordRes.json() as { properties: Record<string, string | null> };
 
   const linearId = record.properties.linear_issue_id || null;
-  const asanaId = record.properties.asana_task_id || null;
+  // SyncToAsana writes back asana_task_url and never asana_task_id, so a
+  // correctly linked record carries the URL with the id empty — and this card
+  // reported "Not linked to Asana" on records that were linked. The gid is the
+  // last path segment of the task URL, which is how SyncToAsana resolves it too.
+  const asanaId = record.properties.asana_task_id || taskGidFromUrl(record.properties.asana_task_url);
   const pipelineId = record.properties.hs_pipeline || '';
   const stageId = record.properties.hs_pipeline_stage || '';
 
