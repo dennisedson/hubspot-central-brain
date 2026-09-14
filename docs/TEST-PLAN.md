@@ -49,11 +49,19 @@ succeeded before continuing.
 
 Open **Settings → Data Management → Objects → Custom Objects**.
 
-**Expect** exactly four: `content_piece`, `changelog_entry`, `video`,
-`app_configs`.
-**Fail signal** — a stray `app_settings` alongside `app_configs`. They are not
-interchangeable; the app reads `app_configs`, and a stray one shadows it in
-two provisioning scripts.
+**Expect** exactly four. The UI lists objects by their **plural label**, not the
+internal name the API uses, so you are looking for:
+
+| Shown in the UI | Internal name (what the code uses) |
+|---|---|
+| Content Pieces | `content_piece` |
+| Changelog Entries | `changelog_entry` |
+| Videos | `video` |
+| App Configs | `app_configs` |
+
+**Fail signal** — a fifth object, **App Settings**, alongside App Configs. Those
+are not interchangeable: the app reads `app_configs`, and a stray `app_settings`
+shadows it in two provisioning scripts.
 
 ### 1.3 Settings are configured
 
