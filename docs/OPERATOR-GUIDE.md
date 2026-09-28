@@ -189,7 +189,19 @@ so expect to debug it rather than to switch it on.
 
 1. In Google Cloud, create (or reuse) a project and enable the **YouTube Data API v3** and
    **YouTube Analytics API**.
-2. Configure the OAuth consent screen.
+2. Configure the OAuth consent screen — then **check its publishing status**.
+
+   > **A consent screen left in `Testing` expires every refresh token after 7 days.**
+   > Google does this silently: no warning, no email, nothing in any log. The
+   > connection simply stops working about a week after you set it up, and
+   > `?action=status` keeps answering `connected` the whole time because the
+   > secret still holds a token-shaped string. The only symptom is `youtube-sync`
+   > returning `Token has been expired or revoked`.
+   >
+   > Press **Publish app** so the status reads **In production**. With YouTube's
+   > sensitive scopes and no Google verification you get an "unverified app"
+   > interstitial at the consent screen (Advanced → Go to …) and a 100-user cap.
+   > Both are fine for a single channel — verification only removes the warning.
 3. Create an **OAuth client ID** (Web application). Its redirect URI must be the deployed
    function:
    ```
@@ -213,6 +225,16 @@ The `youtube-auth` endpoint takes three actions:
 
 Open the `authorize` URL, grant access, and Google redirects back to the callback. The
 exchange yields a **refresh token** — store it as the `YOUTUBE_REFRESH_TOKEN` app secret.
+
+A refresh token can die while everything still reports healthy — see the publishing-status
+warning in §4.1. Re-authorising is the same flow as the first time: open `authorize`, grant
+access, take the new refresh token, then
+
+```bash
+hs secrets update YOUTUBE_REFRESH_TOKEN   # `update`, not `add` — it already exists
+```
+
+and redeploy, because secrets are injected at deploy time.
 
 `pending_secret` is a real state, not a bug: the channel is known and the code exchanged,
 but the refresh token is not yet set, so no API call can be made. `status` will say so.
@@ -291,7 +313,7 @@ Do not spend an afternoon on these expecting a result.
 | Provisioning script exits `401` | Private app token expired — regenerate it |
 | `expired 20705 day(s) ago` | Epoch zero: the token is unparseable, not old — wrong variable or wrong token |
 | Everything deploys, nothing works | Data model never provisioned — §1.2 |
-| A function 500s on a secret | Secret set in `.env` instead of `hs app secret` — §1.3 |
+| A function 500s on a secret | Secret set in `.env` instead of the `hs secrets` store — §1.3 |
 | Association calls 4xx | `provision:associations` skipped |
 | Property writes rejected, group error | Property group derived rather than read — it is `app_configs_information`, not `app_configsinformation` |
 | YouTube says disconnected after connecting | `provision:youtube-config` not run |
@@ -299,4 +321,5 @@ Do not spend an afternoon on these expecting a result.
 | Agent tool returns UNAUTHORIZED | Known, unresolved — §6 |
 | Deploy still says a secret is missing after you added it | Wrong store — `hs app secret` is not what the deploy checks. Re-add with `hs secrets add` and confirm via `hs secrets list` |
 | Build succeeds, deploy fails on a secret | The secret is named in an hsmeta but absent from the portal. Create it, even as a placeholder — one missing secret fails the entire deploy |
+| `Token has been expired or revoked` from `youtube-sync` | The refresh token is dead while `status` still says `connected`. Almost always a consent screen left in **Testing**, which expires refresh tokens after 7 days — §4.1. Publish the app, re-authorise, `hs secrets update YOUTUBE_REFRESH_TOKEN`, redeploy |
 | Cannot deploy `youtube_auth` without a refresh token | Chicken-and-egg — create `YOUTUBE_REFRESH_TOKEN` as `pending`, authorise, then replace it |
