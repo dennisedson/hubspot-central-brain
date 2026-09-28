@@ -73,6 +73,32 @@ describe('VideoCardApi', () => {
     expect(payload.campaignName).toBe('c');
   });
 
+  it('derives the watch URL when youtube_url is unset', async () => {
+    // youtube_url is provisioned but nothing writes it, so it is blank on
+    // every record. Without deriving, the card's "Watch on YouTube" link never
+    // renders — which is exactly what test 5.2 caught.
+    mockProps({ title: 'T', youtube_video_id: 'chjwqRv90l0' });
+    const payload = JSON.parse((await main(ctx({ objectId: '1' }))).body);
+    expect(payload.youtubeUrl).toBe('https://www.youtube.com/watch?v=chjwqRv90l0');
+  });
+
+  it('prefers a stored URL over the derived one', async () => {
+    // A hand-written link, say a UTM'd one, must not be overwritten.
+    mockProps({
+      title: 'T',
+      youtube_video_id: 'abc123',
+      youtube_url: 'https://youtu.be/abc123?utm_source=newsletter',
+    });
+    const payload = JSON.parse((await main(ctx({ objectId: '1' }))).body);
+    expect(payload.youtubeUrl).toBe('https://youtu.be/abc123?utm_source=newsletter');
+  });
+
+  it('leaves the URL null with no video id, so no dead link renders', async () => {
+    mockProps({ title: 'T' });
+    const payload = JSON.parse((await main(ctx({ objectId: '1' }))).body);
+    expect(payload.youtubeUrl).toBeNull();
+  });
+
   it('reports an unset metric as null, never as zero', async () => {
     // "Never synced" and "zero views" must not render identically.
     mockProps({ title: 'T', youtube_video_id: 'abc' });
@@ -134,5 +160,24 @@ describe('Video card wiring', () => {
 
   it('the API is reachable by the uid the card calls', () => {
     expect(hsmeta.uid).toBe('video_card_api');
+  });
+});
+
+describe('watchUrlFor', () => {
+  it('derives the watch URL from the video id', async () => {
+    const { watchUrlFor } = await import('../functions/VideoCardApi');
+    expect(watchUrlFor('chjwqRv90l0')).toBe('https://www.youtube.com/watch?v=chjwqRv90l0');
+  });
+
+  it('is null without an id, so the card renders no dead link', async () => {
+    const { watchUrlFor } = await import('../functions/VideoCardApi');
+    expect(watchUrlFor(null)).toBeNull();
+    expect(watchUrlFor('')).toBeNull();
+    expect(watchUrlFor('   ')).toBeNull();
+  });
+
+  it('encodes the id rather than interpolating it raw', async () => {
+    const { watchUrlFor } = await import('../functions/VideoCardApi');
+    expect(watchUrlFor('a&b')).toContain('a%26b');
   });
 });

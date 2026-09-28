@@ -66,6 +66,25 @@ function getToken(): string {
   return token;
 }
 
+/**
+ * The canonical watch URL for a video id.
+ *
+ * Derived rather than stored. `youtube_url` is a provisioned property that
+ * nothing ever writes — only reads — so it is blank on every record unless
+ * somebody fills it in by hand, and the card's "Watch on YouTube" link was
+ * therefore never rendered. The id is already on the record and the URL is a
+ * pure function of it; asking a human to maintain the second copy is how the
+ * link went missing.
+ *
+ * A stored value still wins when present, so a hand-written link — a UTM'd one,
+ * say — is not overwritten by this.
+ */
+export function watchUrlFor(videoId: string | null | undefined): string | null {
+  const id = videoId?.trim();
+  if (!id) return null;
+  return `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+}
+
 export async function readVideoCard(
   objectTypeId: string,
   objectId: string,
@@ -80,7 +99,7 @@ export async function readVideoCard(
     objectId,
     title: p.title ?? null,
     youtubeVideoId: p.youtube_video_id ?? null,
-    youtubeUrl: p.youtube_url ?? null,
+    youtubeUrl: p.youtube_url || watchUrlFor(p.youtube_video_id),
     viewCount: p.view_count ?? null,
     likeCount: p.like_count ?? null,
     commentCount: p.comment_count ?? null,
