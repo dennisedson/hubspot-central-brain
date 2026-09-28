@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { LinearWebhookPayload } from '@lib/types';
 
 const TEST_PORTAL_ID = 999;
@@ -224,5 +224,55 @@ describe('archiveContentByLinearId', () => {
 
     expect(result).toBeNull();
     expect(mockFetch).toHaveBeenCalledOnce();
+  });
+});
+
+describe('readYouTubeChannelId', () => {
+  const originalEnv = process.env.YOUTUBE_CHANNEL_ID;
+
+  beforeEach(() => {
+    delete process.env.YOUTUBE_CHANNEL_ID;
+  });
+
+  afterEach(() => {
+    if (originalEnv === undefined) delete process.env.YOUTUBE_CHANNEL_ID;
+    else process.env.YOUTUBE_CHANNEL_ID = originalEnv;
+  });
+
+  it('reads the channel the OAuth callback recorded', async () => {
+    // The whole point: the app already knows this. Nobody should have to copy
+    // it into a secret.
+    const { readYouTubeChannelId } = await import('@lib/hubspot-client');
+    mockSearchResponse([{ id: '1', properties: { youtube_channel_id: 'UCfromConfig' } }]);
+    expect(await readYouTubeChannelId(TEST_PORTAL_ID)).toBe('UCfromConfig');
+  });
+
+  it('lets the secret override, without calling HubSpot at all', async () => {
+    process.env.YOUTUBE_CHANNEL_ID = 'UCoverride';
+    const { readYouTubeChannelId } = await import('@lib/hubspot-client');
+    const before = mockFetch.mock.calls.length;
+    expect(await readYouTubeChannelId(TEST_PORTAL_ID)).toBe('UCoverride');
+    expect(mockFetch.mock.calls.length).toBe(before);
+  });
+
+  it('ignores a blank secret rather than treating it as a channel', async () => {
+    process.env.YOUTUBE_CHANNEL_ID = '   ';
+    const { readYouTubeChannelId } = await import('@lib/hubspot-client');
+    mockSearchResponse([{ id: '1', properties: { youtube_channel_id: 'UCfromConfig' } }]);
+    expect(await readYouTubeChannelId(TEST_PORTAL_ID)).toBe('UCfromConfig');
+  });
+
+  it('returns null when no channel has been connected', async () => {
+    const { readYouTubeChannelId } = await import('@lib/hubspot-client');
+    mockSearchResponse([]);
+    expect(await readYouTubeChannelId(TEST_PORTAL_ID)).toBeNull();
+  });
+
+  it('returns null rather than throwing when the search fails', async () => {
+    // Analytics are an enhancement. Failing to find a channel id must not cost
+    // the statistics half of the sync.
+    const { readYouTubeChannelId } = await import('@lib/hubspot-client');
+    mockFetch.mockRejectedValueOnce(new Error('network'));
+    expect(await readYouTubeChannelId(TEST_PORTAL_ID)).toBeNull();
   });
 });

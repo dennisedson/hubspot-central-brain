@@ -242,12 +242,31 @@ This is HubSpot search indexing lag, not a bug — the record is not yet
 searchable. Wait a minute and run it again. It was mistaken for a bug during
 development.
 
-### 4.2 Analytics stay empty
+### 4.2 Analytics populate
 
-**Expect** `impressions`, `click_through_rate` and `average_view_duration` to
-remain blank.
-**This is correct.** They come from the YouTube Analytics API and only populate
-once `YOUTUBE_CHANNEL_ID` is set as a secret. Do not file it.
+`impressions`, `click_through_rate` and `average_view_duration` come from the
+YouTube Analytics API — a different API from the one behind 4.1, with its own
+quota and permissions.
+
+**Expect** the sync response to carry `"analyticsSkipped": null`, and those
+three properties to be written on the record.
+
+**Why that field is the test, not the properties.** All three can legitimately
+be `0` on a channel with no impressions, and blank properties look identical
+whether analytics ran and found nothing or never ran at all. `analyticsSkipped`
+is what tells the two apart: `null` means the call happened.
+
+**Not a bug** — zeros across all three. A test channel genuinely has no
+impressions yet. The figures being *present* is what 4.2 checks.
+
+**Fail signal** — `"analyticsSkipped": "no channel id …"`. The sync reads the
+channel id from `app_configs`, where the OAuth callback recorded it, so this
+means the connection never completed. Re-check 3.1; you should not need to set
+anything by hand.
+
+> `YOUTUBE_CHANNEL_ID` exists as a **secret override** for pointing a sync at a
+> channel the callback never wrote. It is not part of normal setup. This test
+> used to require it, which was wrong — the app already knew the value.
 
 ### 4.3 Unset versus zero
 

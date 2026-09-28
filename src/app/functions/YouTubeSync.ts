@@ -1,5 +1,5 @@
 import { getPortalConfig } from '../lib/portal-config';
-import { hsUpdate } from '../lib/hubspot-client';
+import { hsUpdate, readYouTubeChannelId } from '../lib/hubspot-client';
 import { HS_BASE, objectSearchPath } from '../lib/hs-api';
 import { getYouTubeAccessToken } from '../lib/youtube-auth';
 import {
@@ -71,6 +71,14 @@ export interface SyncOutcome {
   batchesFetched: number;
   /** Non-fatal per-record failures. The run still reports the rest. */
   errors: string[];
+  /**
+   * Why the analytics figures were not fetched, or null when they were.
+   *
+   * Without this, "analytics ran and the channel has no impressions" and
+   * "analytics never ran at all" produce an identical outcome and identical
+   * blank properties. That ambiguity cost real debugging time.
+   */
+  analyticsSkipped: string | null;
 }
 
 function getToken(): string {
@@ -156,6 +164,7 @@ export async function runSync(portalId: number): Promise<SyncOutcome> {
     batchesNotModified: 0,
     batchesFetched: 0,
     errors: [],
+    analyticsSkipped: null,
   };
   if (records.length === 0) return outcome;
 
@@ -165,12 +174,20 @@ export async function runSync(portalId: number): Promise<SyncOutcome> {
   // must not cost us the statistics we already have, so it is attempted once,
   // up front, and a failure degrades the run rather than ending it.
   let analytics = new Map<string, VideoAnalytics>();
-  const channelId = process.env.YOUTUBE_CHANNEL_ID;
-  if (channelId) {
+  const channelId = await readYouTubeChannelId(portalId);
+  if (!channelId) {
+    // Not an error: a portal that has never authorised YouTube has no channel
+    // to report on. It is recorded because blank analytics properties are
+    // otherwise indistinguishable from a channel with no impressions.
+    outcome.analyticsSkipped =
+      'no channel id — authorise YouTube, or set YOUTUBE_CHANNEL_ID to override';
+  } else {
     try {
       analytics = await fetchVideoAnalytics(accessToken, channelId, [...byYouTubeId.keys()]);
     } catch (err) {
-      outcome.errors.push(`analytics unavailable: ${err instanceof Error ? err.message : String(err)}`);
+      const message = err instanceof Error ? err.message : String(err);
+      outcome.analyticsSkipped = `analytics request failed: ${message}`;
+      outcome.errors.push(`analytics unavailable: ${message}`);
     }
   }
 

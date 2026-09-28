@@ -123,7 +123,7 @@ describe('runSync orchestration', () => {
       fetchVideoBatch: async () => ({ notModified: false, etag: null, items: [] }),
       fetchVideoAnalytics: async () => new Map(),
     }));
-    vi.doMock('@lib/hubspot-client', () => ({ hsUpdate: vi.fn() }));
+    vi.doMock('@lib/hubspot-client', () => ({ hsUpdate: vi.fn(), readYouTubeChannelId: async () => null }));
     mockSearch([]);
 
     const { runSync } = await import('../functions/YouTubeSync');
@@ -141,7 +141,7 @@ describe('runSync orchestration', () => {
       fetchVideoBatch: async () => ({ notModified: true, etag: 'E1', items: [] }),
       fetchVideoAnalytics: async () => new Map(),
     }));
-    vi.doMock('@lib/hubspot-client', () => ({ hsUpdate }));
+    vi.doMock('@lib/hubspot-client', () => ({ hsUpdate, readYouTubeChannelId: async () => null }));
     mockSearch([{ id: '1', ytId: 'v1' }]);
 
     const { runSync } = await import('../functions/YouTubeSync');
@@ -171,7 +171,7 @@ describe('runSync orchestration', () => {
       }),
       fetchVideoAnalytics: async () => new Map(),
     }));
-    vi.doMock('@lib/hubspot-client', () => ({ hsUpdate }));
+    vi.doMock('@lib/hubspot-client', () => ({ hsUpdate, readYouTubeChannelId: async () => null }));
     mockSearch([
       { id: '1', ytId: 'v1' },
       { id: '2', ytId: 'v2' },
@@ -185,11 +185,62 @@ describe('runSync orchestration', () => {
     expect(out.errors[0]).toContain('v1');
   });
 
+  it('says why analytics were skipped when no channel is known', async () => {
+    // Blank analytics properties are indistinguishable from a channel with no
+    // impressions. Before this the outcome was silent, and the difference cost
+    // real debugging time.
+    const hsUpdate = vi.fn().mockResolvedValue(undefined);
+    vi.doMock('@lib/youtube-auth', () => ({ getYouTubeAccessToken: async () => 'tok' }));
+    vi.doMock('@lib/youtube-client', () => ({
+      chunkVideoIds: (ids: string[]) => [ids],
+      fetchVideoBatch: async () => ({
+        notModified: false,
+        etag: 'E',
+        items: [{ id: 'v1', statistics: { viewCount: '5' } }],
+      }),
+      fetchVideoAnalytics: async () => {
+        throw new Error('should never be called without a channel');
+      },
+    }));
+    vi.doMock('@lib/hubspot-client', () => ({ hsUpdate, readYouTubeChannelId: async () => null }));
+    mockSearch([{ id: '1', ytId: 'v1' }]);
+
+    const { runSync } = await import('../functions/YouTubeSync');
+    const out = await runSync(51869810);
+
+    expect(out.analyticsSkipped).toContain('no channel id');
+    // Missing configuration is not a failure — the statistics still landed.
+    expect(out.errors).toEqual([]);
+    expect(out.recordsUpdated).toBe(1);
+  });
+
+  it('leaves analyticsSkipped null when analytics actually ran', async () => {
+    const hsUpdate = vi.fn().mockResolvedValue(undefined);
+    vi.doMock('@lib/youtube-auth', () => ({ getYouTubeAccessToken: async () => 'tok' }));
+    vi.doMock('@lib/youtube-client', () => ({
+      chunkVideoIds: (ids: string[]) => [ids],
+      fetchVideoBatch: async () => ({
+        notModified: false,
+        etag: 'E',
+        items: [{ id: 'v1', statistics: { viewCount: '5' } }],
+      }),
+      fetchVideoAnalytics: async () =>
+        new Map([['v1', { impressions: 0, clickThroughRate: 0, averageViewDuration: 0 }]]),
+    }));
+    vi.doMock('@lib/hubspot-client', () => ({ hsUpdate, readYouTubeChannelId: async () => 'UC123' }));
+    mockSearch([{ id: '1', ytId: 'v1' }]);
+
+    const { runSync } = await import('../functions/YouTubeSync');
+    const out = await runSync(51869810);
+
+    // All zeros is a real answer, and must not read as "never ran".
+    expect(out.analyticsSkipped).toBeNull();
+  });
+
   it('degrades rather than failing when analytics are unavailable', async () => {
     // Analytics is a separate API with its own quota. Losing it must not cost
     // us the statistics we already fetched.
     const hsUpdate = vi.fn().mockResolvedValue(undefined);
-    process.env.YOUTUBE_CHANNEL_ID = 'UC123';
     vi.doMock('@lib/youtube-auth', () => ({ getYouTubeAccessToken: async () => 'tok' }));
     vi.doMock('@lib/youtube-client', () => ({
       chunkVideoIds: (ids: string[]) => [ids],
@@ -202,14 +253,16 @@ describe('runSync orchestration', () => {
         throw new Error('analytics quota exceeded');
       },
     }));
-    vi.doMock('@lib/hubspot-client', () => ({ hsUpdate }));
+    vi.doMock('@lib/hubspot-client', () => ({ hsUpdate, readYouTubeChannelId: async () => 'UC123' }));
     mockSearch([{ id: '1', ytId: 'v1' }]);
 
     const { runSync } = await import('../functions/YouTubeSync');
     const out = await runSync(51869810);
-    delete process.env.YOUTUBE_CHANNEL_ID;
 
     expect(out.recordsUpdated).toBe(1);
     expect(out.errors.some((e) => e.includes('analytics'))).toBe(true);
+    // The outcome must say why the analytics properties are blank, not merely
+    // that something went wrong somewhere.
+    expect(out.analyticsSkipped).toContain('analytics request failed');
   });
 });

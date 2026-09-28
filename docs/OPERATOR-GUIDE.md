@@ -245,6 +245,14 @@ Point a daily workflow at `youtube-sync`, or call it directly. It finds every Vi
 carrying a `youtube_video_id`, fetches statistics in batches of 50, and writes `view_count`,
 `like_count`, `comment_count` plus the analytics figures.
 
+The analytics figures need a channel id, which the sync reads off `app_configs` — the
+value the OAuth callback already recorded. **There is nothing to configure.** If the
+response carries `"analyticsSkipped": "no channel id …"`, the connection never completed;
+fix that rather than setting anything by hand.
+
+`YOUTUBE_CHANNEL_ID` exists as a secret **override**, for pointing a sync at a channel the
+callback never wrote. It is not part of setup, and it is deliberately absent from §1.3.
+
 Verify by **postcondition, not response code**:
 
 ```bash

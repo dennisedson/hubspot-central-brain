@@ -352,3 +352,35 @@ export async function readAppSettings(portalId: number): Promise<AppSettings> {
     return { ...DEFAULT_APP_SETTINGS };
   }
 }
+
+/**
+ * The connected YouTube channel id.
+ *
+ * Read from `app_configs`, where the OAuth callback already recorded it — the
+ * same value `youtube-auth?action=status` reports back. `YOUTUBE_CHANNEL_ID`
+ * overrides it, because a secret is the only way to point a sync at a channel
+ * the callback never wrote, but it is an override rather than the source.
+ *
+ * It used to be the source, and that was a mistake: it made an operator copy a
+ * value the app already knew into a second store that nothing validated and no
+ * setup doc listed. Unset, it disabled the analytics half of the sync in
+ * silence — no error, no note, and blank analytics fields that looked exactly
+ * like a channel with no impressions.
+ *
+ * Returns null rather than throwing. Analytics are an enhancement to the sync;
+ * failing to discover a channel id must not cost the statistics.
+ */
+export async function readYouTubeChannelId(portalId: number): Promise<string | null> {
+  const override = process.env.YOUTUBE_CHANNEL_ID?.trim();
+  if (override) return override;
+
+  const objectTypeId = getPortalConfig(portalId).appConfig.objectTypeId;
+  if (!objectTypeId) return null;
+
+  try {
+    const response = await hsSearch(objectTypeId, [], ['youtube_channel_id']);
+    return response.results[0]?.properties.youtube_channel_id || null;
+  } catch {
+    return null;
+  }
+}
