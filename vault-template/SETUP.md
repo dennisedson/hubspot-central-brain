@@ -22,42 +22,50 @@ integration, no auth. That is exactly why the strategy doc puts Obsidian here.
 
 Download from [obsidian.md](https://obsidian.md) and install it. It is free for personal use.
 
-## 2. Get this folder onto the machine
+## 2. Get the vault template onto the machine
 
-The vault template lives in the `hubspot-central-brain` repo.
+The template lives in the `hubspot-central-brain` repo, on the **`develop`** branch. You do not
+need the repo itself — this is 21 files and about 56 KB, and nothing in the vault ever refers
+back to it.
 
-```bash
-git clone https://github.com/dennisedson/hubspot-central-brain.git
-cd hubspot-central-brain
-```
-
-If you already have the repo there, `git pull` instead.
-
-## 3. Copy it to where the vault will live — and mind the folder name
-
-**The folder you copy into becomes the vault name.** The prompts in here build links like
-`obsidian://open?vault=Dev-Central-Brain`, so the folder must be named exactly:
-
-```
-Dev-Central-Brain
-```
-
-No spaces — that is deliberate, and explained under "If a link does not open" below. Copy it
-somewhere sensible — your home folder or Documents, **not** inside the git repo:
+**The one-liner.** Creates the vault folder and fills it, no git involved, nothing left behind:
 
 ```bash
-cp -R vault-template/ ~/Dev-Central-Brain
+mkdir -p ~/Dev-Central-Brain
+curl -sL https://github.com/dennisedson/hubspot-central-brain/archive/refs/heads/develop.tar.gz \
+  | tar -xz --strip-components=2 -C ~/Dev-Central-Brain hubspot-central-brain-develop/vault-template
 ```
 
-**Already have the repo on this machine?** Skip step 2 and copy straight out of wherever it
-lives — `cd` into it first, or give the full path:
+That does step 3 as well — skip to step 4.
+
+> **If you clone instead, ask for `develop` explicitly.** The repo's default branch is `master`,
+> and **`vault-template/` does not exist on it**. A plain `git clone` leaves you in a checkout
+> with no template to copy:
+> ```bash
+> git clone --branch develop --depth 1 https://github.com/dennisedson/hubspot-central-brain.git
+> ```
+
+**Already have the repo on this machine?** Copy straight out of wherever it lives — `cd` into it
+first, or give the full path:
 
 ```bash
 cp -R /path/to/hubspot-central-brain/vault-template/ ~/Dev-Central-Brain
 ```
 
-The vault does not have to be on the same machine as the repo, and the repo does not have to be
-anywhere in particular. Nothing in the vault refers back to it.
+The vault does not have to be on the same machine as the repo.
+
+## 3. Mind the folder name
+
+**The folder you copy into becomes the vault name.** The prompts in here build links like
+`obsidian://open?vault=Dev-Central-Brain`, so it must be named exactly:
+
+```
+Dev-Central-Brain
+```
+
+No spaces — that is deliberate, and explained under "If a link does not open" below. Put it
+somewhere sensible — your home folder or Documents, **not** inside the git repo. The one-liner
+above already uses the right name.
 
 > **If you want a different name**, that is fine — but change it in two files afterwards
 > (`prompts/README.md` and `prompts/changelog-from-linear.md`), remembering that a space becomes

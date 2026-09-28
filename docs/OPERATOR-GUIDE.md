@@ -142,11 +142,14 @@ auth.
 Full walkthrough, written for someone who has never opened Obsidian:
 [`vault-template/SETUP.md`](../vault-template/SETUP.md). The short version:
 
-1. Copy the template out of the repo — **the folder name becomes the vault name**, and the
+1. Get the template onto the machine — **the folder name becomes the vault name**, and the
    prompts build `obsidian://` links against it, so it must be exactly `Dev-Central-Brain`
-   (hyphens, no spaces — a space would have to be written `%20` in the URI):
+   (hyphens, no spaces — a space would have to be written `%20` in the URI). No clone needed,
+   and note the branch: `vault-template/` does not exist on `master`.
    ```bash
-   cp -R vault-template/ ~/Dev-Central-Brain
+   mkdir -p ~/Dev-Central-Brain
+   curl -sL https://github.com/dennisedson/hubspot-central-brain/archive/refs/heads/develop.tar.gz \
+     | tar -xz --strip-components=2 -C ~/Dev-Central-Brain hubspot-central-brain-develop/vault-template
    ```
 2. Obsidian → **Open folder as vault** → choose it → trust the author.
 3. **Settings → Core plugins → Templates**, then set the template folder to `templates`.
