@@ -143,10 +143,10 @@ Full walkthrough, written for someone who has never opened Obsidian:
 [`vault-template/SETUP.md`](../vault-template/SETUP.md). The short version:
 
 1. Copy the template out of the repo — **the folder name becomes the vault name**, and the
-   prompts build `obsidian://` links against it, so it must be exactly `Dev- Central-Brain`
-   (hyphen after `Dev`, space before `Central`):
+   prompts build `obsidian://` links against it, so it must be exactly `Dev-Central-Brain`
+   (hyphens, no spaces — a space would have to be written `%20` in the URI):
    ```bash
-   cp -R vault-template/ ~/"Dev- Central-Brain"
+   cp -R vault-template/ ~/Dev-Central-Brain
    ```
 2. Obsidian → **Open folder as vault** → choose it → trust the author.
 3. **Settings → Core plugins → Templates**, then set the template folder to `templates`.
@@ -163,7 +163,7 @@ Cowork is the orchestrator and, early on, the interface you actually use. It rea
 everything the serverless layer does not yet automate.
 
 1. **Create a project** for this work.
-2. **Add the vault as a connected folder**: `~/Dev- Central-Brain`. Cowork reads and writes
+2. **Add the vault as a connected folder**: `~/Dev-Central-Brain`. Cowork reads and writes
    the notes directly — no integration required.
 3. **Connect the tools you have**: Linear, Asana, Fellow, Slack, Google Calendar. Enterpret
    too, if your account has it — that connector is currently the *only* route to Enterpret

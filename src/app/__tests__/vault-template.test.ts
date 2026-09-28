@@ -129,7 +129,7 @@ describe('Cowork prompts', () => {
       const body = read(file);
       for (const m of body.matchAll(/obsidian:\/\/open\?vault=([^&\s]*)/g)) {
         expect(m[1], `${file} has an unencoded vault name`).not.toContain(' ');
-        expect(m[1]).toBe('Dev-%20Central-Brain');
+        expect(m[1]).toBe('Dev-Central-Brain');
       }
     }
   });

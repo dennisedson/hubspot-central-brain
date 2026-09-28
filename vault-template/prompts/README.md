@@ -15,15 +15,16 @@ fix it here so the next run starts better.
 
 ## Vault name
 
-The vault is **`Dev- Central-Brain`**. Note the space — in an `obsidian://` URI it must be
-percent-encoded:
+The vault is **`Dev-Central-Brain`**. No spaces, deliberately: a space has to be written `%20`
+in an `obsidian://` URI, and a raw one produces a link that silently does nothing.
 
 ```
-obsidian://open?vault=Dev-%20Central-Brain&file=changelogs%2Fexample.md
+obsidian://open?vault=Dev-Central-Brain&file=changelogs%2Fexample.md
 ```
 
-`Dev-%20Central-Brain` is already filled in wherever a prompt builds one of these links. If you
-rename the vault, update it here and in `changelog-from-linear.md`.
+`Dev-Central-Brain` is already filled in wherever a prompt builds one of these links. If you
+rename the vault, update it here and in `changelog-from-linear.md` — and note that
+`vault-template.test.ts` pins the name, so it will tell you if the two drift apart.
 
 ## Prompts
 

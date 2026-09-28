@@ -348,9 +348,9 @@ a failure sends people re-authorising when the fix is a secret.
 
 Follow [`vault-template/SETUP.md`](../vault-template/SETUP.md).
 
-**Expect** the vault named exactly `Dev- Central-Brain` — hyphen after `Dev`,
-space before `Central`. The prompts build `obsidian://` links against that name;
-anything else silently breaks every link.
+**Expect** the vault named exactly `Dev-Central-Brain` — hyphens, no spaces.
+The prompts build `obsidian://` links against that name; anything else silently
+breaks every link, with no error and no dialog.
 **Expect** seven folders: `daily/`, `meetings/`, `content/`, `changelogs/`,
 `references/`, `templates/` and `prompts/`. The first five look empty — their
 `.gitkeep` files are hidden dotfiles.
@@ -366,7 +366,7 @@ exists — that pair is what ties the note to a CRM record.
 
 ### 6.3 Cowork reads the vault
 
-Connect `~/Dev- Central-Brain` as a folder in Cowork and ask it to list your
+Connect `~/Dev-Central-Brain` as a folder in Cowork and ask it to list your
 content notes.
 
 **Expect** it can read them.

@@ -59,11 +59,11 @@ wins if they disagree.
 ### HubSpot → note, in `source_url`
 
 ```
-obsidian://open?vault=Dev-%20Central-Brain&file=changelogs%2Fwebhook-retries.md
+obsidian://open?vault=Dev-Central-Brain&file=changelogs%2Fwebhook-retries.md
 ```
 
-The vault is `Dev- Central-Brain`. Both the vault name and the file path are percent-encoded —
-the space in the name becomes `%20`, and path separators become `%2F`.
+The vault is `Dev-Central-Brain`. The path is percent-encoded — separators become `%2F`. The
+vault name needs no encoding, which is the whole reason it has no space in it.
 
 `source_url` is defined in the strategy doc as "Link to the draft (Google Doc, Obsidian note, etc.)".
 

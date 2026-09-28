@@ -36,20 +36,24 @@ If you already have the repo there, `git pull` instead.
 ## 3. Copy it to where the vault will live — and mind the folder name
 
 **The folder you copy into becomes the vault name.** The prompts in here build links like
-`obsidian://open?vault=Dev-%20Central-Brain&…`, so the folder must be named exactly:
+`obsidian://open?vault=Dev-Central-Brain`, so the folder must be named exactly:
 
 ```
-Dev- Central-Brain
+Dev-Central-Brain
 ```
 
-Note the hyphen right after `Dev` and the space before `Central`. Copy it somewhere sensible —
-your home folder or Documents, **not** inside the git repo:
+No spaces — that is deliberate, and explained under "If a link does not open" below. Copy it
+somewhere sensible — your home folder or Documents, **not** inside the git repo:
 
 ```bash
-cp -R vault-template/ ~/"Dev- Central-Brain"
+cp -R vault-template/ ~/Dev-Central-Brain
 ```
 
-The quotes are needed because of the space.
+**Already have the repo cloned?** Skip step 2 entirely and copy straight out of it:
+
+```bash
+cp -R ~/Development/hubspot-central-brain/vault-template/ ~/Dev-Central-Brain
+```
 
 > **If you want a different name**, that is fine — but change it in two files afterwards
 > (`prompts/README.md` and `prompts/changelog-from-linear.md`), remembering that a space becomes
@@ -59,7 +63,7 @@ The quotes are needed because of the space.
 
 1. Launch Obsidian
 2. **Open folder as vault**
-3. Choose the `Dev- Central-Brain` folder you just created
+3. Choose the `Dev-Central-Brain` folder you just created
 4. Trust the author when prompted — it is your own folder
 
 Obsidian creates a hidden `.obsidian/` folder inside it for your settings. That is normal, and it
@@ -105,7 +109,7 @@ Full explanation of every field is in `README.md` under "The linkage contract".
 
 ## 7. Connect the folder in Cowork
 
-In Cowork, add `~/Dev- Central-Brain` as a connected folder. Cowork can then read and write these
+In Cowork, add `~/Dev-Central-Brain` as a connected folder. Cowork can then read and write these
 notes directly.
 
 Then open `prompts/README.md` — those are ready-made instructions to paste into Cowork. Start with
@@ -134,13 +138,14 @@ just files on your machine — back them up however you back up anything else.
 
 ## If a link does not open
 
-`obsidian://` links only work when the vault name matches exactly, encoded. Given a vault named
-`Dev- Central-Brain`, a correct link is:
+`obsidian://` links only work when the vault name matches exactly. Given a vault named
+`Dev-Central-Brain`, a correct link is:
 
 ```
-obsidian://open?vault=Dev-%20Central-Brain&file=content%2Fmy-note.md
+obsidian://open?vault=Dev-Central-Brain&file=content%2Fmy-note.md
 ```
 
-`%20` is the space. `%2F` is the `/` between folder and filename. A raw space produces a link that
-silently does nothing — no error, no dialog. If a link from HubSpot does not open, this is almost
-always why.
+`%2F` is the `/` between folder and filename. **This is why the vault name has no space in it.**
+A space is legal in a folder name but must be written `%20` in the URI, and a raw one produces a
+link that silently does nothing — no error, no dialog. Removing the space removes the trap. If a
+link from HubSpot does not open, check the name matches character for character.
