@@ -147,7 +147,8 @@ const Card = ({ context }: { context: { crm: { objectId: string | number }; port
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [syncing, setSyncing] = useState(false);
+  /** Which sync is in flight, so each button shows its own state. */
+  const [syncing, setSyncing] = useState<'record' | 'all' | null>(null);
   const [syncNote, setSyncNote] = useState<string | null>(null);
 
   const [suggesting, setSuggesting] = useState(false);
@@ -188,23 +189,38 @@ const Card = ({ context }: { context: { crm: { objectId: string | number }; port
     };
   }, [objectId, portalId]);
 
-  async function onSync() {
-    setSyncing(true);
+  /**
+   * `scope: 'record'` sends this record's id and syncs only it. `'all'` omits
+   * it and sweeps the portal. Passing the id also sidesteps HubSpot's search
+   * indexing lag, since a single record is read rather than searched for.
+   */
+  async function onSync(scope: 'record' | 'all') {
+    setSyncing(scope);
     setSyncNote(null);
     try {
-      const res = await callServerless('youtube_sync', { parameters: { portalId } });
+      const parameters: Record<string, string> = { portalId };
+      if (scope === 'record') parameters.recordId = objectId;
+      const res = await callServerless('youtube_sync', { parameters });
       const outcome = parseBody<SyncOutcome>(res);
-      if (res.statusCode !== 200) throw new Error(`HTTP ${res.statusCode}`);
+      if (res.statusCode !== 200) {
+        throw new Error(
+          (outcome as unknown as { message?: string })?.message ?? `HTTP ${res.statusCode}`,
+        );
+      }
       setVideo(await loadVideo());
       setSyncNote(
         outcome.errors?.length
           ? `Synced with ${outcome.errors.length} error(s): ${outcome.errors[0]}`
-          : `Updated ${outcome.recordsUpdated} of ${outcome.recordsFound} video record(s).`,
+          : scope === 'record'
+            ? outcome.recordsFound === 0
+              ? 'Nothing to sync — this record has no YouTube video id.'
+              : 'Updated this video.'
+            : `Updated ${outcome.recordsUpdated} of ${outcome.recordsFound} video record(s).`,
       );
     } catch (err) {
       setSyncNote(err instanceof Error ? err.message : 'Sync failed');
     } finally {
-      setSyncing(false);
+      setSyncing(null);
     }
   }
 
@@ -275,15 +291,32 @@ const Card = ({ context }: { context: { crm: { objectId: string | number }; port
       <Divider />
 
       <ButtonRow>
-        <Button onClick={() => void onSync()} disabled={syncing || noVideoId || !conn?.connected}>
-          {syncing ? 'Syncing…' : 'Sync metrics'}
+        <Button
+          onClick={() => void onSync('record')}
+          disabled={!!syncing || noVideoId || !conn?.connected}
+        >
+          {syncing === 'record' ? 'Syncing…' : 'Sync this video'}
+        </Button>
+        <Button
+          onClick={() => void onSync('all')}
+          disabled={!!syncing || !conn?.connected}
+        >
+          {syncing === 'all' ? 'Syncing all…' : 'Sync all videos'}
         </Button>
         <Button onClick={() => void onSuggest()} disabled={suggesting}>
           {suggesting ? 'Asking Claude…' : 'Suggest metadata'}
         </Button>
       </ButtonRow>
 
-      {syncing && <LoadingSpinner label="Fetching from YouTube…" />}
+      {syncing && (
+        <LoadingSpinner
+          label={
+            syncing === 'all'
+              ? 'Fetching every video from YouTube…'
+              : 'Fetching from YouTube…'
+          }
+        />
+      )}
       {syncNote && <Text variant="microcopy">{syncNote}</Text>}
 
       {/* The suggestion call routinely takes ~13s, so an explicit wait state is

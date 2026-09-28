@@ -297,14 +297,31 @@ and a line reading "Record updated …".
 
 ### 5.3 Sync from the card
 
-Press **Sync metrics**.
+There are two sync buttons, and the difference matters.
 
-**Expect** a spinner, then a note like "Updated 1 of 1 video record(s)", and the
-stats refresh in place.
-**Note** — this button syncs **every** Video record on the portal, not just this
-one. The count reflects that: with three records it reads "Updated 3 of 3".
-**Expect the button disabled** when the record has no `youtube_video_id`, or
-when YouTube is not connected. Both are deliberate.
+**Press *Sync this video*.**
+
+**Expect** a spinner, then `Updated this video.`, with the stats refreshing in
+place. Only this record is touched.
+**Why it reads rather than searches** — a single-record sync fetches the record
+by id, so it is immune to the HubSpot search indexing lag that makes a freshly
+created record report `recordsFound: 0` in 4.1.
+
+**Press *Sync all videos*.**
+
+**Expect** `Updated N of N video record(s).` — every Video record on the
+portal, which is the right behaviour for the nightly workflow and the reason
+this is a separate, explicitly labelled button.
+
+**Expect also** that *Sync this video* is disabled when the record has no
+`youtube_video_id`, or when YouTube is not connected. *Sync all videos* is
+disabled only on the connection, since it does not depend on this record.
+
+**Fail signal** — `HTTP 500`. The handler resolves the portal from
+`accountId`, which a gateway request carries and a card's
+`hubspot.serverless()` call does not, so it falls back to the `portalId`
+parameter the card sends. A 500 here means that fallback is gone; a 400 saying
+`Missing portalId` means the card stopped sending it.
 
 ### 5.4 AI suggestions
 

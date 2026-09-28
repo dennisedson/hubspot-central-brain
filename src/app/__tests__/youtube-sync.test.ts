@@ -281,3 +281,105 @@ describe('mapAnalyticsToProperties — absent versus zero', () => {
     expect('click_through_rate' in props).toBe(false);
   });
 });
+
+describe('YouTubeSync.main — how the portal is resolved', () => {
+  const originalFetch = globalThis.fetch;
+  const originalToken = process.env.HS_ACCESS_TOKEN;
+
+  beforeEach(() => {
+    process.env.HS_ACCESS_TOKEN = 'test-token';
+    vi.resetModules();
+    globalThis.fetch = vi.fn() as unknown as typeof fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    if (originalToken === undefined) delete process.env.HS_ACCESS_TOKEN;
+    else process.env.HS_ACCESS_TOKEN = originalToken;
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  function mockEmptySearch() {
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ results: [] }),
+      text: async () => '',
+    } as unknown as Response);
+  }
+
+  async function load() {
+    vi.doMock('@lib/youtube-auth', () => ({ getYouTubeAccessToken: async () => 'tok' }));
+    vi.doMock('@lib/youtube-client', () => ({
+      chunkVideoIds: (ids: string[]) => (ids.length ? [ids] : []),
+      fetchVideoBatch: async () => ({ notModified: false, etag: null, items: [] }),
+      fetchVideoAnalytics: async () => new Map(),
+    }));
+    vi.doMock('@lib/hubspot-client', () => ({
+      hsUpdate: vi.fn(),
+      readYouTubeChannelId: async () => null,
+    }));
+    return (await import('../functions/YouTubeSync')).main;
+  }
+
+  it('falls back to the portalId parameter when accountId is absent', async () => {
+    // A card's hubspot.serverless() call carries no accountId, which is why the
+    // card passes portalId explicitly. Reading only accountId made every sync
+    // from the card a 500.
+    const main = await load();
+    mockEmptySearch();
+    const res = await main({ parameters: { portalId: '51869810' } } as never);
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('unwraps an array portalId from a public-URL query', async () => {
+    const main = await load();
+    mockEmptySearch();
+    const res = await main({ params: { portalId: ['51869810'] } } as never);
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('answers 400 rather than 500 with no portal anywhere', async () => {
+    // Previously this reached getPortalConfig(undefined) and threw, which the
+    // card surfaced as an opaque HTTP 500.
+    const main = await load();
+    const res = await main({} as never);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('reads one record rather than searching when given a recordId', async () => {
+    // A single-record sync must not depend on HubSpot search indexing, which
+    // is what makes a freshly created record report recordsFound: 0.
+    const main = await load();
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: '42', properties: { youtube_video_id: 'v1' } }),
+      text: async () => '',
+    } as unknown as Response);
+
+    const res = await main({ parameters: { portalId: '51869810', recordId: '42' } } as never);
+    expect(res.statusCode).toBe(200);
+    expect((res.body as { recordsFound: number }).recordsFound).toBe(1);
+
+    const urls = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) =>
+      String(c[0]),
+    );
+    expect(urls.some((u) => u.includes('/search'))).toBe(false);
+    expect(urls[0]).toContain('/42');
+  });
+
+  it('reports nothing to sync when the record has no video id', async () => {
+    const main = await load();
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: '42', properties: {} }),
+      text: async () => '',
+    } as unknown as Response);
+
+    const res = await main({ parameters: { portalId: '51869810', recordId: '42' } } as never);
+    expect(res.statusCode).toBe(200);
+    expect((res.body as { recordsFound: number }).recordsFound).toBe(0);
+  });
+});

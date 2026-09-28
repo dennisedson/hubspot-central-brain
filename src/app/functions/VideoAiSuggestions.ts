@@ -100,17 +100,48 @@ export async function suggestForRecord(
   return { ...result, recordId, basedOn: facts };
 }
 
-export const main = async (context: {
-  accountId: number;
+interface SuggestionsContext {
+  accountId?: number;
+  params?: Record<string, string | string[] | undefined>;
+  parameters?: Record<string, string | undefined>;
+  query?: Record<string, string | undefined>;
   body?: SuggestionRequest;
-}): Promise<{ statusCode: number; body: SuggestionResponse | { message: string } }> => {
-  const recordId = context?.body?.recordId;
+}
+
+/**
+ * The card calls this through `hubspot.serverless()`, which delivers values in
+ * `parameters` — not in the body this handler used to read exclusively, and
+ * not with the `accountId` a gateway request carries. Reading only the body
+ * made every card request a 400, and only `accountId` would have made it a 500.
+ * Query params on a public URL arrive in `params` as ARRAYS.
+ */
+function param(ctx: SuggestionsContext, key: string): string | undefined {
+  const q = ctx.params?.[key];
+  const fromQuery = Array.isArray(q) ? q[0] : q;
+  const fromBody = (ctx.body as Record<string, unknown> | undefined)?.[key];
+  return (
+    fromQuery ??
+    ctx.parameters?.[key] ??
+    ctx.query?.[key] ??
+    (typeof fromBody === 'string' ? fromBody : undefined)
+  );
+}
+
+export const main = async (
+  context: SuggestionsContext,
+): Promise<{ statusCode: number; body: SuggestionResponse | { message: string } }> => {
+  const recordId = param(context, 'recordId');
   if (!recordId) {
     return { statusCode: 400, body: { message: 'recordId is required' } };
   }
 
+  const portalId = context.accountId ?? parseInt(param(context, 'portalId') ?? '0', 10);
+  if (!portalId) {
+    return { statusCode: 400, body: { message: 'Missing portalId' } };
+  }
+
   try {
-    return { statusCode: 200, body: await suggestForRecord(context.accountId, recordId, context.body?.transcript) };
+    return { statusCode: 200, body: await suggestForRecord(portalId, recordId, context.body?.transcript) };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     // A ClaudeError carries a classified reason (rate limit, refusal, bad JSON)

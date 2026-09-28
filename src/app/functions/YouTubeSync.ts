@@ -1,6 +1,6 @@
 import { getPortalConfig } from '../lib/portal-config';
 import { hsUpdate, readYouTubeChannelId } from '../lib/hubspot-client';
-import { HS_BASE, objectSearchPath } from '../lib/hs-api';
+import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 import { getYouTubeAccessToken } from '../lib/youtube-auth';
 import {
   chunkVideoIds,
@@ -135,6 +135,31 @@ export async function findVideosWithYouTubeIds(objectTypeId: string): Promise<Vi
 }
 
 /**
+ * One video record by id, in the shape `findVideosWithYouTubeIds` returns.
+ *
+ * Read directly rather than searched, which matters twice. A search does not
+ * see a record until HubSpot has indexed it — the lag that makes a freshly
+ * created record report `recordsFound: 0` — and a card syncing the record
+ * already on screen knows its id, so there is nothing to search for.
+ *
+ * Returns an empty list, not an error, when the record has no YouTube id:
+ * "nothing to sync" is a legitimate outcome, not a failure.
+ */
+export async function readVideoById(
+  objectTypeId: string,
+  recordId: string,
+): Promise<VideoRecord[]> {
+  const token = getToken();
+  const url = `${HS_BASE}${objectPath(objectTypeId, recordId)}?properties=${READ_PROPERTIES.join(',')}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`HubSpot video read failed ${res.status}: ${await res.text()}`);
+
+  const body = (await res.json()) as { id: string; properties?: Record<string, string | null> };
+  const ytId = body.properties?.youtube_video_id;
+  return ytId ? [{ id: body.id, youtubeVideoId: ytId }] : [];
+}
+
+/**
  * Map a YouTube payload onto HubSpot property values. Counts arrive as strings
  * and are passed through as strings — HubSpot number properties accept them,
  * and parsing to a JS number then back risks precision loss on a large channel.
@@ -171,12 +196,26 @@ export function mapAnalyticsToProperties(analytics: VideoAnalytics): Record<stri
   return props;
 }
 
-export async function runSync(portalId: number): Promise<SyncOutcome> {
+/**
+ * `recordId` narrows the sync to one video. Absent, every Video record on the
+ * portal is synced — which is right for the nightly workflow and wrong for a
+ * button on one record's card, where it quietly touches every other video too.
+ */
+export interface SyncOptions {
+  recordId?: string;
+}
+
+export async function runSync(
+  portalId: number,
+  options: SyncOptions = {},
+): Promise<SyncOutcome> {
   const config = getPortalConfig(portalId);
   const objectTypeId = config.video.objectTypeId;
 
   const accessToken = await getYouTubeAccessToken();
-  const records = await findVideosWithYouTubeIds(objectTypeId);
+  const records = options.recordId
+    ? await readVideoById(objectTypeId, options.recordId)
+    : await findVideosWithYouTubeIds(objectTypeId);
 
   const outcome: SyncOutcome = {
     recordsFound: records.length,
@@ -245,11 +284,47 @@ export async function runSync(portalId: number): Promise<SyncOutcome> {
   return outcome;
 }
 
-export const main = async (context: {
-  accountId: number;
-}): Promise<{ statusCode: number; body: SyncOutcome | { message: string } }> => {
+interface SyncContext {
+  accountId?: number;
+  params?: Record<string, string | string[] | undefined>;
+  parameters?: Record<string, string | undefined>;
+  query?: Record<string, string | undefined>;
+  body?: Record<string, unknown>;
+}
+
+/**
+ * HubSpot delivers the same value in different places depending on how the
+ * function was called: query params on a public URL arrive in `params` AS
+ * ARRAYS, a UI extension's `hubspot.serverless()` call puts them in
+ * `parameters`, and a plain POST puts them in the body.
+ */
+function param(ctx: SyncContext, key: string): string | undefined {
+  const q = ctx.params?.[key];
+  const fromQuery = Array.isArray(q) ? q[0] : q;
+  const fromBody = ctx.body?.[key];
+  return (
+    fromQuery ??
+    ctx.parameters?.[key] ??
+    ctx.query?.[key] ??
+    (typeof fromBody === 'string' ? fromBody : undefined)
+  );
+}
+
+export const main = async (
+  context: SyncContext,
+): Promise<{ statusCode: number; body: SyncOutcome | { message: string } }> => {
+  // accountId is present on a gateway request and absent on a card's
+  // `hubspot.serverless()` call, which is why the card passes portalId
+  // explicitly. Reading only accountId made every card sync a 500.
+  const portalId = context.accountId ?? parseInt(param(context, 'portalId') ?? '0', 10);
+  if (!portalId) {
+    return { statusCode: 400, body: { message: 'Missing portalId' } };
+  }
+
+  const recordId = param(context, 'recordId') || undefined;
+
   try {
-    const outcome = await runSync(context.accountId);
+    const outcome = await runSync(portalId, { recordId });
     return { statusCode: 200, body: outcome };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
