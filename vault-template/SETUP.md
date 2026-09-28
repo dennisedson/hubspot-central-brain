@@ -49,11 +49,15 @@ somewhere sensible — your home folder or Documents, **not** inside the git rep
 cp -R vault-template/ ~/Dev-Central-Brain
 ```
 
-**Already have the repo cloned?** Skip step 2 entirely and copy straight out of it:
+**Already have the repo on this machine?** Skip step 2 and copy straight out of wherever it
+lives — `cd` into it first, or give the full path:
 
 ```bash
-cp -R ~/Development/hubspot-central-brain/vault-template/ ~/Dev-Central-Brain
+cp -R /path/to/hubspot-central-brain/vault-template/ ~/Dev-Central-Brain
 ```
+
+The vault does not have to be on the same machine as the repo, and the repo does not have to be
+anywhere in particular. Nothing in the vault refers back to it.
 
 > **If you want a different name**, that is fine — but change it in two files afterwards
 > (`prompts/README.md` and `prompts/changelog-from-linear.md`), remembering that a space becomes
