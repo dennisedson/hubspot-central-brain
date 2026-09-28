@@ -219,6 +219,11 @@ function buildWorkflow(def: WorkflowDef) {
         { name: 'linearTeamId', value: def.linearTeamId },
         { name: 'hubspotStage', value: 'hs_pipeline_stage' },
         { name: 'linearIssueId', value: 'linear_issue_id' },
+        // Both only matter on the create path, when linear_issue_id is empty:
+        // title names the new Linear issue, objectId says where to write its id
+        // back. Without objectId every later stage change creates another issue.
+        { name: 'title', value: 'title' },
+        { name: 'objectId', value: 'hs_object_id' },
       ]),
     });
   }

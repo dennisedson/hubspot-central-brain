@@ -4,7 +4,11 @@
   "config": {
     "actionUrl": "https://51869810.hs-sites.com/hs/serverless/sync-to-linear",
     "isPublished": true,
-    "supportedClients": [{ "client": "WORKFLOWS" }],
+    "supportedClients": [
+      {
+        "client": "WORKFLOWS"
+      }
+    ],
     "objectTypes": [],
     "inputFields": [
       {
@@ -13,7 +17,9 @@
           "type": "string",
           "fieldType": "text"
         },
-        "supportedValueTypes": ["STATIC_VALUE"],
+        "supportedValueTypes": [
+          "STATIC_VALUE"
+        ],
         "isRequired": true
       },
       {
@@ -22,8 +28,10 @@
           "type": "string",
           "fieldType": "text"
         },
-        "supportedValueTypes": ["OBJECT_PROPERTY"],
-        "isRequired": true
+        "supportedValueTypes": [
+          "OBJECT_PROPERTY"
+        ],
+        "isRequired": false
       },
       {
         "typeDefinition": {
@@ -31,7 +39,9 @@
           "type": "string",
           "fieldType": "text"
         },
-        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "supportedValueTypes": [
+          "OBJECT_PROPERTY"
+        ],
         "isRequired": true
       },
       {
@@ -40,11 +50,19 @@
           "type": "enumeration",
           "fieldType": "select",
           "options": [
-            { "value": "content", "label": "Content" },
-            { "value": "changelog", "label": "Changelog Entry" }
+            {
+              "value": "content",
+              "label": "Content"
+            },
+            {
+              "value": "changelog",
+              "label": "Changelog Entry"
+            }
           ]
         },
-        "supportedValueTypes": ["STATIC_VALUE"],
+        "supportedValueTypes": [
+          "STATIC_VALUE"
+        ],
         "isRequired": true
       },
       {
@@ -53,41 +71,93 @@
           "type": "string",
           "fieldType": "text"
         },
-        "supportedValueTypes": ["STATIC_VALUE"],
+        "supportedValueTypes": [
+          "STATIC_VALUE"
+        ],
         "isRequired": true
+      },
+      {
+        "typeDefinition": {
+          "name": "title",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": [
+          "OBJECT_PROPERTY"
+        ],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "objectId",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": [
+          "OBJECT_PROPERTY"
+        ],
+        "isRequired": false
       }
     ],
     "outputFields": [
       {
-        "typeDefinition": { "name": "syncStatus", "type": "string", "fieldType": "text" }
+        "typeDefinition": {
+          "name": "syncStatus",
+          "type": "string",
+          "fieldType": "text"
+        }
       },
       {
-        "typeDefinition": { "name": "linearStateName", "type": "string", "fieldType": "text" }
+        "typeDefinition": {
+          "name": "linearStateName",
+          "type": "string",
+          "fieldType": "text"
+        }
+      },
+      {
+        "typeDefinition": {
+          "name": "linearIssueId",
+          "type": "string",
+          "fieldType": "text"
+        }
+      },
+      {
+        "typeDefinition": {
+          "name": "linearIssueUrl",
+          "type": "string",
+          "fieldType": "text"
+        }
       }
     ],
     "labels": {
       "en": {
         "actionName": "Sync Status to Linear",
         "appDisplayName": "Central Brain",
-        "actionDescription": "Pushes the current HubSpot pipeline stage to the linked Linear issue",
+        "actionDescription": "Pushes the current HubSpot pipeline stage to the linked Linear issue, or creates the issue when the record has none and has reached Outline",
         "actionCardContent": "Sync to Linear → {{objectType}}",
         "inputFieldLabels": {
           "sharedSecret": "Shared Secret",
           "linearIssueId": "Linear Issue ID",
           "hubspotStage": "HubSpot Pipeline Stage",
           "objectType": "Object Type",
-          "linearTeamId": "Linear Team ID"
+          "linearTeamId": "Linear Team ID",
+          "title": "Content Title",
+          "objectId": "HubSpot Record ID"
         },
         "inputFieldDescriptions": {
           "sharedSecret": "Shared secret that authenticates this request; must match the SYNC_SHARED_SECRET function secret",
-          "linearIssueId": "The linear_issue_id property from the HubSpot record",
+          "linearIssueId": "The linear_issue_id property from the HubSpot record. Empty on a record promoted from the vault — the action then creates the issue instead of updating one",
           "hubspotStage": "The hs_pipeline_stage property from the HubSpot record",
           "objectType": "Whether this is a Content or Changelog Entry record",
-          "linearTeamId": "Your Linear team ID — find it in Linear Settings > API"
+          "linearTeamId": "Your Linear team ID — find it in Linear Settings > API",
+          "title": "The title property from the HubSpot record — used as the Linear issue title when creating a new issue",
+          "objectId": "The hs_object_id of the enrolled HubSpot record — used to write the new Linear issue id back after creation. Without it every later stage change creates another issue"
         },
         "outputFieldLabels": {
           "syncStatus": "Sync Status",
-          "linearStateName": "Linear State Set"
+          "linearStateName": "Linear State Set",
+          "linearIssueId": "Linear Issue ID",
+          "linearIssueUrl": "Linear Issue URL"
         }
       }
     }

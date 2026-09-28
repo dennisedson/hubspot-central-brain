@@ -5,6 +5,8 @@ import {
   CONTENT_STAGE_TO_LINEAR_STATE,
   CHANGELOG_STAGE_TO_LINEAR_STATE,
   LINEAR_CHANGELOG_LABEL,
+  FANOUT_STAGES,
+  isFanoutStage,
 } from '@lib/mapping';
 
 describe('LINEAR_STATE_TO_CONTENT_STAGE', () => {
@@ -44,4 +46,44 @@ describe('CHANGELOG_STAGE_TO_LINEAR_STATE', () => {
 describe('constants', () => {
   it('LINEAR_CHANGELOG_LABEL is "changelog"', () =>
     expect(LINEAR_CHANGELOG_LABEL).toBe('changelog'));
+});
+
+/**
+ * The Outline threshold, shared by the Linear and Asana fan-out.
+ *
+ * It lives in mapping.ts rather than in either handler because two copies would
+ * eventually disagree, and a record with a Linear issue but no Asana task looks
+ * identical to a record whose Asana call failed.
+ */
+describe('isFanoutStage', () => {
+  it.each(['outline', 'drafting', 'editing', 'review', 'published'])(
+    '%s is at or past the threshold', stage => {
+      expect(isFanoutStage(stage)).toBe(true);
+    });
+
+  // Rule 1: the vault is the idea stage, and an idea never fans out.
+  it('idea is below the threshold', () => {
+    expect(isFanoutStage('idea')).toBe(false);
+  });
+
+  // Archived is not "later than Outline" — it is off to the side. Opening a
+  // Linear issue for work that arrived dead is noise, not tracking.
+  it('archived is outside the threshold rather than past it', () => {
+    expect(isFanoutStage('archived')).toBe(false);
+  });
+
+  it('an unknown or missing stage never fans out', () => {
+    expect(isFanoutStage(undefined)).toBe(false);
+    expect(isFanoutStage('identified')).toBe(false);
+    expect(isFanoutStage('')).toBe(false);
+  });
+
+  // Every stage named must be a real ContentStage. A typo here would silently
+  // disable the fan-out for that stage with no type error at the call site,
+  // because isFanoutStage takes a plain string.
+  it('names only stages the content pipeline actually has', () => {
+    for (const stage of FANOUT_STAGES) {
+      expect(Object.keys(CONTENT_STAGE_TO_LINEAR_STATE)).toContain(stage);
+    }
+  });
 });

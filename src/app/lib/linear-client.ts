@@ -1,4 +1,5 @@
 import type { LinearState } from './types';
+import { HS_SYNC_TAG } from './mapping';
 
 const LINEAR_API = 'https://api.linear.app/graphql';
 
@@ -7,7 +8,7 @@ interface GraphQLResponse<T> {
   errors?: Array<{ message: string }>;
 }
 
-async function gql<T>(apiKey: string, query: string, variables: Record<string, string>): Promise<T> {
+async function gql<T>(apiKey: string, query: string, variables: Record<string, unknown>): Promise<T> {
   const response = await fetch(LINEAR_API, {
     method: 'POST',
     headers: {
@@ -70,6 +71,73 @@ export async function updateLinearIssueState(
   if (!data.issueUpdate.success) {
     throw new Error(`Linear issueUpdate returned success: false for issue ${issueId}`);
   }
+}
+
+export interface CreatedLinearIssue {
+  id: string;
+  identifier: string;
+  url: string;
+}
+
+export interface CreateIssueInput {
+  teamId: string;
+  title: string;
+  description?: string;
+  /** Omit to let Linear use the team's default state (normally Backlog). */
+  stateId?: string;
+}
+
+/**
+ * Create a Linear issue.
+ *
+ * The description ALWAYS carries HS_SYNC_TAG, and this function appends it
+ * rather than trusting the caller to remember. Linear fires a webhook for every
+ * issue that appears, including the ones we create; `LinearWebhook` skips any
+ * payload whose description contains the tag, and that skip is the only thing
+ * standing between this call and a second HubSpot record for work that already
+ * has one.
+ *
+ * Putting the tag here rather than at the call site is the point. A caller who
+ * forgot it would not fail here — it would succeed, and fail a minute later
+ * somewhere else, as a duplicate record nobody can trace back to this line.
+ */
+export async function createIssue(
+  apiKey: string,
+  input: CreateIssueInput,
+): Promise<CreatedLinearIssue> {
+  const description = input.description?.includes(HS_SYNC_TAG)
+    ? input.description
+    : [input.description?.trim(), HS_SYNC_TAG].filter(Boolean).join('\n\n');
+
+  const mutation = `
+    mutation CreateIssue($input: IssueCreateInput!) {
+      issueCreate(input: $input) {
+        success
+        issue { id identifier url }
+      }
+    }
+  `;
+
+  const data = await gql<{ issueCreate: { success: boolean; issue: CreatedLinearIssue | null } }>(
+    apiKey,
+    mutation,
+    {
+      input: {
+        teamId: input.teamId,
+        title: input.title,
+        description,
+        ...(input.stateId ? { stateId: input.stateId } : {}),
+      },
+    },
+  );
+
+  // success: false with no error array is Linear's way of refusing without
+  // explaining. Returning a half-built object here would hand the caller an
+  // undefined issue id to write into HubSpot.
+  if (!data.issueCreate.success || !data.issueCreate.issue) {
+    throw new Error(`Linear issueCreate returned success: false for team ${input.teamId}`);
+  }
+  return data.issueCreate.issue;
 }
 
 export interface LinearIssueDetail {

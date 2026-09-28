@@ -89,3 +89,30 @@ export const ASANA_STAGE_TO_CHANGELOG_STAGE: Record<string, ChangelogStage> = {
   '1202184607668470': 'reviewing',  // Peer Review
   '1202212684793528': 'published',  // Published
 };
+
+/**
+ * The Content stages at which work fans out into Linear and Asana.
+ *
+ * The vault is the idea stage. A note that nobody has promoted is a thought,
+ * and a thought has no business occupying a slot in an issue tracker or
+ * somebody's task list — so nothing is created below Outline. Outline is the
+ * threshold at which the work becomes real, and it is the same threshold for
+ * both systems deliberately: two different thresholds would mean a record that
+ * has a Linear issue but no Asana task, and no way to tell whether that was
+ * the rule or a failure.
+ *
+ * `archived` is absent on purpose. It is not "later than Outline", it is off
+ * to the side — creating a Linear issue for work that arrived already dead
+ * would be noise.
+ */
+export const FANOUT_STAGES: readonly ContentStage[] = [
+  'outline',
+  'drafting',
+  'editing',
+  'review',
+  'published',
+];
+
+export function isFanoutStage(stageName: string | undefined): boolean {
+  return FANOUT_STAGES.includes(stageName as ContentStage);
+}
