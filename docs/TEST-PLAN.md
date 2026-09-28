@@ -80,7 +80,15 @@ a regression rather than a new-feature problem.
 
 ### 2.1 Linear issue creates a Content record — and the Asana task
 
-Tag a Linear issue with the configured label.
+Tag a Linear issue with the configured label. **Put the issue in `Todo`, not
+`Backlog`, and check that before you start.**
+
+The state is not incidental — it decides half of what this test expects.
+`Todo` maps to **Outline**, and Outline is the threshold at which work fans out
+into Asana. `Backlog` maps to **Idea**, and nothing is created at Idea: no
+Asana task, and no Linear issue in the other direction either. An issue tagged
+in Backlog therefore produces a Content record and *no task*, which is correct
+behaviour and looks exactly like the Asana sync being broken.
 
 More happens here than the name suggests. The webhook creates the record *with a
 pipeline stage already set*, and the sync workflow enrols on any
@@ -94,12 +102,17 @@ webhook maps it on creation: Backlog → Idea, Todo → Outline, In Progress →
 Drafting, In Review → Review, Done → Published, Canceled → Archived. An issue
 in Todo therefore appears in **Outline**, which is correct. Anything unmapped
 falls back to Idea.
-**Expect** a **task in Asana**, created by that same enrolment.
+**Expect** a **task in Asana**, created by that same enrolment — because the
+issue is in `Todo` and the record therefore landed at Outline.
 **Expect** `asana_task_url` on the HubSpot record. That write-back is a separate
 call after the create, and it is the proof the two are linked.
 **Fail signal** — the record and the Asana task both exist but `asana_task_url`
 is empty. The task was created and never linked, and every later stage change
 will create another one.
+**Not a bug** — no Asana task at all when the issue was in `Backlog`. Check the
+Linear state before filing anything. Move the issue to `Todo` and the task
+appears within a minute; that transition is itself the cleanest way to see the
+threshold working.
 **Where to look on failure** — the gateway stream, for a `linear-webhook`
 execution. No entry at all means the webhook never arrived; an entry with an
 error means it arrived and we rejected it. Those are very different bugs.
@@ -116,6 +129,36 @@ The link already exists from 2.1, so this is the **update** path.
 **Fail signal** — a second Asana task appears. That means `asana_task_url` was
 never written back in 2.1, so the sync could not find the existing task and
 created another.
+
+**Moving it *back* to Idea is a fair test and does not undo anything.** The
+Outline threshold suppresses task *creation* only. A task that already exists
+still follows the record down to **New Idea** in Asana, and the Linear issue
+still moves to Backlog. Leaving Asana asserting a stage HubSpot had stopped
+believing would be the worse bug.
+
+### 2.2b A record created at Outline with no Linear issue
+
+This is the other direction — the one the vault uses. You can exercise it
+without Obsidian: create a Content record by hand, set its stage to **Outline**,
+and leave `linear_issue_id` empty.
+
+**Expect** a **new Linear issue** in the configured team, in `Todo`.
+**Expect** `linear_issue_id` and `linear_issue_url` on the HubSpot record within
+a minute. This write-back is the whole test.
+**Expect** the new issue's description to contain `[hs-sync]`.
+**Expect exactly one HubSpot record** — still the one you made.
+
+**Fail signal — a second Content record appears.** The `[hs-sync]` tag is
+missing from the issue description, so our own webhook did not recognise the
+issue as ours and created a record for it.
+**Fail signal — `linear_issue_id` stays empty while the issue exists.** The
+issue was created and never linked. Move the stage again and you will get a
+*third* issue, then a fourth: one per stage change, with every response a 200.
+The workflow action reports `syncStatus: created_unlinked` when it knows this
+has happened — check the action's output before assuming the create failed.
+
+**Do the same at Idea and expect nothing.** No Linear issue, no Asana task,
+`syncStatus: skipped`. That is the rule, not a failure.
 
 ### 2.3 Asana change flows back
 
@@ -172,6 +215,9 @@ Then **reassign yourself** in Linear.
 to wherever it sat before. Archived is a stage, not a delete, and the normal
 upsert writes the mapped stage on the way back. An issue in `Todo` returns to
 **Outline**.
+
+**Expect no *second* Asana task**, whichever state you reassign into. The
+Outline threshold gates creation, and the task already exists.
 
 **Expect the Asana task to stay unassigned.** This is deliberate, not a missed
 case. Nothing in Asana distinguishes "the sync unassigned this" from "a person
@@ -363,6 +409,10 @@ breaks every link, with no error and no dialog.
 **Expect** frontmatter with `hubspot_object`, `hubspot_id`, `hubspot_portal`,
 `hubspot_pipeline` and `content_type`. `hubspot_id` is empty until the record
 exists — that pair is what ties the note to a CRM record.
+**Expect `promote` on the content brief, rendered as an unticked checkbox** in
+the properties panel. That checkbox is the entire user interface for 6.4. If it
+shows as the text `false` instead, the value was quoted somewhere and Obsidian
+is treating it as a string.
 
 ### 6.3 Cowork reads the vault
 
@@ -373,6 +423,36 @@ content notes.
 **Expect to edit the prompts.** They are explicitly unverified — nobody has
 watched Cowork execute them. When one is wrong, fix the file rather than filing
 a bug.
+
+### 6.4 Promoting a note creates the record — at Outline
+
+This is the vault's only front door into HubSpot. **Unverified end to end** —
+nobody has watched Cowork run it.
+
+Make a note in `content/` from `templates/content-brief.md`, leave `hubspot_id`
+empty, and tick **promote** in the properties panel. Then run
+`prompts/promote-note.md`.
+
+**Expect** a `content_piece` at **Outline** (`1418660000`), not Idea.
+**Expect** `source_url` on the record, an `obsidian://` link that opens the note.
+**Expect** `hubspot_id` written back into the note's frontmatter.
+**Then expect the fan-out**, within a minute and without you doing anything: a
+Linear issue and an Asana task, because Outline is the threshold for both. This
+is the same path as 2.2b, reached from the vault instead of by hand.
+
+**Expect running it twice to be a no-op.** The second run finds `hubspot_id`
+already set and skips the note. If it creates a second record, the write-back in
+step 3 did not happen — that is the bug, not the duplicate.
+
+**Fail signal** — the record exists at Idea. Nothing fans out from Idea, so the
+record will sit there looking finished and connected to nothing. Check the stage
+id in the prompt: Outline is `1418660000`, Idea is `1418659999`.
+
+**An untick is not an undo.** Clearing `promote` after the record exists changes
+nothing — `hubspot_id` is what the prompt reads, and the record is already out
+there. Delete the record by hand if you want it gone.
+
+---
 
 ---
 
