@@ -121,11 +121,19 @@ Full explanation of every field is in `README.md` under "The linkage contract".
 
 ## 7. Connect the folder in Cowork
 
-In Cowork, add `~/Dev-Central-Brain` as a connected folder. Cowork can then read and write these
-notes directly.
+**Create a project first, then connect the folder to it.** The prompts here are long, and meant
+to be re-run — a project is where a persistent instruction set and a connected folder live
+together, so you attach the vault once rather than per conversation.
+
+1. Create a Cowork project for this work.
+2. Add `~/Dev-Central-Brain` as a connected folder. Cowork reads and writes the notes directly —
+   no integration, no auth.
 
 Then open `prompts/README.md` — those are ready-made instructions to paste into Cowork. Start with
 `prompts/enterpret-sync.md`.
+
+> **The project-first ordering is an assumption, not an observation.** Nobody has watched this
+> being set up. If Cowork turns out to connect folders some other way, fix this step.
 
 > **The prompts are unverified.** The HubSpot ids and property names in them are checked against
 > the live portal, but nobody has watched Cowork run them. Expect to edit them. When one is wrong,
