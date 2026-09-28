@@ -129,8 +129,12 @@ together, so you attach the vault once rather than per conversation.
 2. Add `~/Dev-Central-Brain` as a connected folder. Cowork reads and writes the notes directly —
    no integration, no auth.
 
-Then open `prompts/README.md` — those are ready-made instructions to paste into Cowork. Start with
-`prompts/enterpret-sync.md`.
+Then open `prompts/README.md`. Those are ready-made instructions you **copy and paste into a
+Cowork conversation** — there is no scheduler and nothing runs on its own. That README explains
+how, including the HubSpot token every prompt needs.
+
+Start with `prompts/daily-pipeline-digest.md`: it touches only HubSpot and the vault, so there
+are just two things it can be when it fails.
 
 > **The project-first ordering is an assumption, not an observation.** Nobody has watched this
 > being set up. If Cowork turns out to connect folders some other way, fix this step.
