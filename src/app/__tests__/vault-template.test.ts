@@ -26,6 +26,7 @@ const TEMPLATES = [
 const PROMPTS = [
   'README.md', 'enterpret-sync.md', 'weekly-content-planning.md',
   'coverage-gaps.md', 'changelog-from-linear.md', 'daily-pipeline-digest.md',
+  'promote-note.md',
 ];
 
 function read(rel: string): string {
@@ -143,5 +144,76 @@ describe('Cowork prompts', () => {
         expect(body).not.toContain('22047910');
       }
     }
+  });
+});
+
+/**
+ * The vault's one front door.
+ *
+ * Ideas never reach HubSpot on their own — the vault IS the idea stage. Ticking
+ * `promote` on a note is the moment somebody decides the work is real, and it
+ * lands the record at Outline, which is the threshold where the app creates the
+ * Linear issue and the Asana task.
+ *
+ * None of this can be tested by running it: the prompt executes in Cowork on a
+ * different machine, against a live portal. These checks pin the facts that a
+ * human reading the prompt cannot verify for themselves — the stage id above
+ * all, because Outline and Idea differ by one digit and picking the wrong one
+ * produces a record that looks created and fans out to nothing.
+ */
+describe('the vault promotion path', () => {
+  it('content-brief carries a promote switch, defaulting to off', () => {
+    const body = read('templates/content-brief.md');
+    // Obsidian renders a frontmatter boolean as a checkbox in the properties
+    // panel — which is the entire user interface for this feature.
+    expect(body).toContain('promote: false');
+  });
+
+  it('the promote switch sits in frontmatter, not in the note body', () => {
+    const body = read('templates/content-brief.md');
+    const frontmatter = body.slice(0, body.indexOf('\n---', 3));
+    expect(frontmatter).toContain('promote: false');
+  });
+
+  // Changelog notes are born from a Linear issue that already exists, and their
+  // pipeline has no Outline stage to promote into. A switch there would be a
+  // control that does nothing.
+  it('the changelog template has no promote switch', () => {
+    expect(read('templates/changelog.md')).not.toContain('promote:');
+  });
+
+  it('the promote prompt targets Outline, never Idea', () => {
+    const body = read('prompts/promote-note.md');
+    // 1418660000 is Outline on dev; 1418659999 is Idea. One digit apart.
+    expect(body).toContain('1418660000');
+    expect(body).toContain('"hs_pipeline_stage":"1418660000"');
+  });
+
+  it('the promote prompt writes both halves of the identity contract', () => {
+    const body = read('prompts/promote-note.md');
+    // Note → record, and record → note. Missing either leaves a link that only
+    // works in one direction, which nobody notices until they need the other.
+    expect(body).toContain('hubspot_id');
+    expect(body).toContain('source_url');
+    expect(body).toContain('obsidian://open?vault=Dev-Central-Brain');
+  });
+
+  it('the promote prompt guards against promoting the same note twice', () => {
+    const body = read('prompts/promote-note.md');
+    expect(body.toLowerCase()).toContain('hubspot_id` is already set');
+  });
+
+  // changelog-from-linear.md step 3 creates a record LinearWebhook has already
+  // created. Running it today produces two records for one issue, and both look
+  // correct. The prompt is not rewritten here — it is flagged, loudly, at the top.
+  it('changelog-from-linear warns about the duplicate it creates', () => {
+    const body = read('prompts/changelog-from-linear.md');
+    const top = body.slice(0, 1200);
+    expect(top).toContain('LinearWebhook');
+    expect(top.toLowerCase()).toMatch(/two records|duplicate/);
+  });
+
+  it('the promote prompt is listed in the prompts README', () => {
+    expect(read('prompts/README.md')).toContain('`promote-note.md`');
   });
 });

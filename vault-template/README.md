@@ -42,6 +42,7 @@ created**, and are never maintained by a background process.
 
 ```yaml
 ---
+promote: false                   # tick it to send this note to HubSpot
 hubspot_object: content_piece
 hubspot_id: "60962462621"
 hubspot_portal: 51869810
@@ -51,6 +52,12 @@ topic_tags: [api, crm]
 enterpret_theme: webhook retries
 ---
 ```
+
+`promote` is the switch, and it only exists on content briefs. Ideas never reach HubSpot on
+their own — **this vault is the idea stage.** Ticking `promote` and running
+`prompts/promote-note.md` creates the record at **Outline**, skipping Idea entirely, because
+Outline is the threshold where the app opens a Linear issue and an Asana task. Nothing fans
+out below it.
 
 `hubspot_id` + `hubspot_portal` are the durable pointer. The other fields mirror HubSpot
 properties so Cowork can filter notes without a round-trip — they are a **cache**, and HubSpot

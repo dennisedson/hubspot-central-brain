@@ -69,7 +69,8 @@ rename the vault, update it here and in `changelog-from-linear.md` — and note 
 | `enterpret-sync.md` | Enterpret themes and quotes → HubSpot properties + theme notes |
 | `weekly-content-planning.md` | Pipeline vs top Enterpret themes |
 | `coverage-gaps.md` | Themes with no content record |
-| `changelog-from-linear.md` | Linear issue → changelog draft + HubSpot record |
+| `promote-note.md` | Ticked `promote` → HubSpot record at **Outline** (the vault's one front door) |
+| `changelog-from-linear.md` | Linear issue → changelog draft + HubSpot record — ⚠️ collides with the webhook, read its warning |
 | `daily-pipeline-digest.md` | Morning pipeline summary into today's daily note |
 
 ## Portals
