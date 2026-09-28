@@ -247,12 +247,12 @@ development.
 `average_view_duration` comes from the YouTube Analytics API — a different API
 from the one behind 4.1, with its own quota and permissions.
 
-**Expect** the sync response to carry `"analyticsSkipped": null`, and
+**Expect** the sync response to carry `"analyticsStatus": "ok"`, and
 `average_view_duration` to be written on the record.
 
 **Why that field is the test, not the property.** The figure can legitimately be
 `0`, so a blank-looking record does not tell you whether analytics ran and found
-nothing or never ran at all. `analyticsSkipped: null` means the call happened.
+nothing or never ran at all. `"ok"` means the call happened.
 
 **Expect `impressions` and `click_through_rate` to stay blank — permanently.**
 `reports.query` does not serve them; asking returns
@@ -260,7 +260,7 @@ nothing or never ran at all. `analyticsSkipped: null` means the call happened.
 rather than set to `0`, because "zero impressions" is a claim YouTube never
 made.
 
-**Fail signal** — `"analyticsSkipped": "no channel id …"`. The sync reads the
+**Fail signal** — `"analyticsStatus": "skipped: no channel id …"`. The sync reads the
 channel id from `app_configs`, where the OAuth callback recorded it, so this
 means the connection never completed. Re-check 3.1; you should not need to set
 anything by hand.

@@ -208,13 +208,13 @@ describe('runSync orchestration', () => {
     const { runSync } = await import('../functions/YouTubeSync');
     const out = await runSync(51869810);
 
-    expect(out.analyticsSkipped).toContain('no channel id');
+    expect(out.analyticsStatus).toContain('no channel id');
     // Missing configuration is not a failure — the statistics still landed.
     expect(out.errors).toEqual([]);
     expect(out.recordsUpdated).toBe(1);
   });
 
-  it('leaves analyticsSkipped null when analytics actually ran', async () => {
+  it('reports analyticsStatus "ok" when analytics actually ran', async () => {
     const hsUpdate = vi.fn().mockResolvedValue(undefined);
     vi.doMock('@lib/youtube-auth', () => ({ getYouTubeAccessToken: async () => 'tok' }));
     vi.doMock('@lib/youtube-client', () => ({
@@ -234,7 +234,11 @@ describe('runSync orchestration', () => {
     const out = await runSync(51869810);
 
     // All zeros is a real answer, and must not read as "never ran".
-    expect(out.analyticsSkipped).toBeNull();
+    //
+    // Asserted as a string rather than null on purpose: HubSpot drops null
+    // properties when a handler returns an object body, so a null success
+    // signal disappears from the response and reads as a stale deploy.
+    expect(out.analyticsStatus).toBe('ok');
   });
 
   it('degrades rather than failing when analytics are unavailable', async () => {
@@ -263,7 +267,7 @@ describe('runSync orchestration', () => {
     expect(out.errors.some((e) => e.includes('analytics'))).toBe(true);
     // The outcome must say why the analytics properties are blank, not merely
     // that something went wrong somewhere.
-    expect(out.analyticsSkipped).toContain('analytics request failed');
+    expect(out.analyticsStatus).toContain('failed:');
   });
 });
 

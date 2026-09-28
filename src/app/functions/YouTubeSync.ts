@@ -72,13 +72,20 @@ export interface SyncOutcome {
   /** Non-fatal per-record failures. The run still reports the rest. */
   errors: string[];
   /**
-   * Why the analytics figures were not fetched, or null when they were.
+   * `ok`, or why the analytics figures were not fetched.
    *
-   * Without this, "analytics ran and the channel has no impressions" and
-   * "analytics never ran at all" produce an identical outcome and identical
-   * blank properties. That ambiguity cost real debugging time.
+   * Without this, "analytics ran and found nothing" and "analytics never ran"
+   * produce an identical outcome and identical blank properties. That ambiguity
+   * cost real debugging time.
+   *
+   * ALWAYS A STRING, NEVER NULL. This field was `string | null` for exactly one
+   * build. HubSpot serialises a handler that returns `body` as an OBJECT by
+   * dropping null properties, so the success case vanished from the response
+   * entirely and looked identical to a stale deploy. (`YouTubeAuth` does not
+   * hit this because it calls `JSON.stringify` itself — hence its `lastSync:
+   * null` surviving.) Verified on build #267.
    */
-  analyticsSkipped: string | null;
+  analyticsStatus: string;
 }
 
 function getToken(): string {
@@ -177,7 +184,7 @@ export async function runSync(portalId: number): Promise<SyncOutcome> {
     batchesNotModified: 0,
     batchesFetched: 0,
     errors: [],
-    analyticsSkipped: null,
+    analyticsStatus: 'ok',
   };
   if (records.length === 0) return outcome;
 
@@ -192,14 +199,14 @@ export async function runSync(portalId: number): Promise<SyncOutcome> {
     // Not an error: a portal that has never authorised YouTube has no channel
     // to report on. It is recorded because blank analytics properties are
     // otherwise indistinguishable from a channel with no impressions.
-    outcome.analyticsSkipped =
-      'no channel id — authorise YouTube, or set YOUTUBE_CHANNEL_ID to override';
+    outcome.analyticsStatus =
+      'skipped: no channel id — authorise YouTube, or set YOUTUBE_CHANNEL_ID to override';
   } else {
     try {
       analytics = await fetchVideoAnalytics(accessToken, channelId, [...byYouTubeId.keys()]);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      outcome.analyticsSkipped = `analytics request failed: ${message}`;
+      outcome.analyticsStatus = `failed: ${message}`;
       outcome.errors.push(`analytics unavailable: ${message}`);
     }
   }

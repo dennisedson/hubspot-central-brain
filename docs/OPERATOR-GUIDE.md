@@ -247,7 +247,7 @@ carrying a `youtube_video_id`, fetches statistics in batches of 50, and writes `
 
 The analytics half needs a channel id, which the sync reads off `app_configs` — the value
 the OAuth callback already recorded. **There is nothing to configure.** If the response
-carries `"analyticsSkipped": "no channel id …"`, the connection never completed; fix that
+carries `"analyticsStatus": "skipped: no channel id …"`, the connection never completed; fix that
 rather than setting anything by hand.
 
 Analytics means `average_view_duration` and nothing else. `impressions` and
