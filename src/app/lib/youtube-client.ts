@@ -72,9 +72,14 @@ export interface VideoBatchResult {
 }
 
 export interface VideoAnalytics {
-  impressions: number;
-  clickThroughRate: number;
   averageViewDuration: number;
+  /**
+   * Optional because `reports.query` does not serve them — see
+   * ANALYTICS_METRICS. Present only if a future API surface supplies them;
+   * absent means "not obtainable", which is not the same as zero.
+   */
+  impressions?: number;
+  clickThroughRate?: number;
 }
 
 /**
@@ -165,14 +170,21 @@ export async function fetchVideoBatch(
 }
 
 /**
- * Fetches impressions, impression CTR and average view duration for a set of
- * videos, keyed by video id.
+ * Fetches average view duration for a set of videos, keyed by video id.
  *
- * WHY TWO REQUESTS
- * Impressions live in a different Analytics report group from watch-time
- * metrics; the API rejects a request that mixes them. So: one call for
- * `averageViewDuration`, one for `impressions,impressionsClickThroughRate`,
- * merged on video id.
+ * WHAT IS NOT HERE, AND WHY (verified against the live API 2026-09-28)
+ * -------------------------------------------------------------------
+ * `impressions` and `impressionsClickThroughRate` are not requested. YouTube
+ * rejects them outright:
+ *
+ *     400 Unknown identifier (impressions) given in field parameters.metrics
+ *
+ * They exist in YouTube Studio and in the bulk Reporting API; they are not
+ * metrics of `youtubeAnalytics.reports.query`. The previous code asked for them
+ * in a second report and awaited both with `Promise.all`, so the guaranteed
+ * rejection also discarded the watch-time report that worked — which is why all
+ * three analytics properties were blank rather than one. A single report now
+ * fetches what the API actually serves.
  *
  * WHY COLUMN HEADERS INSTEAD OF FIXED INDEXES
  * The Analytics API answers with bare rows — `[["abc123", 12, 0.05], …]` — and
@@ -182,6 +194,9 @@ export async function fetchVideoBatch(
  * Every value here is located through `columnHeaders`, which the API returns
  * alongside the rows.
  */
+/** Everything `reports.query` will actually serve for a channel's videos. */
+const ANALYTICS_METRICS = 'views,averageViewDuration';
+
 export async function fetchVideoAnalytics(
   accessToken: string,
   channelId: string,
@@ -194,20 +209,14 @@ export async function fetchVideoAnalytics(
   const startDate = isoDate(Date.now() - ANALYTICS_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
   for (const batch of chunkVideoIds(videoIds)) {
-    const [watchTime, impressions] = await Promise.all([
-      runAnalyticsReport(accessToken, channelId, batch, startDate, endDate, 'views,averageViewDuration'),
-      runAnalyticsReport(accessToken, channelId, batch, startDate, endDate, 'views,impressions,impressionsClickThroughRate'),
-    ]);
+    const watchTime = await runAnalyticsReport(
+      accessToken, channelId, batch, startDate, endDate, ANALYTICS_METRICS,
+    );
 
     for (const videoId of batch) {
       const duration = watchTime.get(videoId);
-      const reach = impressions.get(videoId);
-      if (!duration && !reach) continue;
-      analytics.set(videoId, {
-        impressions: reach?.impressions ?? 0,
-        clickThroughRate: reach?.impressionsClickThroughRate ?? 0,
-        averageViewDuration: duration?.averageViewDuration ?? 0,
-      });
+      if (!duration) continue;
+      analytics.set(videoId, { averageViewDuration: duration.averageViewDuration ?? 0 });
     }
   }
 

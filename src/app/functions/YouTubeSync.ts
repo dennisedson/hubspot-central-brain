@@ -143,12 +143,25 @@ export function mapVideoToProperties(video: YouTubeVideo): Record<string, string
   return props;
 }
 
+/**
+ * Analytics onto HubSpot properties, following the same absent-versus-zero rule
+ * as `mapVideoToProperties`: a figure the API never returned is omitted rather
+ * than written as "0".
+ *
+ * That matters more here than it looks. `impressions` and `click_through_rate`
+ * are not served by `reports.query` at all, and the previous version defaulted
+ * them to 0 — so every synced video asserted "zero impressions", which is a
+ * claim YouTube never made and which nobody could distinguish from a real zero.
+ */
 export function mapAnalyticsToProperties(analytics: VideoAnalytics): Record<string, string> {
-  return {
-    impressions: String(analytics.impressions),
-    click_through_rate: String(analytics.clickThroughRate),
+  const props: Record<string, string> = {
     average_view_duration: String(analytics.averageViewDuration),
   };
+  if (analytics.impressions !== undefined) props.impressions = String(analytics.impressions);
+  if (analytics.clickThroughRate !== undefined) {
+    props.click_through_rate = String(analytics.clickThroughRate);
+  }
+  return props;
 }
 
 export async function runSync(portalId: number): Promise<SyncOutcome> {

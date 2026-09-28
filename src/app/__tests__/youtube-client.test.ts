@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   VIDEO_BATCH_SIZE,
   chunkVideoIds,
+  fetchVideoAnalytics,
   fetchVideoBatch,
   videoBatchKey,
 } from '@lib/youtube-client';
@@ -162,5 +163,81 @@ describe('fetchVideoBatch', () => {
     await fetchVideoBatch('TOKEN123', ['a']);
     const init = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit;
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer TOKEN123');
+  });
+});
+
+describe('fetchVideoAnalytics', () => {
+  const original = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn() as unknown as typeof fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = original;
+    vi.restoreAllMocks();
+  });
+
+  function mockReport(body: unknown) {
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => body,
+      text: async () => '',
+    } as unknown as Response);
+  }
+
+  it('never asks for impressions — the API rejects the whole request', async () => {
+    // Verified against the live API 2026-09-28:
+    //   400 Unknown identifier (impressions) given in field parameters.metrics
+    // Re-adding it does not degrade analytics, it removes them entirely, so
+    // this assertion is the guard rail rather than a style preference.
+    mockReport({ columnHeaders: [{ name: 'video' }], rows: [] });
+    await fetchVideoAnalytics('tok', 'UC123', ['v1']);
+
+    const url = String((globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+    const metrics = new URL(url).searchParams.get('metrics') ?? '';
+    expect(metrics).not.toContain('impressions');
+    expect(metrics).toContain('averageViewDuration');
+  });
+
+  it('issues one report, not two', async () => {
+    // The second report was a guaranteed 400, and Promise.all meant it took the
+    // working report down with it — which is why all three analytics
+    // properties were blank rather than one.
+    mockReport({ columnHeaders: [{ name: 'video' }], rows: [] });
+    await fetchVideoAnalytics('tok', 'UC123', ['v1']);
+    expect((globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+  });
+
+  it('locates values by column header rather than by offset', async () => {
+    mockReport({
+      columnHeaders: [{ name: 'video' }, { name: 'views' }, { name: 'averageViewDuration' }],
+      rows: [['v1', 100, 42]],
+    });
+    const out = await fetchVideoAnalytics('tok', 'UC123', ['v1']);
+    expect(out.get('v1')?.averageViewDuration).toBe(42);
+  });
+
+  it('leaves impressions absent rather than defaulting them to zero', async () => {
+    // "Zero impressions" is a claim YouTube never made.
+    mockReport({
+      columnHeaders: [{ name: 'video' }, { name: 'views' }, { name: 'averageViewDuration' }],
+      rows: [['v1', 100, 42]],
+    });
+    const out = await fetchVideoAnalytics('tok', 'UC123', ['v1']);
+    expect(out.get('v1')?.impressions).toBeUndefined();
+    expect(out.get('v1')?.clickThroughRate).toBeUndefined();
+  });
+
+  it('skips a video the report has no row for', async () => {
+    mockReport({ columnHeaders: [{ name: 'video' }, { name: 'averageViewDuration' }], rows: [] });
+    const out = await fetchVideoAnalytics('tok', 'UC123', ['v1']);
+    expect(out.has('v1')).toBe(false);
+  });
+
+  it('does not call the API with no channel', async () => {
+    const out = await fetchVideoAnalytics('tok', '', ['v1']);
+    expect(out.size).toBe(0);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 });

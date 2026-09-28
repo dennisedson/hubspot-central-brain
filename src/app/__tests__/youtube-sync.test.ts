@@ -266,3 +266,14 @@ describe('runSync orchestration', () => {
     expect(out.analyticsSkipped).toContain('analytics request failed');
   });
 });
+
+describe('mapAnalyticsToProperties — absent versus zero', () => {
+  it('omits impressions and CTR when the API did not supply them', () => {
+    // reports.query does not serve them. Writing 0 asserts something YouTube
+    // never said, and is indistinguishable from a genuine zero.
+    const props = mapAnalyticsToProperties({ averageViewDuration: 42 });
+    expect(props).toEqual({ average_view_duration: '42' });
+    expect('impressions' in props).toBe(false);
+    expect('click_through_rate' in props).toBe(false);
+  });
+});

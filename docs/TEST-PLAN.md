@@ -244,20 +244,21 @@ development.
 
 ### 4.2 Analytics populate
 
-`impressions`, `click_through_rate` and `average_view_duration` come from the
-YouTube Analytics API — a different API from the one behind 4.1, with its own
-quota and permissions.
+`average_view_duration` comes from the YouTube Analytics API — a different API
+from the one behind 4.1, with its own quota and permissions.
 
-**Expect** the sync response to carry `"analyticsSkipped": null`, and those
-three properties to be written on the record.
+**Expect** the sync response to carry `"analyticsSkipped": null`, and
+`average_view_duration` to be written on the record.
 
-**Why that field is the test, not the properties.** All three can legitimately
-be `0` on a channel with no impressions, and blank properties look identical
-whether analytics ran and found nothing or never ran at all. `analyticsSkipped`
-is what tells the two apart: `null` means the call happened.
+**Why that field is the test, not the property.** The figure can legitimately be
+`0`, so a blank-looking record does not tell you whether analytics ran and found
+nothing or never ran at all. `analyticsSkipped: null` means the call happened.
 
-**Not a bug** — zeros across all three. A test channel genuinely has no
-impressions yet. The figures being *present* is what 4.2 checks.
+**Expect `impressions` and `click_through_rate` to stay blank — permanently.**
+`reports.query` does not serve them; asking returns
+`400 Unknown identifier (impressions)`. See section 7. They are left unwritten
+rather than set to `0`, because "zero impressions" is a claim YouTube never
+made.
 
 **Fail signal** — `"analyticsSkipped": "no channel id …"`. The sync reads the
 channel id from `app_configs`, where the OAuth callback recorded it, so this
@@ -370,6 +371,12 @@ Verified as blocked. Each has been investigated and documented.
 | **Social / LinkedIn** | Drafts are not published | HubSpot Social not connected (#18); the action exists but is in no live workflow |
 
 ---
+
+**`impressions` and `click_through_rate` are never populated.** The YouTube
+Analytics API's `reports.query` has no such metrics — requesting them returns
+`400 Unknown identifier (impressions) given in field parameters.metrics`. They
+exist in YouTube Studio and in the bulk Reporting API, which is a different
+integration. The properties are left blank rather than zeroed. Do not file this.
 
 ## 8. When something fails
 
