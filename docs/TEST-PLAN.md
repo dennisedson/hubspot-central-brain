@@ -463,7 +463,7 @@ Verified as blocked. Each has been investigated and documented.
 | Area | Symptom | Why |
 |---|---|---|
 | **Breeze agent tools** | `The requesting portal is not authorized to execute tool` | Deploys, publishes, appears in the agent builder, refuses to execute. Every action declaring `WORKFLOWS` works; only the three declaring `AGENTS` fail — same app, portal and build |
-| **YouTube push notifications** | Metrics only update on the poll | HubSpot's gateway accepts only `application/json`; YouTube's hub sends `application/atom+xml`, rejected `415` before any code runs |
+| **YouTube push notifications** | Metrics only update on the daily sync or the card button | HubSpot's gateway accepts only `application/json`; YouTube's hub sends `application/atom+xml`, rejected `415` before any code runs |
 | **Enterpret** | Card shows no data | No obtainable API key; data arrives out-of-band via Cowork (#12) |
 | **Social / LinkedIn** | Drafts are not published | HubSpot Social not connected (#18); the action exists but is in no live workflow |
 

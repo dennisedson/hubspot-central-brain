@@ -310,29 +310,54 @@ function param(ctx: SyncContext, key: string): string | undefined {
   );
 }
 
+/**
+ * Workflow-action output, alongside the plain outcome the card reads.
+ *
+ * This function has two callers with different expectations: the Video card
+ * calls it over `hubspot.serverless()` and reads the outcome directly, while a
+ * workflow step reads `outputFields` out of the response body. Returning both
+ * lets one function serve both — the same thing `VideoAttribution` does.
+ *
+ * Every value is a string because that is what a workflow field holds.
+ */
+function outputFieldsFor(outcome: SyncOutcome): Record<string, string> {
+  return {
+    syncStatus: outcome.errors.length > 0 ? 'partial' : 'success',
+    recordsFound: String(outcome.recordsFound),
+    recordsUpdated: String(outcome.recordsUpdated),
+    analyticsStatus: outcome.analyticsStatus,
+  };
+}
+
 export const main = async (
   context: SyncContext,
-): Promise<{ statusCode: number; body: SyncOutcome | { message: string } }> => {
+): Promise<{
+  statusCode: number;
+  body: (SyncOutcome & { outputFields: Record<string, string> }) | { message: string; outputFields: Record<string, string> };
+}> => {
   // accountId is present on a gateway request and absent on a card's
   // `hubspot.serverless()` call, which is why the card passes portalId
   // explicitly. Reading only accountId made every card sync a 500.
   const portalId = context.accountId ?? parseInt(param(context, 'portalId') ?? '0', 10);
   if (!portalId) {
-    return { statusCode: 400, body: { message: 'Missing portalId' } };
+    return {
+      statusCode: 400,
+      body: { message: 'Missing portalId', outputFields: { syncStatus: 'error' } },
+    };
   }
 
   const recordId = param(context, 'recordId') || undefined;
 
   try {
     const outcome = await runSync(portalId, { recordId });
-    return { statusCode: 200, body: outcome };
+    return { statusCode: 200, body: { ...outcome, outputFields: outputFieldsFor(outcome) } };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('YouTube sync failed:', message);
     // 500 deliberately. A sync that cannot authenticate or cannot reach YouTube
     // has done nothing, and returning 200 with an empty outcome is how a broken
     // integration goes unnoticed for a fortnight.
-    return { statusCode: 500, body: { message } };
+    return { statusCode: 500, body: { message, outputFields: { syncStatus: 'error' } } };
   }
 };
 

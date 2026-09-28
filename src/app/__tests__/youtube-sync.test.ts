@@ -383,3 +383,87 @@ describe('YouTubeSync.main — how the portal is resolved', () => {
     expect((res.body as { recordsFound: number }).recordsFound).toBe(0);
   });
 });
+
+describe('YouTubeSync.main — serving a workflow step as well as the card', () => {
+  const originalFetch = globalThis.fetch;
+  const originalToken = process.env.HS_ACCESS_TOKEN;
+
+  beforeEach(() => {
+    process.env.HS_ACCESS_TOKEN = 'test-token';
+    vi.resetModules();
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ results: [] }),
+      text: async () => '',
+    } as unknown as Response) as unknown as typeof fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    if (originalToken === undefined) delete process.env.HS_ACCESS_TOKEN;
+    else process.env.HS_ACCESS_TOKEN = originalToken;
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  async function load() {
+    vi.doMock('@lib/youtube-auth', () => ({ getYouTubeAccessToken: async () => 'tok' }));
+    vi.doMock('@lib/youtube-client', () => ({
+      chunkVideoIds: (ids: string[]) => (ids.length ? [ids] : []),
+      fetchVideoBatch: async () => ({ notModified: false, etag: null, items: [] }),
+      fetchVideoAnalytics: async () => new Map(),
+    }));
+    vi.doMock('@lib/hubspot-client', () => ({
+      hsUpdate: vi.fn(),
+      readYouTubeChannelId: async () => null,
+    }));
+    return (await import('../functions/YouTubeSync')).main;
+  }
+
+  it('carries outputFields for the workflow step', async () => {
+    // A workflow reads outputFields out of the response body. Without them the
+    // daily sync runs but reports nothing back into the workflow, so a failing
+    // sync looks identical to a healthy one in the workflow history.
+    const main = await load();
+    const res = await main({ accountId: 51869810 } as never);
+    const body = res.body as { outputFields: Record<string, string> };
+
+    expect(body.outputFields.syncStatus).toBe('success');
+    expect(body.outputFields.recordsFound).toBe('0');
+    // 'ok' rather than a skip reason: with no video records the sync returns
+    // before the analytics block, so analytics were never needed rather than
+    // skipped. Nothing to fetch them for is not a failure to fetch them.
+    expect(body.outputFields.analyticsStatus).toBe('ok');
+  });
+
+  it('still carries the plain outcome the card reads', async () => {
+    // The card reads the outcome directly. Adding outputFields must not move
+    // or wrap the fields it already depends on.
+    const main = await load();
+    const res = await main({ accountId: 51869810 } as never);
+    const body = res.body as { recordsFound: number; recordsUpdated: number; errors: string[] };
+
+    expect(body.recordsFound).toBe(0);
+    expect(body.recordsUpdated).toBe(0);
+    expect(body.errors).toEqual([]);
+  });
+
+  it('reports a missing portal through outputFields too', async () => {
+    const main = await load();
+    const res = await main({} as never);
+    expect(res.statusCode).toBe(400);
+    expect((res.body as { outputFields: Record<string, string> }).outputFields.syncStatus).toBe('error');
+  });
+
+  it('every outputFields value is a string', async () => {
+    // Workflow fields hold strings. A number here is silently coerced or
+    // dropped depending on the field type, which is the sort of thing nobody
+    // notices until a workflow branch stops matching.
+    const main = await load();
+    const res = await main({ accountId: 51869810 } as never);
+    const fields = (res.body as { outputFields: Record<string, unknown> }).outputFields;
+    for (const [key, value] of Object.entries(fields)) {
+      expect(typeof value, `${key} must be a string`).toBe('string');
+    }
+  });
+});

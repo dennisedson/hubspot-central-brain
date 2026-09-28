@@ -36,6 +36,7 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
   fellowSyncId: string;
   associateRelatedContentId: string;
   generateSocialDraftId: string;
+  youtubeSyncId: string;
 }> {
   const res = await fetch(
     `${API}/automation/v4/actions/${appId}?hapikey=${devKey}&limit=100`,
@@ -65,6 +66,13 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pollAction = actions.find((a: any) =>
     (a.uid ?? '').includes('poll') || (a.labels?.en?.actionName ?? '').toLowerCase().includes('poll'),
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // Matched on "youtube", never on "poll" — the Asana matcher above claims that
+  // word, and an action named "...Poll..." here would be silently swapped for it.
+  const youtubeSyncAction = actions.find((a: any) =>
+    (a.uid ?? '').includes('youtube') ||
+    (a.labels?.en?.actionName ?? '').toLowerCase().includes('youtube'),
   );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fellowAction = actions.find((a: any) =>
@@ -105,6 +113,12 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
     );
   }
 
+  if (!youtubeSyncAction) {
+    throw new Error(
+      `Could not find the YouTube sync action. Make sure you have deployed the project before running this script. Found UIDs: ${actions.map((a: any) => a.uid ?? a.id).join(', ')}`,
+    );
+  }
+
   if (!generateSocialDraftAction) {
     throw new Error(
       `Could not find GenerateSocialDraft action. Make sure you have deployed the project before running this script. Found UIDs: ${actions.map((a: any) => a.uid ?? a.id).join(', ')}`,
@@ -118,6 +132,7 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
     fellowSyncId: `1-${fellowAction.id}`,
     associateRelatedContentId: `1-${associateRelatedContentAction.id}`,
     generateSocialDraftId: `1-${generateSocialDraftAction.id}`,
+    youtubeSyncId: `1-${youtubeSyncAction.id}`,
   };
 }
 
@@ -437,7 +452,7 @@ async function main() {
 
   // Step 1: Discover action definition IDs for our custom workflow actions
   console.log('\nDiscovering custom action IDs...');
-  const { syncToAsanaId, syncToLinearId, asanaPollId, fellowSyncId, associateRelatedContentId, generateSocialDraftId } = await discoverActionIds(developerApiKey, appId);
+  const { syncToAsanaId, syncToLinearId, asanaPollId, fellowSyncId, associateRelatedContentId, generateSocialDraftId, youtubeSyncId } = await discoverActionIds(developerApiKey, appId);
   console.log(`  appId=${appId}  syncToAsanaId=${syncToAsanaId}  syncToLinearId=${syncToLinearId}  asanaPollId=${asanaPollId}  fellowSyncId=${fellowSyncId}  associateRelatedContentId=${associateRelatedContentId}  generateSocialDraftId=${generateSocialDraftId}`);
 
   // Step 2: Fetch linearTeamId from app settings CRM object
@@ -544,6 +559,20 @@ async function main() {
     fellowWorkflowName,
     config.appConfig.objectTypeId,
     fellowSyncId,
+  ));
+
+  // Step 8: App Config daily YouTube metrics sync.
+  //
+  // Reuses the App Config poll shape because it is the same problem: a sync
+  // that runs on a cadence rather than in response to a record changing. Until
+  // this existed nothing scheduled the YouTube sync at all — its only caller
+  // was the button on the Video card, so metrics were as fresh as the last
+  // person to click it, while three docs described a daily poll.
+  const youtubeWorkflowName = 'YouTube → Sync Metrics (Daily)';
+  await upsertWorkflow(youtubeWorkflowName, buildPollWorkflow(
+    youtubeWorkflowName,
+    config.appConfig.objectTypeId,
+    youtubeSyncId,
   ));
 
   // Step 7: Content → Associate Related Content (fires on enter review stage)

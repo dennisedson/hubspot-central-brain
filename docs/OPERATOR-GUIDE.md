@@ -244,7 +244,12 @@ but the refresh token is not yet set, so no API call can be made. `status` will 
 
 ### 4.3 Sync metrics
 
-Point a daily workflow at `youtube-sync`, or call it directly. It finds every Video record
+`provision:workflows` creates **YouTube → Sync Metrics (Daily)** on the App Config object,
+disabled like every other provisioned workflow — enable it in HubSpot and set its recurrence.
+Until you do, nothing schedules this: the only other caller is the button on the Video card, so
+metrics stay as fresh as the last person to click it.
+
+The sync finds every Video record
 carrying a `youtube_video_id`, fetches statistics in batches of 50, and writes `view_count`,
 `like_count`, `comment_count` plus the analytics figures.
 
