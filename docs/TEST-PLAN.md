@@ -149,7 +149,7 @@ Insights*.
 **Expect** Enterpret Insights to be empty or say it has no data — see 7.3. That
 is correct behaviour, not a failure.
 
-### 2.5 Unassignment archives the record, reassignment restores it
+### 2.5 Unassignment archives the record and clears the Asana task
 
 Only applies when `assignee_filter` is `mine` or `assigned` — on `all` nothing is
 ever excluded. Yours is `mine`.
@@ -160,16 +160,31 @@ In Linear, **unassign yourself** from the issue (or reassign it to someone else)
 **Why** — it would otherwise sit in the pipeline at its last synced stage,
 looking live while it had quietly stopped tracking. Archived makes that visible.
 
-Then **reassign yourself**.
+**Then check Asana.** The task is tagged **Canceled** *and* has **no assignee** —
+it should have left your My Tasks entirely.
+**Why** — Canceled on its own is not enough. A Canceled task still sits in the
+assignee's My Tasks looking like a live to-do: labelled dead, behaving alive.
+Archived work has to leave the queue, not just get a label.
+
+Then **reassign yourself** in Linear.
 
 **Expect** the record returns to the stage mapped from the Linear state — *not*
 to wherever it sat before. Archived is a stage, not a delete, and the normal
 upsert writes the mapped stage on the way back. An issue in `Todo` returns to
 **Outline**.
 
+**Expect the Asana task to stay unassigned.** This is deliberate, not a missed
+case. Nothing in Asana distinguishes "the sync unassigned this" from "a person
+unassigned this on purpose", so reassigning automatically would overrule a real
+decision. Reassign it by hand if you want it back.
+
 **Not a bug** — archiving by hand while the issue is still assigned to you does
 not stick. The next Linear update pulls it back out: Linear remains the source
 of truth for stage.
+
+**Not a bug** — no other stage change touches the Asana assignee. Only the move
+into Archived does. If a routine stage change ever clears an assignee, that *is*
+a bug worth filing.
 
 **Changelog records are skipped, not archived.** That pipeline has no Archived
 stage to move to.
