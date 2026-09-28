@@ -136,6 +136,26 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
         }
       }
     } else {
+      // Nothing fans out at Idea. Outline is the threshold at which work
+      // becomes real, and it is the same threshold Linear uses.
+      //
+      // Only CREATION is suppressed. An existing task still updates above —
+      // that branch is unreachable from here. Once a task exists, somebody is
+      // already carrying the work, and refusing to move it back to New Idea
+      // would leave Asana asserting a stage HubSpot has stopped believing.
+      //
+      // Gated on 'idea' rather than on the fan-out list because 'archived' is
+      // also outside that list, and a record that arrives already archived is
+      // deliberately given a task — an unassigned one — so the cancellation is
+      // visible to anyone looking at the project.
+      if (stageName === 'idea') {
+        console.log('Stage is "idea" — not creating an Asana task below the Outline threshold');
+        return {
+          statusCode: 200,
+          body: JSON.stringify({ outputFields: { syncStatus: 'skipped', reason: 'below_outline:idea' } }),
+        };
+      }
+
       const customFields: Record<string, string> = { [ASANA_PIPELINE_STAGE_FIELD_GID]: asanaStageGid };
       if (linearIssueUrl) customFields[ASANA_LINEAR_ISSUE_URL_FIELD_GID] = linearIssueUrl;
       const sectionGid = config.asanaSections[objectType] || undefined;
