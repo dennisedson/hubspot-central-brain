@@ -228,12 +228,40 @@ describe('BreezeContentPipeline.main — stage filter', () => {
 
 describe('BreezeContentPipeline.main — guards', () => {
   it('returns 400 when the requested pipeline is not configured for the portal', async () => {
-    // Staging has no changelog pipeline id.
-    const res = await main(ctx({ pipeline: 'changelog' }, 22047910));
+    // Built on a stubbed config rather than a real portal, deliberately.
+    //
+    // This used to point at staging, then at prod, because neither had a
+    // changelog pipeline id — so it passed for a reason that had nothing to do
+    // with the guard, and it broke the day prod was finally provisioned. A test
+    // that depends on a portal being incomplete stops testing anything the
+    // moment someone completes it.
+    vi.resetModules();
+    vi.doMock('@lib/portal-config', async () => {
+      const actual = await vi.importActual<typeof import('@lib/portal-config')>('@lib/portal-config');
+      return {
+        ...actual,
+        getPortalConfig: (portalId: number) => {
+          const config = actual.getPortalConfig(portalId);
+          return {
+            ...config,
+            content: {
+              ...config.content,
+              pipelines: { ...config.content.pipelines, changelog: { pipelineId: '', stageIds: {} } },
+            },
+          };
+        },
+      };
+    });
+
+    const { main: withoutChangelog } = await import('../functions/BreezeContentPipeline');
+    const res = await withoutChangelog(ctx({ pipeline: 'changelog' }, TEST_PORTAL_ID));
 
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body).error).toContain('changelog');
     expect(mockFetch).not.toHaveBeenCalled();
+
+    vi.doUnmock('@lib/portal-config');
+    vi.resetModules();
   });
 
   it('returns 500 when the portal has no config', async () => {

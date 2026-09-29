@@ -31,7 +31,8 @@
     "dev": "hs project dev",
     "upload": "npm run build && hs project upload",
     "upload:dev": "npm run build && hs project upload --account=Dev-HubSpot-Brain",
-    "upload:prod": "npm run build && .github/scripts/upload-to-portal.sh 22047910 DevRelTeamHub"
+    "upload:prod": "npm run build && .github/scripts/upload-to-portal.sh 22047910 DevRelTeamHub",
+    "preflight": "tsx src/scripts/preflight.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

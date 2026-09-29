@@ -26,6 +26,28 @@ jobs:
       - name: Build functions
         run: npm run build
 
+      # Asserts prod's live schema matches portal-config BEFORE anything is
+      # uploaded: object type ids, pipeline ids, stage ids, and every property
+      # the app reads or writes.
+      #
+      # This is what replaced the staging environment. Deploying over
+      # provisioning drift does not error — it produces records with blank
+      # properties and syncs that report success while writing nothing, which
+      # is the failure mode this project has produced most often.
+      #
+      # On its first run against prod it found the changelog pipeline missing
+      # (#21) and four app_configs properties absent, which would have made a
+      # successful YouTube connection read as "disconnected" in silence.
+      - name: Preflight — does prod match portal-config?
+        env:
+          PORTAL: prod
+          HUBSPOT_PROD_SERVICE_KEY: ${{ secrets.HUBSPOT_PROD_SERVICE_KEY }}
+          HUBSPOT_PROD_PERSONAL_ACCESS_KEY: ${{ secrets.HUBSPOT_PROD_PERSONAL_ACCESS_KEY }}
+          HUBSPOT_PROD_SYNC_SECRET: ${{ secrets.HUBSPOT_PROD_SYNC_SECRET }}
+          HUBSPOT_PROD_DEVELOPER_KEY: ${{ secrets.HUBSPOT_PROD_DEVELOPER_KEY }}
+          ASANA_API_KEY: ${{ secrets.ASANA_API_KEY }}
+        run: npm run preflight
+
       # Rewrites every workflow-action actionUrl to this portal and FAILS the
       # deploy if any is left pointing elsewhere. The per-file seds this
       # replaced matched ${...} placeholders that no longer exist, so they
