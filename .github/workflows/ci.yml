@@ -56,9 +56,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 20, not 18, and it differs from the job above on purpose.
+      #
+      # The HubSpot CLI pulls ink → string-width, which uses the `v` regex flag
+      # (unicodeSets). That flag landed in Node 20, so on 18 the CLI does not
+      # merely misbehave — it fails to parse:
+      #
+      #   SyntaxError: Invalid regular expression flags
+      #
+      # Both deploy workflows already run 20, which is why only CI hit this.
+      # The test job stays on 18 because that is what the serverless bundle
+      # targets (esbuild --target=node18); running tests on the runtime the
+      # code actually ships to is worth the inconsistency.
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: npm
 
       - run: npm ci
