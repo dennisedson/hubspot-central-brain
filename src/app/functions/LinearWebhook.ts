@@ -11,7 +11,7 @@ import {
   CONTENT_STAGE_TO_LINEAR_STATE,
   CHANGELOG_STAGE_TO_LINEAR_STATE,
 } from '../lib/mapping';
-import { getPortalConfig } from '../lib/portal-config';
+import { getPortalConfig, isConfigured } from '../lib/portal-config';
 
 interface PublicFunctionContext {
   method: string;
@@ -53,8 +53,25 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
   try {
     const settings = await readAppSettings(context.accountId);
 
-    // Filter to configured team if set — applies to all action types including removes.
-    if (settings.linearTeamId && payload.data.team.id !== settings.linearTeamId) {
+    // Refuse everything until the settings have actually been answered.
+    //
+    // Checked BEFORE the team filter below, because that filter fails open: an
+    // empty linearTeamId skips it, so an unconfigured portal accepted every
+    // team. 200 rather than an error — Linear retries a failure, and retrying
+    // will not configure the portal.
+    if (!isConfigured(settings)) {
+      console.log('LinearWebhook: refusing — settings not configured for this portal');
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          skipped: true,
+          reason: 'settings not configured — choose a Linear team, and an assignee if filtering by "mine"',
+        }),
+      };
+    }
+
+    // Filter to the configured team. Applies to all action types including removes.
+    if (payload.data.team.id !== settings.linearTeamId) {
       return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'not configured team' }) };
     }
 

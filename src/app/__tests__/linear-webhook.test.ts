@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { isConfigured, DEFAULT_APP_SETTINGS } from '@lib/portal-config';
 
 let main: (ctx: any) => Promise<any>;
 
@@ -28,11 +29,11 @@ beforeEach(async () => {
     getCurrentStage: vi.fn().mockResolvedValue(null),
     upsertContent: vi.fn().mockResolvedValue({ id: 'hs-1', action: 'created' }),
     archiveContentByLinearId: vi.fn().mockResolvedValue({ id: 'hs-arch', action: 'updated' }),
-    readAppSettings: vi.fn().mockResolvedValue({ linearTeamId: '', assigneeFilter: 'all', linearAssigneeId: '' }),
+    readAppSettings: vi.fn().mockResolvedValue({ linearTeamId: 't-1', assigneeFilter: 'all', linearAssigneeId: '' }),
   }));
-  vi.doMock('@lib/portal-config', () => ({
+  vi.doMock('@lib/portal-config', async () => ({
+    ...(await vi.importActual<typeof import('@lib/portal-config')>('@lib/portal-config')),
     getPortalConfig: vi.fn().mockReturnValue(TEST_PORTAL_CONFIG),
-    DEFAULT_APP_SETTINGS: { linearTeamId: '', assigneeFilter: 'all', linearAssigneeId: '' },
   }));
 
   process.env.LINEAR_WEBHOOK_SECRET = 'test-secret';
@@ -204,7 +205,7 @@ describe('LinearWebhook.main', () => {
   describe('assignee filter', () => {
     it('skips unassigned issues when filter is "assigned"', async () => {
       const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
-      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'assigned', linearAssigneeId: '' });
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: 't-1', assigneeFilter: 'assigned', linearAssigneeId: '' });
       const result = await main(baseCtx); // baseCtx has no assignee
       expect(result.statusCode).toBe(200);
       expect(JSON.parse(result.body).reason).toBe('no assignee');
@@ -213,7 +214,7 @@ describe('LinearWebhook.main', () => {
 
     it('processes an assigned issue when filter is "assigned"', async () => {
       const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
-      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'assigned', linearAssigneeId: '' });
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: 't-1', assigneeFilter: 'assigned', linearAssigneeId: '' });
       const ctx = {
         ...baseCtx,
         body: { ...baseCtx.body, data: { ...baseCtx.body.data, assignee: { id: 'user-1', name: 'Alice' } } },
@@ -226,7 +227,7 @@ describe('LinearWebhook.main', () => {
 
     it('skips issues assigned to someone else when filter is "mine"', async () => {
       const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
-      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: 't-1', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
       const ctx = {
         ...baseCtx,
         body: { ...baseCtx.body, data: { ...baseCtx.body.data, assignee: { id: 'user-other', name: 'Bob' } } },
@@ -239,7 +240,7 @@ describe('LinearWebhook.main', () => {
 
     it('processes an issue assigned to the configured user when filter is "mine"', async () => {
       const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
-      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: 't-1', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
       const ctx = {
         ...baseCtx,
         body: { ...baseCtx.body, data: { ...baseCtx.body.data, assignee: { id: 'user-me', name: 'Me' } } },
@@ -267,7 +268,7 @@ describe('LinearWebhook — unassignment archives the HubSpot record', () => {
   it('archives the record when the assignee no longer matches "mine"', async () => {
     const { readAppSettings: mockSettings, archiveContentByLinearId: mockArchive, upsertContent: mockUpsert } =
       await import('@lib/hubspot-client');
-    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
+    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: 't-1', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
     vi.mocked(mockArchive).mockResolvedValue({ id: '123', action: 'updated' });
 
     const ctx = {
@@ -287,7 +288,7 @@ describe('LinearWebhook — unassignment archives the HubSpot record', () => {
   it('archives when the issue is unassigned entirely under "assigned"', async () => {
     const { readAppSettings: mockSettings, archiveContentByLinearId: mockArchive } =
       await import('@lib/hubspot-client');
-    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'assigned', linearAssigneeId: '' });
+    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: 't-1', assigneeFilter: 'assigned', linearAssigneeId: '' });
     vi.mocked(mockArchive).mockResolvedValue({ id: '123', action: 'updated' });
 
     const body = JSON.parse((await main(baseCtx)).body); // baseCtx has no assignee
@@ -300,7 +301,7 @@ describe('LinearWebhook — unassignment archives the HubSpot record', () => {
     // than becoming noise on every issue assigned to someone else.
     const { readAppSettings: mockSettings, archiveContentByLinearId: mockArchive } =
       await import('@lib/hubspot-client');
-    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
+    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: 't-1', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
     vi.mocked(mockArchive).mockResolvedValue(null);
 
     const ctx = {
@@ -315,7 +316,7 @@ describe('LinearWebhook — unassignment archives the HubSpot record', () => {
   it('reassignment goes through the normal upsert, which un-archives it', async () => {
     const { readAppSettings: mockSettings, archiveContentByLinearId: mockArchive, upsertContent: mockUpsert } =
       await import('@lib/hubspot-client');
-    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
+    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: 't-1', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
 
     const ctx = {
       ...baseCtx,
@@ -328,5 +329,44 @@ describe('LinearWebhook — unassignment archives the HubSpot record', () => {
     // upsertContent writes the stage mapped from the Linear state, which is what
     // moves the record back out of Archived.
     expect(mockUpsert).toHaveBeenCalledOnce();
+  });
+});
+
+describe('LinearWebhook — refuses to sync an unconfigured portal', () => {
+  /**
+   * The defaults are permissive: an empty linearTeamId skipped the team filter
+   * entirely and assigneeFilter 'all' excludes nobody, so the portal that
+   * should sync nothing synced everything.
+   *
+   * On 2026-09-29 production had its Linear webhook registered before its
+   * settings were saved, and 34 Content Pieces arrived from teams nobody had
+   * chosen, against live data. These pin the gate that stops it.
+   */
+
+  it('refuses when no team has been chosen', () => {
+    expect(isConfigured({ linearTeamId: '', assigneeFilter: 'all', linearAssigneeId: '' })).toBe(false);
+  });
+
+  it('refuses "mine" with nobody named — it would match every issue', () => {
+    expect(
+      isConfigured({ linearTeamId: 'team-1', assigneeFilter: 'mine', linearAssigneeId: '' }),
+    ).toBe(false);
+  });
+
+  it('accepts "assigned" without a person, since it means anyone', () => {
+    expect(
+      isConfigured({ linearTeamId: 'team-1', assigneeFilter: 'assigned', linearAssigneeId: '' }),
+    ).toBe(true);
+  });
+
+  it('accepts a fully answered configuration', () => {
+    expect(
+      isConfigured({ linearTeamId: 'team-1', assigneeFilter: 'mine', linearAssigneeId: 'user-1' }),
+    ).toBe(true);
+  });
+
+  it('the shipped defaults are NOT configured', () => {
+    // The whole point. If this ever passes, an unconfigured portal syncs again.
+    expect(isConfigured(DEFAULT_APP_SETTINGS)).toBe(false);
   });
 });

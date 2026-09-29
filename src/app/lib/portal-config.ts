@@ -10,6 +10,31 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   linearAssigneeId: '',
 };
 
+/**
+ * Whether an operator has actually answered the settings, as opposed to a
+ * portal that has never been configured returning the defaults above.
+ *
+ * THIS IS A SAFETY GATE, NOT A CONVENIENCE CHECK
+ * ----------------------------------------------
+ * `readAppSettings` returns DEFAULT_APP_SETTINGS when no App Config record
+ * exists, and those defaults are permissive: an empty `linearTeamId` skipped
+ * the team filter entirely, and `assigneeFilter: 'all'` excludes nobody. So an
+ * unconfigured portal — the one that should sync nothing — synced *everything*.
+ *
+ * That is not hypothetical. On 2026-09-29 the production portal had its Linear
+ * webhook registered before its settings were saved, and 34 Content Pieces
+ * arrived from teams nobody had chosen, against live data.
+ *
+ * Unconfigured now means inert. A portal syncs when someone has said which team
+ * and whose issues, and not before.
+ */
+export function isConfigured(settings: AppSettings): boolean {
+  if (!settings.linearTeamId) return false;
+  // 'mine' is the only filter that needs a person; 'assigned' means "anyone".
+  if (settings.assigneeFilter === 'mine' && !settings.linearAssigneeId) return false;
+  return true;
+}
+
 interface PipelineConfig {
   pipelineId: string;
   stageIds: Record<string, string>;
