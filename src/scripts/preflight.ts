@@ -251,11 +251,16 @@ async function main() {
   for (const line of checks) console.log(`  ok   ${line}`);
 
   if (failures.length > 0) {
-    console.error(`\n${failures.length} problem(s) — this portal is NOT ready for a deploy:\n`);
-    for (const f of failures) console.error(`  FAIL [${f.area}] ${f.detail}`);
-    console.error('\nProvision the missing pieces before deploying. Deploying over drift');
-    console.error('does not error — it produces records with blank properties and syncs');
-    console.error('that report success while writing nothing.\n');
+    // stdout, not stderr, deliberately. CI renders the two streams as separate
+    // interleaved buffers, so a summary written to stderr lands in the middle
+    // of the passing checks — the failure appeared above half the "ok" lines it
+    // was meant to summarise, which reads as a garbled report rather than a
+    // verdict. One stream keeps the order. The exit code still fails the step.
+    console.log(`\n${failures.length} problem(s) — this portal is NOT ready for a deploy:\n`);
+    for (const f of failures) console.log(`  FAIL [${f.area}] ${f.detail}`);
+    console.log('\nProvision the missing pieces before deploying. Deploying over drift');
+    console.log('does not error — it produces records with blank properties and syncs');
+    console.log('that report success while writing nothing.\n');
     process.exit(1);
   }
 
