@@ -1,6 +1,8 @@
-import { getPortalConfig, DEFAULT_APP_SETTINGS } from '../lib/portal-config';
+import { getPortalConfig, DEFAULT_APP_SETTINGS, isConfigured } from '../lib/portal-config';
 import type { AppSettings } from '../lib/portal-config';
 import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
+import { upsertContent } from '../lib/hubspot-client';
+import { HS_SYNC_TAG, LINEAR_CHANGELOG_LABEL } from '../lib/mapping';
 
 interface SettingsContext {
   accountId?: number;
@@ -141,6 +143,62 @@ async function hsUpdate(objectTypeId: string, objectId: string, properties: Reco
   if (!res.ok) throw new Error(`HubSpot update failed ${res.status}: ${await res.text()}`);
 }
 
+/**
+ * How many issues one invocation imports.
+ *
+ * Deliberately small. Each issue costs a HubSpot search plus a create or
+ * update, and a serverless function has seconds rather than minutes — so this
+ * imports a page per call and hands the cursor back, instead of trying to
+ * finish a several-hundred-issue workspace in one request and timing out
+ * halfway with no record of where it got to.
+ */
+const BACKFILL_PAGE_SIZE = 15;
+
+interface BackfillIssue {
+  id: string;
+  identifier: string;
+  title: string;
+  description?: string;
+  url: string;
+  state: { id: string; name: string; type: string };
+  labels: { nodes: Array<{ id: string; name: string }> };
+  team: { id: string; name: string };
+  assignee?: { id: string; name: string } | null;
+}
+
+/** One page of a team's issues, oldest first so the order is stable across runs. */
+async function fetchIssuePage(
+  apiKey: string,
+  teamId: string,
+  after: string | null,
+): Promise<{ nodes: BackfillIssue[]; hasNextPage: boolean; endCursor: string | null }> {
+  const data = await linearQuery(
+    `query($teamId: String!, $first: Int!, $after: String) {
+       team(id: $teamId) {
+         issues(first: $first, after: $after, orderBy: createdAt) {
+           nodes {
+             id identifier title description url
+             state { id name type }
+             labels { nodes { id name } }
+             team { id name }
+             assignee { id name }
+           }
+           pageInfo { hasNextPage endCursor }
+         }
+       }
+     }`,
+    { teamId, first: BACKFILL_PAGE_SIZE, after },
+    apiKey,
+  );
+
+  const conn = (data.data?.team as { issues?: { nodes: BackfillIssue[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } } | undefined)?.issues;
+  return {
+    nodes: conn?.nodes ?? [],
+    hasNextPage: conn?.pageInfo?.hasNextPage ?? false,
+    endCursor: conn?.pageInfo?.endCursor ?? null,
+  };
+}
+
 export async function main(context: SettingsContext): Promise<{ statusCode: number; body: string }> {
   const portalId = context.accountId ?? parseInt(param(context, 'portalId') ?? '0', 10);
   if (!portalId) {
@@ -233,6 +291,110 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       return { statusCode: 500, body: JSON.stringify({ error: 'Failed to save settings', detail }) };
+    }
+  }
+
+  if (action === 'backfill') {
+    // Importing into a portal nobody has configured is exactly how 34 unwanted
+    // records arrived on production. Same gate the webhook uses.
+    const current = await hsSearch(
+      objectTypeId,
+      ['linear_team_id', 'assignee_filter', 'linear_assignee_id', 'linear_backfill_cursor', 'linear_backfill_count'],
+      token,
+    );
+    const record = current.results[0];
+    const settings: AppSettings = {
+      linearTeamId: record?.properties.linear_team_id ?? '',
+      assigneeFilter: (record?.properties.assignee_filter as AppSettings['assigneeFilter']) ?? 'all',
+      linearAssigneeId: record?.properties.linear_assignee_id ?? '',
+    };
+
+    if (!isConfigured(settings)) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Choose a Linear team and save your settings before importing.' }),
+      };
+    }
+    if (!linearApiKey) {
+      return { statusCode: 500, body: JSON.stringify({ error: 'LINEAR_API_KEY is not set on this portal.' }) };
+    }
+
+    const reset = param(context, 'reset') === 'true';
+    const cursor = reset ? null : (record?.properties.linear_backfill_cursor || null);
+    const alreadyImported = reset ? 0 : parseInt(record?.properties.linear_backfill_count || '0', 10) || 0;
+
+    try {
+      const page = await fetchIssuePage(linearApiKey, settings.linearTeamId, cursor);
+
+      let created = 0, updated = 0, skipped = 0;
+      for (const issue of page.nodes) {
+        // Issues our own sync wrote. Re-importing them would be circular.
+        if (issue.description?.includes(HS_SYNC_TAG)) { skipped++; continue; }
+
+        const assigneeId = issue.assignee?.id ?? null;
+        if (settings.assigneeFilter === 'assigned' && !assigneeId) { skipped++; continue; }
+        if (settings.assigneeFilter === 'mine' && assigneeId !== settings.linearAssigneeId) { skipped++; continue; }
+
+        const pipelineKey = issue.labels.nodes.some(l => l.name === LINEAR_CHANGELOG_LABEL) ? 'changelog' : 'content';
+        // The same upsert the webhook calls, matching on linear_id — so a
+        // resumed or repeated run updates rather than duplicating.
+        const result = await upsertContent(
+          {
+            action: 'update',
+            type: 'Issue',
+            data: {
+              id: issue.id,
+              identifier: issue.identifier,
+              title: issue.title,
+              description: issue.description,
+              state: issue.state,
+              labels: issue.labels.nodes,
+              url: issue.url,
+              team: issue.team,
+              assignee: issue.assignee ?? null,
+            },
+            organizationId: 'backfill',
+            webhookTimestamp: Date.now(),
+            webhookId: 'backfill',
+          },
+          portalId,
+          pipelineKey,
+        );
+        if (result.action === 'created') created++; else updated++;
+      }
+
+      const totalImported = alreadyImported + created + updated;
+      const done = !page.hasNextPage || !page.endCursor;
+
+      // Persist before returning. A browser closed mid-import then resumes from
+      // here rather than starting over — which is the whole point of storing a
+      // cursor instead of looping inside one request.
+      if (record?.id) {
+        await hsUpdate(
+          objectTypeId,
+          record.id,
+          {
+            linear_backfill_cursor: done ? '' : (page.endCursor ?? ''),
+            linear_backfill_count: String(totalImported),
+          },
+          token,
+        );
+      }
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          scanned: page.nodes.length,
+          created, updated, skipped,
+          totalImported,
+          done,
+        }),
+      };
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      // The cursor is untouched on failure, so retrying repeats this page
+      // rather than skipping it. The upsert is idempotent, so that is safe.
+      return { statusCode: 500, body: JSON.stringify({ error: 'Import failed', detail }) };
     }
   }
 
