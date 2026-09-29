@@ -244,10 +244,25 @@ but the refresh token is not yet set, so no API call can be made. `status` will 
 
 ### 4.3 Sync metrics
 
-`provision:workflows` creates **YouTube → Sync Metrics (Daily)** on the App Config object,
-disabled like every other provisioned workflow — enable it in HubSpot and set its recurrence.
-Until you do, nothing schedules this: the only other caller is the button on the Video card, so
-metrics stay as fresh as the last person to click it.
+**The schedule lives in GitHub, not in HubSpot.** `.github/workflows/youtube-sync.yml` runs it
+daily on a cron and can be triggered by hand from the Actions tab.
+
+That is not a stylistic choice. HubSpot Projects serverless has no scheduler, and a HubSpot
+workflow cannot supply one either: `buildPollWorkflow` enrols with `type: MANUAL`, because there
+is no cron trigger for a custom object. The three provisioned workflows named "(Daily)" are
+therefore not daily — they run when something enrols a record. Do not go looking for a recurrence
+setting on them; there isn't one.
+
+`provision:workflows` still creates **YouTube → Sync Metrics** as a workflow action, so the sync
+can be used as a step inside some other workflow. That was never what made it recur.
+
+> **The scheduled Action only runs from the default branch.** GitHub runs `schedule` triggers from
+> `master` alone, so the cron is inert until the workflow file is merged there. `workflow_dispatch`
+> works from anywhere in the meantime.
+
+The job asserts postconditions rather than the HTTP status: it fails on a non-empty `errors`
+array, fails when `analyticsStatus` starts `failed:`, warns on `skipped:`, and warns when no Video
+records are found — that last one being indistinguishable from a broken search.
 
 The sync finds every Video record
 carrying a `youtube_video_id`, fetches statistics in batches of 50, and writes `view_count`,
@@ -302,18 +317,83 @@ soonest.
 
 ---
 
+## 5b. Before you deploy to another portal — preflight
+
+```bash
+PORTAL=prod npm run preflight
+```
+
+Asserts that the target portal's live schema matches `src/app/lib/portal-config.ts`: every
+object type id, every pipeline id, every stage id, and all 28 properties the app reads or
+writes. Read-only — schemas, pipelines and properties, all GETs, so re-running costs nothing.
+
+`.github/workflows/deploy-prod.yml` runs it before the upload, so a prod deploy cannot proceed
+over drift.
+
+**Why it exists.** This replaced the staging environment. Staging's one real value was catching
+per-portal provisioning drift — ids and properties differ per portal, so code that works on dev
+fails on prod because something was never created there. Staging never caught it: it went
+unmaintained, pointed at the *real* BuildRel Asana project, and had no changelog pipeline of its
+own. A check beats an environment here for one reason — it fails loudly, where a stale
+environment fails silently.
+
+It earned that on its first run against prod, reporting two faults nobody had recorded:
+
+```
+FAIL [pipeline] content/changelog has no pipelineId configured
+FAIL [property] app_configs is missing: youtube_channel_id, youtube_channel_title,
+     youtube_connection_status, youtube_last_sync
+```
+
+The second is the one that matters. HubSpot *omits* unknown properties rather than erroring, so
+a YouTube connection would have completed successfully and then read as `disconnected` forever,
+with nothing in any log.
+
+**It does not check secrets**, deliberately. `hs project deploy` already validates those and
+names the missing one; a second list that could disagree with the deploy would be worse than no
+list.
+
+**Add to `REQUIRED_PROPERTIES` in `src/scripts/preflight.ts`** whenever a property becomes
+load-bearing. `youtube_url`, `source_url` and `asana_task_id` were each provisioned-but-unwritten
+or read-but-absent, and every one was found by a person noticing something blank.
+
 ## 6. What will not work, however correctly you set it up
 
-Do not spend an afternoon on these expecting a result.
+Two different things get filed here, and conflating them makes the system look worse than it
+is. A **blocked** feature has no route forward. A **human-initiated** one works and is waiting
+for someone to start it.
+
+### 6.1 Blocked
 
 - **Breeze agent tools** return `UNAUTHORIZED`. The tools deploy, publish and appear in the
   agent builder; execution is refused upstream of the code. Every action declaring
   `WORKFLOWS` works and only the three declaring `AGENTS` fail — same app, same portal, same
-  build.
-- **Enterpret** has no obtainable API key. The property and card exist; data has to arrive
-  through Cowork's connector rather than a live call (#12).
+  build. **The decisive test is still unrun**: no Breeze tool has ever been placed in a
+  workflow, so the path believed to work has never actually been exercised. That is the
+  cheapest next probe.
 - **Social/LinkedIn drafting** exists as a deployed action but HubSpot Social is not
   connected, and it is not enrolled in any live workflow (#18).
+- **`impressions` and `click_through_rate`** are never populated. They are not metrics of the
+  Analytics API's `reports.query` — asking returns `400 Unknown identifier (impressions)`.
+  They live in YouTube Studio and the bulk Reporting API, a separate integration. Left
+  unwritten rather than zeroed, because "zero impressions" is a claim YouTube never made.
+
+### 6.2 Works, but somebody has to start it
+
+Neither of these can be server-side: a HubSpot serverless function cannot reach an MCP server
+and cannot write to a local disk. So the write happens from the work machine and HubSpot renders
+what was stored. That is the architecture, not a shortfall.
+
+- **Enterpret.** The read side works — `EnterpretInsightsApi` makes one CRM read and renders
+  three properties, degrading gracefully on partial data. The live HTTP call was deliberately
+  removed. What is missing is a *writer*: nothing populates `enterpret_theme`,
+  `enterpret_quote_count` or `enterpret_quotes`. `vault-template/prompts/enterpret-sync.md`,
+  run where Enterpret MCP is connected, is the only one. See `docs/enterpret-mcp-sync.md` (#12).
+- **Vault promotion.** Built, never run. A note with `promote: true` becomes a `content_piece`
+  at Outline, which creates both the Linear issue and the Asana task.
+  `vault-template/prompts/promote-note.md` is what starts it.
+
+An empty Enterpret card means nobody has run the sync. It is not a fault to report.
 - **`provision:workflows` on an already-provisioned portal** — creating workflows on a fresh
   portal is fine; updating existing ones has a fix that has not yet been run against a live
   portal. Edit existing workflows in the UI until it is confirmed.
@@ -330,6 +410,9 @@ Do not spend an afternoon on these expecting a result.
 
 | Symptom | Likely cause |
 |---|---|
+| CI: `HUBSPOT_ACCOUNT_ID … is required but was not set` | Not a typo — `project-validate` reads `DEFAULT_ACCOUNT_ID` and derives that name itself. The job was missing `environment:`, and an environment secret read from a job without one resolves to an **empty string** rather than failing |
+| CI: `SyntaxError: Invalid regular expression flags` | Node 18. The HubSpot CLI pulls ink → string-width, which uses the `v` regex flag from Node 20, so the module fails to parse and the CLI never runs |
+| A deploy reports `[deployed]` but the endpoint serves old code | Container propagation. Build #269 needed ~75s after reporting deployed. Poll the postcondition until it flips rather than testing once |
 | Provisioning script exits `401` | Private app token expired — regenerate it |
 | `expired 20705 day(s) ago` | Epoch zero: the token is unparseable, not old — wrong variable or wrong token |
 | Everything deploys, nothing works | Data model never provisioned — §1.2 |
