@@ -189,7 +189,8 @@ const SettingsPage = ({ portalId }: { portalId: number }) => {
   }, []);
 
   return (
-    <Form>
+    <Flex direction="column" gap="medium">
+      <Form>
       <Heading>Linear Sync Settings</Heading>
       <Text>Configure how this portal syncs with Linear.</Text>
 
@@ -248,6 +249,11 @@ const SettingsPage = ({ portalId }: { portalId: number }) => {
         {saving ? 'Saving…' : 'Save settings'}
       </Button>
 
+      </Form>
+
+      {/* Outside the Form on purpose. HubSpot's Form renders form
+          controls and silently drops anything else — this whole
+          section was in the deployed bundle and never appeared. */}
       <Heading>Import existing issues</Heading>
       <Text variant="microcopy">
         The webhook only picks up issues as they change, so anything tagged before you
@@ -278,6 +284,6 @@ const SettingsPage = ({ portalId }: { portalId: number }) => {
           Start over
         </Button>
       </Flex>
-    </Form>
+    </Flex>
   );
 };
