@@ -41,13 +41,62 @@ async function linearQuery(gql: string, variables: Record<string, unknown>, apiK
   return res.json() as Promise<{ data: Record<string, unknown> }>;
 }
 
-async function getLinearTeams(apiKey: string): Promise<LinearTeam[]> {
+/** Linear's per-page maximum. Asking for more is an error, not a bigger page. */
+const LINEAR_PAGE_SIZE = 250;
+
+/**
+ * Stop after this many pages. A guard, not a limit anyone should hit: 25 pages
+ * is 6,250 teams. It exists so a malformed `endCursor` cannot spin this
+ * function until the gateway kills it.
+ */
+const MAX_PAGES = 25;
+
+/**
+ * Every Linear team the API key can see, paged.
+ *
+ * Paging is not optional here. The query used to be `teams { nodes { … } }`
+ * with no arguments, and Linear defaults a connection to **50** — so on a large
+ * workspace the settings page offered the first fifty teams in whatever order
+ * the API returned them, with no indication that more existed. Prod returned
+ * exactly 50 out of several hundred, which reads as "my team is missing"
+ * rather than "this list is truncated".
+ */
+export async function getLinearTeams(apiKey: string): Promise<LinearTeam[]> {
+  const teams: LinearTeam[] = [];
+  let after: string | null = null;
+
   try {
-    const data = await linearQuery(`query { teams { nodes { id name } } }`, {}, apiKey);
-    return (data.data?.teams as { nodes: LinearTeam[] } | undefined)?.nodes ?? [];
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const data: { data: Record<string, unknown> } = await linearQuery(
+        `query($first: Int!, $after: String) {
+           teams(first: $first, after: $after) {
+             nodes { id name }
+             pageInfo { hasNextPage endCursor }
+           }
+         }`,
+        { first: LINEAR_PAGE_SIZE, after },
+        apiKey,
+      );
+
+      const connection = data.data?.teams as
+        | { nodes: LinearTeam[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } }
+        | undefined;
+      if (!connection) break;
+
+      teams.push(...(connection.nodes ?? []));
+      if (!connection.pageInfo?.hasNextPage || !connection.pageInfo.endCursor) break;
+      after = connection.pageInfo.endCursor;
+    }
   } catch {
-    return [];
+    // An empty list renders as "no teams" in the settings page, which is a
+    // better failure than a half-page presented as the whole set — but return
+    // what we already have rather than discarding it.
+    return teams;
   }
+
+  // Alphabetical, because the API's order is not meaningful and a person
+  // scanning several hundred names needs somewhere to start.
+  return teams.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 async function getLinearTeamMembers(teamId: string, apiKey: string): Promise<LinearMember[]> {
