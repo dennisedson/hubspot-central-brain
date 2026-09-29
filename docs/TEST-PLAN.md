@@ -456,24 +456,38 @@ there. Delete the record by hand if you want it gone.
 
 ---
 
-## 7. Known broken — do not file these
+## 7. Known state — do not file these
 
-Verified as blocked. Each has been investigated and documented.
+Two categories, and conflating them undersells the system. A blocked feature
+has no route forward. A human-initiated one works perfectly and is simply
+waiting for someone to start it — an empty card there means nobody has run it
+yet, not that anything is wrong.
+
+### 7.1 Blocked — investigated, no route forward
 
 | Area | Symptom | Why |
 |---|---|---|
-| **Breeze agent tools** | `The requesting portal is not authorized to execute tool` | Deploys, publishes, appears in the agent builder, refuses to execute. Every action declaring `WORKFLOWS` works; only the three declaring `AGENTS` fail — same app, portal and build |
-| **YouTube push notifications** | Metrics only update on the daily sync or the card button | HubSpot's gateway accepts only `application/json`; YouTube's hub sends `application/atom+xml`, rejected `415` before any code runs |
-| **Enterpret** | Card shows no data | No obtainable API key; data arrives out-of-band via Cowork (#12) |
+| **Breeze agent tools** | `The requesting portal is not authorized to execute tool` | Deploys, publishes, appears in the agent builder, refuses to execute. Every action declaring `WORKFLOWS` works; only the three declaring `AGENTS` fail — same app, portal and build. **The decisive test is still unrun**: no Breeze tool has ever been placed in a workflow, so the path believed to work has never actually been exercised |
+| **YouTube push notifications** | Metrics update on the daily sync, not the moment a video changes | HubSpot's gateway accepts only `application/json`; YouTube's hub sends `application/atom+xml`, rejected `415` before any code runs. Verification succeeds and delivery cannot, which makes it look wired |
 | **Social / LinkedIn** | Drafts are not published | HubSpot Social not connected (#18); the action exists but is in no live workflow |
+| **`impressions`, `click_through_rate`** | Permanently blank | Not metrics of the Analytics API's `reports.query` — asking returns `400 Unknown identifier (impressions)`. They live in YouTube Studio and the bulk Reporting API, a different integration. Left unwritten rather than zeroed |
+
+### 7.2 Works, but human-initiated
+
+Neither of these can be server-side. A HubSpot serverless function cannot reach
+an MCP server and cannot write to a local disk — different runtime, different
+trust boundary. So the write happens from the work machine and HubSpot renders
+what was stored. That is the architecture, not a shortfall.
+
+| Area | State | What starts it |
+|---|---|---|
+| **Enterpret** | The read side works. `EnterpretInsightsApi` makes one CRM read and renders three properties, degrading gracefully on partial data | Nothing writes `enterpret_theme` / `enterpret_quote_count` / `enterpret_quotes`. `prompts/enterpret-sync.md`, run on the machine with Enterpret MCP connected, is the only writer. See `docs/enterpret-mcp-sync.md` |
+| **Vault promotion** | Built, never run. A note with `promote: true` becomes a `content_piece` at Outline, which fans out to Linear and Asana | `prompts/promote-note.md`, pasted into a Cowork conversation with the vault connected |
 
 ---
 
-**`impressions` and `click_through_rate` are never populated.** The YouTube
-Analytics API's `reports.query` has no such metrics — requesting them returns
-`400 Unknown identifier (impressions) given in field parameters.metrics`. They
-exist in YouTube Studio and in the bulk Reporting API, which is a different
-integration. The properties are left blank rather than zeroed. Do not file this.
+**Nothing in 7.2 is a bug.** If the Enterpret card is empty or a note never
+became a record, the question is "has anyone run it?" — not "what broke?"
 
 ## 8. When something fails
 

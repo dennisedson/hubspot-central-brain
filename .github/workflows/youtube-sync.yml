@@ -1,0 +1,96 @@
+# Daily YouTube metrics sync.
+#
+# WHY THIS LIVES HERE AND NOT IN HUBSPOT
+# --------------------------------------
+# HubSpot Projects serverless has no scheduler. A function runs when something
+# invokes it — an HTTP request, a workflow step, or a card — and nothing else.
+#
+# The obvious in-platform answer is a workflow, and the repo already provisions
+# three named "(Daily)". They are not. `buildPollWorkflow` enrols with
+# `type: 'MANUAL'`, which means a person enrols the record by hand; HubSpot has
+# no cron trigger for a custom object. So those workflows only ever ran when
+# somebody pressed something, and the YouTube sync had no caller at all beyond
+# the button on the Video card — metrics were as fresh as the last click.
+#
+# A scheduled Action is the smallest thing that actually recurs: it is version
+# controlled, its logs are readable without a portal login, and it needs no
+# provisioning step and no manual enable.
+#
+# The workflow action in `src/app/workflow-actions/youtube-sync-hsmeta.json`
+# stays. It is what makes the sync usable as a step inside some *other*
+# workflow. It was never what made it daily.
+name: YouTube sync (daily)
+
+on:
+  schedule:
+    # 09:00 UTC. Nothing depends on the exact hour — YouTube statistics move
+    # continuously and this is a poll, not an event.
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+    inputs:
+      portal:
+        description: Portal id to sync
+        required: false
+        default: '51869810'
+
+concurrency:
+  group: youtube-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync metrics
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the sync and check what it actually did
+        env:
+          PORTAL: ${{ github.event.inputs.portal || '51869810' }}
+        run: |
+          set -euo pipefail
+
+          echo "Syncing portal $PORTAL"
+          response=$(curl -sS --fail-with-body \
+            --max-time 120 \
+            -X POST "https://${PORTAL}.hs-sites.com/hs/serverless/youtube-sync" \
+            -H 'Content-Type: application/json' \
+            -d '{}')
+
+          echo "$response" | jq .
+
+          # A 200 is not evidence of anything. This project has produced
+          # "green but empty" repeatedly — a deploy, script or sync reporting
+          # success while doing nothing — so the job asserts the postconditions
+          # instead of trusting the status code.
+
+          errors=$(echo "$response" | jq -r '.errors | length')
+          if [ "$errors" != "0" ]; then
+            echo "::error::Sync reported $errors error(s)"
+            echo "$response" | jq -r '.errors[]'
+            exit 1
+          fi
+
+          # analyticsStatus is always a string — never null — precisely so that
+          # "analytics ran fine" is visible rather than absent. A null here used
+          # to vanish from the response entirely.
+          analytics=$(echo "$response" | jq -r '.analyticsStatus')
+          case "$analytics" in
+            ok) ;;
+            skipped:*)
+              echo "::warning::Analytics skipped — $analytics"
+              ;;
+            *)
+              echo "::error::Analytics failed — $analytics"
+              exit 1
+              ;;
+          esac
+
+          found=$(echo "$response" | jq -r '.recordsFound')
+          updated=$(echo "$response" | jq -r '.recordsUpdated')
+          echo "::notice::Updated $updated of $found video record(s); analytics $analytics"
+
+          # Zero records is not a failure — a portal may legitimately have no
+          # Video records yet — but it is worth surfacing, because it is also
+          # what a broken search looks like.
+          if [ "$found" = "0" ]; then
+            echo "::warning::No Video records carrying a youtube_video_id were found"
+          fi
