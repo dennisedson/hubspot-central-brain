@@ -42,6 +42,34 @@ Per portal you need `SERVICE_KEY` (private app token, the one the provisioning s
 authenticate with), `PERSONAL_ACCESS_KEY` (for the CLI), `DEVELOPER_KEY` (the automation
 actions API rejects OAuth tokens and needs this instead), and `SYNC_SECRET`.
 
+### 1.1a Which credential lives where
+
+Four stores, and they are not interchangeable. Most of the time lost on this project has gone
+into putting a credential in the wrong one.
+
+| Store | Read by | HubSpot credential |
+|---|---|---|
+| `hs secrets` (account-level) | the deployed functions, at runtime | `HS_ACCESS_TOKEN` |
+| `hs app secret` (BETA, app-scoped) | **nothing here** — the deploy does not validate it | — |
+| local `.env` | provisioning scripts and `npm run preflight` | `HUBSPOT_<PORTAL>_SERVICE_KEY` |
+| GitHub **environment** secrets | CI — the preflight step and the deploys | `HUBSPOT_<PORTAL>_SERVICE_KEY` |
+
+The functions never see the service key, and the provisioning scripts never see
+`HS_ACCESS_TOKEN`. That has a useful diagnostic consequence: an invalidated service key breaks
+provisioning and CI while the running app keeps answering `200`, and an invalidated
+`HS_ACCESS_TOKEN` does the reverse — functions fail while the preflight stays green.
+
+**Scopes on the service key's private app are a superset of the app's own.** The app manifest
+requests only what runs at runtime, which is no schema writes at all. Provisioning *does* write
+schemas and properties, including on the standard **Projects** object, so its private app needs
+`project-object-write` on top. Missing it fails late and specifically:
+
+```
+403 You do not have permissions to edit_schema object type … (requires one of [project-object-write])
+```
+
+Add scopes to the private app as the scripts demand them; do not copy the app manifest's list.
+
 > If provisioning returns `401`, regenerate the private app token in the portal before
 > debugging anything else. An expired one reports as `expired 20705 day(s) ago` — epoch
 > zero, meaning "unparseable", not "old".
@@ -446,6 +474,8 @@ An empty Enterpret card means nobody has run the sync. It is not a fault to repo
 | Symptom | Likely cause |
 |---|---|
 | YouTube auth fails with `Error creating app_settings … ["linear_team_id"]` | The app is not installed, so there is no settings page, so no App Config record exists for the callback to update — §5c |
+| `403 … requires one of [project-object-write]` | The service key's private app lacks Projects scopes. Provisioning writes project properties; the app manifest deliberately does not — §1.1a |
+| `401 INVALID_AUTHENTICATION` from a provisioning script | The service key has been invalidated. It has happened three times across two portals. Confirm by running the preflight against the *other* portal — one passing and one 401ing isolates it to the key — then regenerate and update **both** `.env` and the GitHub environment secret |
 | CI: `HUBSPOT_ACCOUNT_ID … is required but was not set` | Not a typo — `project-validate` reads `DEFAULT_ACCOUNT_ID` and derives that name itself. The job was missing `environment:`, and an environment secret read from a job without one resolves to an **empty string** rather than failing |
 | CI: `SyntaxError: Invalid regular expression flags` | Node 18. The HubSpot CLI pulls ink → string-width, which uses the `v` regex flag from Node 20, so the module fails to parse and the CLI never runs |
 | A deploy reports `[deployed]` but the endpoint serves old code | Container propagation. Build #269 needed ~75s after reporting deployed. Poll the postcondition until it flips rather than testing once |
