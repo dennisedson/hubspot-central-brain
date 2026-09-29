@@ -317,6 +317,41 @@ soonest.
 
 ---
 
+## 5c. Install the app — deploying is not installing
+
+**A deployed project is not an installed app, and nothing in the deploy tells you so.**
+
+`app-hsmeta.json` declares `auth.type: static`, and a static-auth app has to be explicitly
+installed into the target account. Until it is, the project shows **Ready** with a deployed
+build while the portal shows **Not installed**.
+
+```bash
+npx hs project app-install-status   # check
+npx hs project install-app
+```
+
+Or in the portal: **Projects → the project → the app → Distribution → Install now**.
+
+**What works without it, and what does not.** The serverless functions answer perfectly well —
+they authenticate with the `HS_ACCESS_TOKEN` secret you set by hand, which has nothing to do
+with installation. So `curl` against any endpoint returns 200 and everything looks live.
+
+The **UI extensions do not exist** until the app is installed: no CRM cards, and no app settings
+page.
+
+**Why that cascades further than it looks.** The settings page is the only way to set
+`linear_team_id`, which is a *required* property on the App Config object. No settings page means
+no App Config record. And the YouTube OAuth callback writes the connected channel onto that
+record — finding none, it tries to create one, and the create is rejected:
+
+```
+Error creating app_settings. Some required properties were not set.
+"properties": ["linear_team_id"]
+```
+
+So an uninstalled app surfaces as a YouTube authorisation failure complaining about a Linear
+property. Install first, set the Linear team second, authorise YouTube third.
+
 ## 5b. Before you deploy to another portal — preflight
 
 ```bash
@@ -410,6 +445,7 @@ An empty Enterpret card means nobody has run the sync. It is not a fault to repo
 
 | Symptom | Likely cause |
 |---|---|
+| YouTube auth fails with `Error creating app_settings … ["linear_team_id"]` | The app is not installed, so there is no settings page, so no App Config record exists for the callback to update — §5c |
 | CI: `HUBSPOT_ACCOUNT_ID … is required but was not set` | Not a typo — `project-validate` reads `DEFAULT_ACCOUNT_ID` and derives that name itself. The job was missing `environment:`, and an environment secret read from a job without one resolves to an **empty string** rather than failing |
 | CI: `SyntaxError: Invalid regular expression flags` | Node 18. The HubSpot CLI pulls ink → string-width, which uses the `v` regex flag from Node 20, so the module fails to parse and the CLI never runs |
 | A deploy reports `[deployed]` but the endpoint serves old code | Container propagation. Build #269 needed ~75s after reporting deployed. Poll the postcondition until it flips rather than testing once |
