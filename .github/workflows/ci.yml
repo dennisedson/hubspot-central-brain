@@ -42,6 +42,17 @@ jobs:
     name: HubSpot Dry-Run Validate
     runs-on: ubuntu-latest
     needs: lint-typecheck-test
+    # Required, not decorative. HUBSPOT_DEV_* are ENVIRONMENT secrets, and a job
+    # that does not declare an environment cannot see them — `secrets.X` quietly
+    # resolves to an empty string rather than failing.
+    #
+    # The symptom points somewhere else entirely: project-validate reads
+    # DEFAULT_ACCOUNT_ID, then sets HUBSPOT_ACCOUNT_ID from it, so an empty
+    # secret surfaces as "HUBSPOT_ACCOUNT_ID environment variable or account_id
+    # input is required but was not set" — naming a variable this file never
+    # mentions. Both deploy workflows always declared their environment, which
+    # is why only CI failed.
+    environment: dev
     steps:
       - uses: actions/checkout@v4
 
