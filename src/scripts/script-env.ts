@@ -20,6 +20,7 @@ export interface ScriptEnv {
   personalKey: string;     // HUBSPOT_*_PERSONAL_ACCESS_KEY (for hs CLI / SDK client init)
   sharedSecret: string;    // HUBSPOT_*_SYNC_SECRET
   asanaApiKey: string;     // ASANA_API_KEY
+  linearApiKey: string;    // LINEAR_API_KEY — optional, only the backfill needs it
   developerApiKey: string; // HUBSPOT_*_DEVELOPER_KEY (per-portal developer key)
 }
 
@@ -75,6 +76,18 @@ export function loadEnv(): ScriptEnv {
     personalKey:     requireVar(vars, `HUBSPOT_${prefix}_PERSONAL_ACCESS_KEY`),
     sharedSecret:    requireVar(vars, `HUBSPOT_${prefix}_SYNC_SECRET`),
     asanaApiKey:     requireVar(vars, 'ASANA_API_KEY'),
+    // Portal-prefixed first, unprefixed as a fallback.
+    //
+    // The portals use different Linear workspaces, and a Linear key only sees
+    // the teams its own workspace has. One shared LINEAR_API_KEY meant dev was
+    // querying prod's workspace for a team that does not exist there, which
+    // Linear reports as "Entity not found: Team" — accurate, and impossible to
+    // read as a credential problem.
+    //
+    // Only the scripts need this. A deployed function reads LINEAR_API_KEY from
+    // its own portal's secret store, so the runtime is already portal-correct;
+    // it is one .env serving two portals that creates the ambiguity.
+    linearApiKey:    vars[`LINEAR_${prefix}_API_KEY`] ?? vars.LINEAR_API_KEY ?? '',
     developerApiKey: requireVar(vars, `HUBSPOT_${prefix}_DEVELOPER_KEY`),
   };
 }

@@ -106,13 +106,48 @@ async function fetchTeamIssues(apiKey: string, teamId: string): Promise<Issue[]>
   return issues;
 }
 
+/** Every issue assigned to a person, across all their teams, paged. */
+async function fetchAssignedIssues(apiKey: string, assigneeId: string): Promise<Issue[]> {
+  const issues: Issue[] = [];
+  let after: string | null = null;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const body: { data?: Record<string, unknown> } = await linearQuery(
+      apiKey,
+      `query($id: String!, $first: Int!, $after: String) {
+         user(id: $id) {
+           assignedIssues(first: $first, after: $after) {
+             nodes {
+               id identifier title description url
+               state { id name type }
+               labels { nodes { id name } }
+               team { id name }
+               assignee { id name }
+             }
+             pageInfo { hasNextPage endCursor }
+           }
+         }
+       }`,
+      { id: assigneeId, first: PAGE_SIZE, after },
+    );
+
+    const conn = (body.data?.user as { assignedIssues?: { nodes: Issue[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } } | undefined)?.assignedIssues;
+    if (!conn) break;
+
+    issues.push(...(conn.nodes ?? []));
+    if (!conn.pageInfo?.hasNextPage || !conn.pageInfo.endCursor) break;
+    after = conn.pageInfo.endCursor;
+  }
+
+  return issues;
+}
+
 async function main() {
   const apply = process.argv.includes('--apply');
-  const { token, portalId, portal } = loadEnv();
+  const { token, portalId, portal, linearApiKey } = loadEnv();
 
-  const linearApiKey = process.env.LINEAR_API_KEY;
   if (!linearApiKey) {
-    console.error('LINEAR_API_KEY is not set in .env or environment.');
+    console.error('LINEAR_API_KEY is empty in .env.');
     process.exit(1);
   }
 
@@ -136,10 +171,15 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`\n[${portal}] Backfill — portal ${portalId}, team ${settings.linearTeamId}`);
+  const scope = settings.linearTeamId
+    ? `team ${settings.linearTeamId}`
+    : `assigned to ${settings.linearAssigneeId}, all teams`;
+  console.log(`\n[${portal}] Backfill — portal ${portalId}, ${scope}`);
   console.log(`Mode: ${apply ? 'APPLY — records will be written' : 'dry run — nothing will be written'}\n`);
 
-  const all = await fetchTeamIssues(linearApiKey, settings.linearTeamId);
+  const all = settings.linearTeamId
+    ? await fetchTeamIssues(linearApiKey, settings.linearTeamId)
+    : await fetchAssignedIssues(linearApiKey, settings.linearAssigneeId);
   console.log(`Issues on the team: ${all.length}`);
 
   const skipped = { echo: 0, assignee: 0 };

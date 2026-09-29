@@ -144,11 +144,20 @@ const SettingsPage = ({ portalId }: { portalId: number }) => {
     );
   }
 
-  const teamOptions = teams.map(t => ({ label: t.name, value: t.id }));
+  // "Any team" first, because it is the mode that keeps working when someone
+  // adds you to a new team. A team-scoped filter goes quietly stale instead.
+  const teamOptions = [
+    { label: 'Any team — filter by assignee only', value: '' },
+    ...teams.map(t => ({ label: t.name, value: t.id })),
+  ];
   const memberOptions = teamMembers.map(m => ({ label: m.name, value: m.id }));
 
-  const canSave = !!settings.linearTeamId &&
-    (settings.assigneeFilter !== 'mine' || !!settings.linearAssigneeId);
+  // Mirrors isConfigured on the server. Either a team bounds the sync, or a
+  // named assignee does. Neither means every issue in the workspace, which is
+  // what filled a portal with records nobody asked for.
+  const canSave = settings.assigneeFilter === 'mine'
+    ? !!settings.linearAssigneeId
+    : !!settings.linearTeamId;
 
   const runImport = useCallback(async (reset: boolean) => {
     setImporting(true);

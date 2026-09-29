@@ -101,6 +101,28 @@ export async function getLinearTeams(apiKey: string): Promise<LinearTeam[]> {
   return teams.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Everyone in the workspace.
+ *
+ * Needed because the assignee list used to come from the selected team, and
+ * with "Any team" there is no team to ask. Paging is not required here — a
+ * workspace fits comfortably under one page — but the count is capped so a
+ * very large org cannot stall the settings page.
+ */
+async function getWorkspaceMembers(apiKey: string): Promise<LinearMember[]> {
+  try {
+    const data = await linearQuery(
+      `query { users(first: 250, filter: { active: { eq: true } }) { nodes { id name } } }`,
+      {},
+      apiKey,
+    );
+    const users = (data.data?.users as { nodes: LinearMember[] } | undefined)?.nodes ?? [];
+    return users.sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    return [];
+  }
+}
+
 async function getLinearTeamMembers(teamId: string, apiKey: string): Promise<LinearMember[]> {
   try {
     const data = await linearQuery(
@@ -164,6 +186,45 @@ interface BackfillIssue {
   labels: { nodes: Array<{ id: string; name: string }> };
   team: { id: string; name: string };
   assignee?: { id: string; name: string } | null;
+}
+
+/**
+ * One page of issues assigned to a person, across every team they belong to.
+ *
+ * This is the path that matters. A team-scoped filter stops covering someone's
+ * work the day they join another team, silently — measured on production, 75
+ * of 83 assigned issues sat outside the single configured team.
+ */
+async function fetchAssignedPage(
+  apiKey: string,
+  assigneeId: string,
+  after: string | null,
+): Promise<{ nodes: BackfillIssue[]; hasNextPage: boolean; endCursor: string | null }> {
+  const data = await linearQuery(
+    `query($id: String!, $first: Int!, $after: String) {
+       user(id: $id) {
+         assignedIssues(first: $first, after: $after) {
+           nodes {
+             id identifier title description url
+             state { id name type }
+             labels { nodes { id name } }
+             team { id name }
+             assignee { id name }
+           }
+           pageInfo { hasNextPage endCursor }
+         }
+       }
+     }`,
+    { id: assigneeId, first: BACKFILL_PAGE_SIZE, after },
+    apiKey,
+  );
+
+  const conn = (data.data?.user as { assignedIssues?: { nodes: BackfillIssue[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } } | undefined)?.assignedIssues;
+  return {
+    nodes: conn?.nodes ?? [],
+    hasNextPage: conn?.pageInfo?.hasNextPage ?? false,
+    endCursor: conn?.pageInfo?.endCursor ?? null,
+  };
 }
 
 /** One page of a team's issues, oldest first so the order is stable across runs. */
@@ -244,8 +305,10 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
 
       const [teams, teamMembers] = await Promise.all([
         linearApiKey ? getLinearTeams(linearApiKey) : Promise.resolve<LinearTeam[]>([]),
-        linearApiKey && settings.linearTeamId
-          ? getLinearTeamMembers(settings.linearTeamId, linearApiKey)
+        linearApiKey
+          ? settings.linearTeamId
+            ? getLinearTeamMembers(settings.linearTeamId, linearApiKey)
+            : getWorkspaceMembers(linearApiKey)
           : Promise.resolve<LinearMember[]>([]),
       ]);
 
@@ -258,10 +321,14 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
 
   if (action === 'loadTeamMembers') {
     const teamId = param(context, 'teamId');
-    if (!teamId || !linearApiKey) {
+    if (!linearApiKey) {
       return { statusCode: 200, body: JSON.stringify({ teamMembers: [] }) };
     }
-    const teamMembers = await getLinearTeamMembers(teamId, linearApiKey);
+    // No team selected means "Any team", so the assignee can be anyone in the
+    // workspace rather than anyone on a team.
+    const teamMembers = teamId
+      ? await getLinearTeamMembers(teamId, linearApiKey)
+      : await getWorkspaceMembers(linearApiKey);
     return { statusCode: 200, body: JSON.stringify({ teamMembers }) };
   }
 
@@ -269,12 +336,26 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
     const linearTeamId = param(context, 'linearTeamId');
     const assigneeFilter = param(context, 'assigneeFilter');
     const linearAssigneeId = param(context, 'linearAssigneeId');
-    if (!linearTeamId || !assigneeFilter) {
+    // linearTeamId is optional now — empty means "any team, filtered by
+    // assignee". isConfigured is what decides whether the result is usable.
+    if (!assigneeFilter) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields' }) };
+    }
+    if (!isConfigured({
+      linearTeamId: linearTeamId ?? '',
+      assigneeFilter: assigneeFilter as AppSettings['assigneeFilter'],
+      linearAssigneeId: linearAssigneeId ?? '',
+    })) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: 'Choose a Linear team, or filter by "mine" and pick yourself. Without one of those nothing bounds the sync.',
+        }),
+      };
     }
 
     const properties: Record<string, string> = {
-      linear_team_id: linearTeamId,
+      linear_team_id: linearTeamId ?? '',
       assignee_filter: assigneeFilter,
       linear_assignee_id: linearAssigneeId ?? '',
     };
@@ -324,7 +405,12 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
     const alreadyImported = reset ? 0 : parseInt(record?.properties.linear_backfill_count || '0', 10) || 0;
 
     try {
-      const page = await fetchIssuePage(linearApiKey, settings.linearTeamId, cursor);
+      // No team means "assigned to me, wherever it lives" — ask Linear for the
+      // person's issues rather than a team's, so a new team is picked up
+      // without anyone remembering to change a setting.
+      const page = settings.linearTeamId
+        ? await fetchIssuePage(linearApiKey, settings.linearTeamId, cursor)
+        : await fetchAssignedPage(linearApiKey, settings.linearAssigneeId, cursor);
 
       let created = 0, updated = 0, skipped = 0;
       for (const issue of page.nodes) {
