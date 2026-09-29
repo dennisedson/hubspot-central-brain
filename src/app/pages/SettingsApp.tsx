@@ -257,6 +257,11 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorDetail, setErrorDetail] = useState<string>('');
 
+  const [importing, setImporting] = useState(false);
+  const [importDone, setImportDone] = useState(false);
+  const [importCount, setImportCount] = useState(0);
+  const [importError, setImportError] = useState('');
+
   useEffect(() => {
     callApi('getSettings', { portalId: String(portalId) })
       .then(res => {
@@ -337,12 +342,50 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
     );
   }
 
-  const teamOptions = teams.map(t => ({ label: t.name, value: t.id }));
+  // "Any team" first: a team-scoped filter goes quietly stale the day you are
+  // added to a new team.
+  const teamOptions = [
+    { label: 'Any team — filter by assignee only', value: '' },
+    ...teams.map(t => ({ label: t.name, value: t.id })),
+  ];
   const memberOptions = teamMembers.map(m => ({ label: m.name, value: m.id }));
-  const canSave = !!settings.linearTeamId &&
-    (settings.assigneeFilter !== 'mine' || !!settings.linearAssigneeId);
+
+  // Mirrors isConfigured on the server: either a team bounds the sync, or a
+  // named assignee does.
+  const canSave = settings.assigneeFilter === 'mine'
+    ? !!settings.linearAssigneeId
+    : !!settings.linearTeamId;
+
+  const runImport = useCallback(async (reset: boolean) => {
+    setImporting(true);
+    setImportError('');
+    setImportDone(false);
+    try {
+      let finished = false;
+      let first = true;
+      // A page per request, each persisting its cursor — so closing this page
+      // stops the import rather than losing it.
+      while (!finished) {
+        const res = await callApi('backfill', {
+          portalId: String(portalId),
+          ...(first && reset ? { reset: 'true' } : {}),
+        });
+        const parsed = JSON.parse(res.body || '{}');
+        if (res.statusCode !== 200) throw new Error(parsed.error || `HTTP ${res.statusCode}`);
+        setImportCount(parsed.totalImported ?? 0);
+        finished = !!parsed.done;
+        first = false;
+      }
+      setImportDone(true);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setImporting(false);
+    }
+  }, [portalId]);
 
   return (
+    <Flex direction="column" gap="medium">
     <Form>
       <PageTitle>Settings</PageTitle>
       <Flex justify="between" align="center">
@@ -402,6 +445,40 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
         {saving ? 'Saving…' : 'Save settings'}
       </Button>
     </Form>
+
+    <Divider />
+
+    <Heading>Import existing issues</Heading>
+    <Text variant="microcopy">
+      The webhook only picks up issues as they change, so anything that existed before you
+      connected Linear will not appear on its own. This imports them once, using the filter
+      above. It reads from Linear and writes here — nothing in Linear is changed.
+    </Text>
+
+    {importing && <LoadingSpinner label={`Imported ${importCount} so far…`} />}
+
+    {importDone && (
+      <Alert title={`Imported ${importCount} issue${importCount === 1 ? '' : 's'}`} variant="success">
+        <Text>Running it again is safe — existing records are updated, not duplicated.</Text>
+      </Alert>
+    )}
+
+    {importError && (
+      <Alert title="Import stopped" variant="error">
+        <Text>{importError}</Text>
+        <Text>Progress was saved. Resume continues from where it stopped.</Text>
+      </Alert>
+    )}
+
+    <Flex direction="row" gap="small">
+      <Button onClick={() => void runImport(false)} disabled={importing || !canSave}>
+        {importing ? 'Importing…' : 'Resume import'}
+      </Button>
+      <Button onClick={() => void runImport(true)} disabled={importing || !canSave}>
+        Start over
+      </Button>
+    </Flex>
+    </Flex>
   );
 }
 
