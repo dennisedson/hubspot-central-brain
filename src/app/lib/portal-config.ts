@@ -29,10 +29,20 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
  * and whose issues, and not before.
  */
 export function isConfigured(settings: AppSettings): boolean {
-  if (!settings.linearTeamId) return false;
-  // 'mine' is the only filter that needs a person; 'assigned' means "anyone".
-  if (settings.assigneeFilter === 'mine' && !settings.linearAssigneeId) return false;
-  return true;
+  // Assignee-first. "Issues assigned to me, wherever they live" is a complete
+  // configuration on its own — a team is optional on top of it.
+  //
+  // That is the mode to prefer, because a team-scoped filter silently stops
+  // covering your work the day somebody adds you to a new team. Measured on
+  // production: 83 issues assigned to one person across four teams, 75 of them
+  // outside the single configured team. The filter was capturing 5% of the
+  // work it was meant to.
+  if (settings.assigneeFilter === 'mine') return Boolean(settings.linearAssigneeId);
+
+  // No named person means the only thing bounding this is the team. Without
+  // one, 'all' would accept every issue in the workspace — which is exactly
+  // how 34 unwanted records reached production.
+  return Boolean(settings.linearTeamId);
 }
 
 interface PipelineConfig {

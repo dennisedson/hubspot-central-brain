@@ -365,6 +365,23 @@ describe('LinearWebhook — refuses to sync an unconfigured portal', () => {
     ).toBe(true);
   });
 
+  it('accepts "mine" with a person and NO team — the point of the change', () => {
+    // "Issues assigned to me, wherever they live." A team-scoped filter stops
+    // covering someone's work the day they join another team, silently.
+    // Measured on production: 83 issues across four teams, 75 outside the one
+    // configured team.
+    expect(
+      isConfigured({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-1' }),
+    ).toBe(true);
+  });
+
+  it('still refuses no team with no named person', () => {
+    // 'all' and 'assigned' are bounded only by the team. Without one they
+    // accept the entire workspace.
+    expect(isConfigured({ linearTeamId: '', assigneeFilter: 'all', linearAssigneeId: '' })).toBe(false);
+    expect(isConfigured({ linearTeamId: '', assigneeFilter: 'assigned', linearAssigneeId: '' })).toBe(false);
+  });
+
   it('the shipped defaults are NOT configured', () => {
     // The whole point. If this ever passes, an unconfigured portal syncs again.
     expect(isConfigured(DEFAULT_APP_SETTINGS)).toBe(false);
