@@ -70,8 +70,14 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
       };
     }
 
-    // Filter to the configured team. Applies to all action types including removes.
-    if (payload.data.team.id !== settings.linearTeamId) {
+    // Team filter, when one is configured. Applies to all action types
+    // including removes.
+    //
+    // Conditional on purpose, and safe only because isConfigured ran first: an
+    // empty team now means "any team, filtered by assignee", not "no filter at
+    // all". Without that gate above this line, this is the code that accepted
+    // every team on an unconfigured portal.
+    if (settings.linearTeamId && payload.data.team.id !== settings.linearTeamId) {
       return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'not configured team' }) };
     }
 
