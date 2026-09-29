@@ -1,11 +1,22 @@
 import { getPortalConfig, DEFAULT_APP_SETTINGS } from '../lib/portal-config';
 import type { AppSettings } from '../lib/portal-config';
+import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 
-interface EndpointContext {
-  method: string;
-  body: Record<string, string | undefined>;
-  query?: Record<string, string>;
+interface SettingsContext {
   accountId?: number;
+  params?: Record<string, string | string[] | undefined>;
+  parameters?: Record<string, string | undefined>;
+  query?: Record<string, string | undefined>;
+  body?: Record<string, string | undefined>;
+}
+
+function param(ctx: SettingsContext, key: string): string | undefined {
+  // HubSpot delivers URL query params in `params`, and their values are
+  // ARRAYS, not strings — reading one straight through yields e.g. ["status"],
+  // which compares unequal to "status" and has no .split().
+  const q = ctx.params?.[key];
+  const fromQuery = Array.isArray(q) ? q[0] : q;
+  return fromQuery ?? ctx.parameters?.[key] ?? ctx.query?.[key] ?? ctx.body?.[key];
 }
 
 interface LinearTeam {
@@ -18,7 +29,6 @@ interface LinearMember {
   name: string;
 }
 
-const HS_BASE = 'https://api.hubapi.com';
 const LINEAR_API = 'https://api.linear.app/graphql';
 
 async function linearQuery(gql: string, variables: Record<string, unknown>, apiKey: string) {
@@ -55,7 +65,7 @@ async function getLinearTeamMembers(teamId: string, apiKey: string): Promise<Lin
 }
 
 async function hsSearch(objectTypeId: string, props: string[], token: string) {
-  const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}/search`, {
+  const res = await fetch(`${HS_BASE}${objectSearchPath(objectTypeId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ filterGroups: [], properties: props, limit: 1, sorts: [], query: '', after: '0' }),
@@ -65,7 +75,7 @@ async function hsSearch(objectTypeId: string, props: string[], token: string) {
 }
 
 async function hsCreate(objectTypeId: string, properties: Record<string, string>, token: string) {
-  const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}`, {
+  const res = await fetch(`${HS_BASE}${objectPath(objectTypeId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ properties, associations: [] }),
@@ -74,7 +84,7 @@ async function hsCreate(objectTypeId: string, properties: Record<string, string>
 }
 
 async function hsUpdate(objectTypeId: string, objectId: string, properties: Record<string, string>, token: string) {
-  const res = await fetch(`${HS_BASE}/crm/v3/objects/${objectTypeId}/${objectId}`, {
+  const res = await fetch(`${HS_BASE}${objectPath(objectTypeId, objectId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ properties }),
@@ -82,8 +92,8 @@ async function hsUpdate(objectTypeId: string, objectId: string, properties: Reco
   if (!res.ok) throw new Error(`HubSpot update failed ${res.status}: ${await res.text()}`);
 }
 
-export async function main(context: EndpointContext): Promise<{ statusCode: number; body: string }> {
-  const portalId = context.accountId ?? parseInt(context.query?.portalId ?? '0', 10);
+export async function main(context: SettingsContext): Promise<{ statusCode: number; body: string }> {
+  const portalId = context.accountId ?? parseInt(param(context, 'portalId') ?? '0', 10);
   if (!portalId) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing portalId' }) };
   }
@@ -107,7 +117,9 @@ export async function main(context: EndpointContext): Promise<{ statusCode: numb
     return { statusCode: 500, body: JSON.stringify({ error: 'App config object type not configured' }) };
   }
 
-  if (context.method === 'GET') {
+  const action = param(context, 'action') ?? 'getSettings';
+
+  if (action === 'getSettings') {
     try {
       const result = await hsSearch(
         objectTypeId,
@@ -137,18 +149,19 @@ export async function main(context: EndpointContext): Promise<{ statusCode: numb
     }
   }
 
-  if (context.method === 'POST') {
-    const body = context.body ?? {};
-
-    if (body.action === 'loadTeamMembers') {
-      if (!body.teamId || !linearApiKey) {
-        return { statusCode: 200, body: JSON.stringify({ teamMembers: [] }) };
-      }
-      const teamMembers = await getLinearTeamMembers(body.teamId, linearApiKey);
-      return { statusCode: 200, body: JSON.stringify({ teamMembers }) };
+  if (action === 'loadTeamMembers') {
+    const teamId = param(context, 'teamId');
+    if (!teamId || !linearApiKey) {
+      return { statusCode: 200, body: JSON.stringify({ teamMembers: [] }) };
     }
+    const teamMembers = await getLinearTeamMembers(teamId, linearApiKey);
+    return { statusCode: 200, body: JSON.stringify({ teamMembers }) };
+  }
 
-    const { linearTeamId, assigneeFilter, linearAssigneeId } = body;
+  if (action === 'saveSettings') {
+    const linearTeamId = param(context, 'linearTeamId');
+    const assigneeFilter = param(context, 'assigneeFilter');
+    const linearAssigneeId = param(context, 'linearAssigneeId');
     if (!linearTeamId || !assigneeFilter) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields' }) };
     }
@@ -174,5 +187,5 @@ export async function main(context: EndpointContext): Promise<{ statusCode: numb
     }
   }
 
-  return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+  return { statusCode: 400, body: JSON.stringify({ error: `Unknown action: ${action}` }) };
 }

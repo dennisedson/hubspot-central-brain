@@ -1,0 +1,41 @@
+{
+  "uid": "youtube_sync_v1",
+  "type": "workflow-action",
+  "config": {
+    "actionUrl": "https://51869810.hs-sites.com/hs/serverless/youtube-sync",
+    "isPublished": true,
+    "supportedClients": [{ "client": "WORKFLOWS" }],
+    "objectTypes": [],
+    "inputFields": [],
+    "outputFields": [
+      {
+        "typeDefinition": { "name": "syncStatus", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "recordsFound", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "recordsUpdated", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "analyticsStatus", "type": "string", "fieldType": "text" }
+      }
+    ],
+    "labels": {
+      "en": {
+        "actionName": "Sync YouTube Metrics",
+        "appDisplayName": "Central Brain",
+        "actionDescription": "Fetches view, like and comment counts plus average view duration for every Video record carrying a youtube_video_id",
+        "actionCardContent": "Sync YouTube → HubSpot",
+        "inputFieldLabels": {},
+        "inputFieldDescriptions": {},
+        "outputFieldLabels": {
+          "syncStatus": "Sync Status",
+          "recordsFound": "Video Records Found",
+          "recordsUpdated": "Video Records Updated",
+          "analyticsStatus": "Analytics Status"
+        }
+      }
+    }
+  }
+}

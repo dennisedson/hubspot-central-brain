@@ -1,0 +1,12 @@
+{
+  "uid": "fellow_sync",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/FellowSync.js",
+    "endpoint": {
+      "path": "fellow-sync",
+      "methods": ["POST"]
+    },
+    "secretKeys": ["FELLOW_API_KEY", "HS_ACCESS_TOKEN"]
+  }
+}

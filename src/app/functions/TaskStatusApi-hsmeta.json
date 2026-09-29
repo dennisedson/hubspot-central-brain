@@ -1,0 +1,12 @@
+{
+  "uid": "task_status_api",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/TaskStatusApi.js",
+    "endpoint": {
+      "path": "task-status-api",
+      "methods": ["GET", "POST"]
+    },
+    "secretKeys": ["HS_ACCESS_TOKEN", "LINEAR_API_KEY", "ASANA_API_KEY"]
+  }
+}

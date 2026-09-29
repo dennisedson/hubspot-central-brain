@@ -1,0 +1,110 @@
+import { getPortalConfig } from '../lib/portal-config';
+import { getLinearIssue } from '../lib/linear-client';
+import { getAsanaTask } from '../lib/asana-client';
+import {
+  resolvePipeline,
+  stageNameFromId,
+  computeLinearDrift,
+  computeAsanaDrift,
+} from '../lib/drift';
+import { HS_BASE, objectPath } from '../lib/hs-api';
+
+interface TaskStatusContext {
+  accountId?: number;
+  params?: Record<string, string | string[] | undefined>;
+  parameters?: Record<string, string | undefined>;
+  query?: Record<string, string | undefined>;
+  body?: Record<string, string | undefined>;
+}
+
+function param(ctx: TaskStatusContext, key: string): string | undefined {
+  // HubSpot delivers URL query params in `params`, and their values are
+  // ARRAYS, not strings — reading one straight through yields e.g. ["status"],
+  // which compares unequal to "status" and has no .split().
+  const q = ctx.params?.[key];
+  const fromQuery = Array.isArray(q) ? q[0] : q;
+  return fromQuery ?? ctx.parameters?.[key] ?? ctx.query?.[key] ?? ctx.body?.[key];
+}
+
+function json(statusCode: number, payload: unknown) {
+  return { statusCode, body: JSON.stringify(payload) };
+}
+
+function reason(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** Last path segment of an Asana task URL, e.g. .../0/<projectGid>/<taskGid>. */
+export function taskGidFromUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const gid = url.split('?')[0].split('#')[0].replace(/\/+$/, '').split('/').pop();
+  return gid && /^\d+$/.test(gid) ? gid : null;
+}
+
+export async function main(context: TaskStatusContext) {
+  const token = process.env.PRIVATE_APP_ACCESS_TOKEN ?? process.env.HS_ACCESS_TOKEN;
+  const objectId = param(context, 'objectId');
+  // hubspot.serverless() calls from a card do NOT populate context.accountId —
+  // the caller passes portalId explicitly, same as SettingsApp.tsx has always done.
+  const portalId = context.accountId ?? parseInt(param(context, 'portalId') ?? '0', 10);
+
+  if (!token) return json(500, { error: 'No HubSpot access token' });
+  if (!objectId) return json(400, { error: 'objectId is required' });
+  if (!portalId) return json(400, { error: 'portalId is required' });
+
+  const config = getPortalConfig(portalId);
+  const props = ['linear_issue_id', 'asana_task_id', 'asana_task_url', 'hs_pipeline', 'hs_pipeline_stage'];
+  const url = `${HS_BASE}${objectPath(config.content.objectTypeId, objectId)}?properties=${props.join(',')}`;
+
+  const recordRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!recordRes.ok) {
+    return json(502, { error: `Could not read record ${objectId}: ${recordRes.status}` });
+  }
+  const record = await recordRes.json() as { properties: Record<string, string | null> };
+
+  const linearId = record.properties.linear_issue_id || null;
+  // SyncToAsana writes back asana_task_url and never asana_task_id, so a
+  // correctly linked record carries the URL with the id empty — and this card
+  // reported "Not linked to Asana" on records that were linked. The gid is the
+  // last path segment of the task URL, which is how SyncToAsana resolves it too.
+  const asanaId = record.properties.asana_task_id || taskGidFromUrl(record.properties.asana_task_url);
+  const pipelineId = record.properties.hs_pipeline || '';
+  const stageId = record.properties.hs_pipeline_stage || '';
+
+  const pipeline = resolvePipeline(config, pipelineId);
+  const stage = pipeline ? stageNameFromId(config, pipeline, stageId) : null;
+
+  const [linearOutcome, asanaOutcome] = await Promise.allSettled([
+    linearId ? getLinearIssue(process.env.LINEAR_API_KEY ?? '', linearId) : Promise.resolve(null),
+    asanaId ? getAsanaTask(process.env.ASANA_API_KEY ?? '', asanaId) : Promise.resolve(null),
+  ]);
+
+  const errors: { linear: string | null; asana: string | null } = { linear: null, asana: null };
+
+  let linear = null;
+  if (linearOutcome.status === 'rejected') {
+    errors.linear = reason(linearOutcome.reason);
+  } else if (linearOutcome.value) {
+    const issue = linearOutcome.value;
+    linear = {
+      ...issue,
+      drift: pipeline && stage ? computeLinearDrift(pipeline, stage, issue.state) : null,
+    };
+  }
+
+  let asana = null;
+  if (asanaOutcome.status === 'rejected') {
+    errors.asana = reason(asanaOutcome.reason);
+  } else if (asanaOutcome.value) {
+    const task = asanaOutcome.value;
+    asana = {
+      ...task,
+      drift:
+        pipeline && stage && task.stageGid
+          ? computeAsanaDrift(pipeline, stage, task.stageGid)
+          : null,
+    };
+  }
+
+  return json(200, { linear, asana, pipeline, stageLabel: stage, errors });
+}

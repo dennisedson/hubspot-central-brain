@@ -20,23 +20,25 @@
 
     **Step 1 — `portal-config.ts` (3:00 - 4:30)**
     Open `src/app/lib/portal-config.ts`. This is a thin config object:
-    - Two top-level keys: `content` and `changelog`
-    - Each has `objectTypeId`, `pipelineId`, and a `stageIds` map
+    - One top-level `content` key holding the shared `content_piece` objectTypeId plus a nested `pipelines` object
+    - `pipelines.content` — the Content Lifecycle pipeline (idea → published)
+    - `pipelines.changelog` — the Changelog Lifecycle pipeline (identified → published)
     - Every value reads from `process.env` first, falls back to `'FILL_IN'`
     - Nothing to deploy yet — this file is a placeholder until `npm run provision` runs in Task 8
 
     **Step 2 — `findByLinearId` and `getCurrentStage` (4:30 - 6:00)**
     Open `src/app/lib/hubspot-client.ts`.
-    - `findByLinearId` calls `searchApi.doSearch` with a single filter on `linear_issue_id` and returns the first result's `id`, or `null`
+    - Both functions call the internal `hsSearch` helper, which wraps the CRM v3 `/search` endpoint with a typed `filterGroups` body
+    - `findByLinearId` passes a single `linear_issue_id` filter and returns the first result's `id`, or `null`
     - `getCurrentStage` does the same search but also requests `hs_pipeline_stage` in the properties array, returning `response.results[0]?.properties?.hs_pipeline_stage ?? null`
-    - Key type fix: use `FilterOperatorEnum.Eq` from the HubSpot SDK (not the raw string `'EQ'`)
+    - Filters use the raw operator string `'EQ'` — no SDK import needed
 
-    **Step 3 — `upsertContent` and `upsertChangelog` (6:00 - 7:30)**
-    Both functions follow the same pattern:
-    1. Map the Linear state name through the mapping table (`LINEAR_STATE_TO_CONTENT_STAGE` / `LINEAR_STATE_TO_CHANGELOG_STAGE`)
-    2. Look up the HubSpot stage ID from `PORTAL_CONFIG`
+    **Step 3 — `upsertContent` (6:00 - 7:30)**
+    One function handles both pipelines via the `pipelineKey` parameter (`'content' | 'changelog'`, defaults to `'content'`):
+    1. Select the right state map based on `pipelineKey` (`LINEAR_STATE_TO_CHANGELOG_STAGE` vs `LINEAR_STATE_TO_CONTENT_STAGE`)
+    2. Call `getPortalConfig(portalId)` and index into `config.content.pipelines[pipelineKey]` for `pipelineId` and `stageIds`
     3. Build a `properties` object — note the `...(data.description ? { notes: data.description } : {})` spread that conditionally sets the `notes` field
-    4. Call `findByLinearId` — if found, call `basicApi.update`; if not, call `basicApi.create` with `associations: []`
+    4. Call `findByLinearId` — if found, `PATCH` the existing record; if not, `POST` a new one with `associations: []`
     5. Return `{ id, action: 'created' | 'updated' }`
 
     **Step 4 — TDD with Vitest mocks (7:30 - 8:00)**
@@ -65,21 +67,24 @@
 export const PORTAL_CONFIG = {
   content: {
     objectTypeId: process.env.CONTENT_OBJECT_TYPE_ID ?? '2-FILL_IN',
-    pipelineId:   process.env.CONTENT_PIPELINE_ID   ?? 'FILL_IN',
-    stageIds: {
-      idea:      process.env.CONTENT_STAGE_IDEA      ?? 'FILL_IN',
-      drafting:  process.env.CONTENT_STAGE_DRAFTING  ?? 'FILL_IN',
-      published: process.env.CONTENT_STAGE_PUBLISHED ?? 'FILL_IN',
-      // ...
-    },
-  },
-  changelog: {
-    objectTypeId: process.env.CHANGELOG_OBJECT_TYPE_ID ?? '2-FILL_IN',
-    pipelineId:   process.env.CHANGELOG_PIPELINE_ID   ?? 'FILL_IN',
-    stageIds: {
-      identified: process.env.CHANGELOG_STAGE_IDENTIFIED  ?? 'FILL_IN',
-      published:  process.env.CHANGELOG_STAGE_PUBLISHED_CL ?? 'FILL_IN',
-      // ...
+    pipelines: {
+      content: {
+        pipelineId: process.env.CONTENT_PIPELINE_ID ?? 'FILL_IN',
+        stageIds: {
+          idea:      process.env.CONTENT_STAGE_IDEA      ?? 'FILL_IN',
+          drafting:  process.env.CONTENT_STAGE_DRAFTING  ?? 'FILL_IN',
+          published: process.env.CONTENT_STAGE_PUBLISHED ?? 'FILL_IN',
+          // ...
+        },
+      },
+      changelog: {
+        pipelineId: process.env.CHANGELOG_PIPELINE_ID ?? 'FILL_IN',
+        stageIds: {
+          identified: process.env.CHANGELOG_STAGE_IDENTIFIED ?? 'FILL_IN',
+          published:  process.env.CHANGELOG_STAGE_PUBLISHED  ?? 'FILL_IN',
+          // ...
+        },
+      },
     },
   },
 };
@@ -88,52 +93,59 @@ export const PORTAL_CONFIG = {
 **`getCurrentStage` (the key addition):**
 ```typescript
 export async function getCurrentStage(
-  client: Client,
   objectTypeId: string,
   linearIssueId: string,
 ): Promise<string | null> {
-  const response = await client.crm.objects.searchApi.doSearch(objectTypeId, {
-    filterGroups: [{ filters: [{ propertyName: 'linear_issue_id', operator: FilterOperatorEnum.Eq, value: linearIssueId }] }],
-    properties: ['linear_issue_id', 'hs_pipeline_stage'],
-    limit: 1, sorts: [], query: '', after: '0',
-  });
+  const response = await hsSearch(
+    objectTypeId,
+    [{ propertyName: 'linear_issue_id', operator: 'EQ', value: linearIssueId }],
+    ['linear_issue_id', 'hs_pipeline_stage'],
+  );
   return response.results[0]?.properties?.hs_pipeline_stage ?? null;
 }
 ```
 
 **`upsertContent` (the full upsert pattern):**
 ```typescript
-export async function upsertContent(client: Client, payload: LinearWebhookPayload): Promise<UpsertResult> {
+export async function upsertContent(
+  payload: LinearWebhookPayload,
+  portalId: number,
+  pipelineKey: 'content' | 'changelog' = 'content',
+): Promise<UpsertResult> {
   const { data } = payload;
-  const stageName = LINEAR_STATE_TO_CONTENT_STAGE[data.state.name] ?? 'idea';
-  const stageId   = PORTAL_CONFIG.content.stageIds[stageName] ?? stageName;
+  const config = getPortalConfig(portalId);
+  const stateMap = pipelineKey === 'changelog' ? LINEAR_STATE_TO_CHANGELOG_STAGE : LINEAR_STATE_TO_CONTENT_STAGE;
+  const stageName = stateMap[data.state.name] ?? (pipelineKey === 'changelog' ? 'identified' : 'idea');
+  const pipelineConfig = config.content.pipelines[pipelineKey];
+  const stageId = pipelineConfig.stageIds[stageName] ?? stageName;
+  const objectTypeId = config.content.objectTypeId;
 
   const properties: Record<string, string> = {
-    title:            data.title,
-    linear_issue_id:  data.id,
-    linear_issue_url: data.url,
-    hs_pipeline:       PORTAL_CONFIG.content.pipelineId,
+    title:             data.title,
+    linear_issue_id:   data.id,
+    linear_issue_url:  data.url,
+    hs_pipeline:       pipelineConfig.pipelineId,
     hs_pipeline_stage: stageId,
     ...(data.description ? { notes: data.description } : {}),
   };
 
-  const existingId = await findByLinearId(client, PORTAL_CONFIG.content.objectTypeId, data.id);
+  const existingId = await findByLinearId(objectTypeId, data.id);
   if (existingId) {
-    await client.crm.objects.basicApi.update(PORTAL_CONFIG.content.objectTypeId, existingId, { properties });
+    await hsUpdate(objectTypeId, existingId, properties);
     return { id: existingId, action: 'updated' };
   }
-  const created = await client.crm.objects.basicApi.create(PORTAL_CONFIG.content.objectTypeId, { properties, associations: [] });
+  const created = await hsCreate(objectTypeId, properties);
   return { id: created.id, action: 'created' };
 }
 ```
 
 **Vitest mock pattern:**
 ```typescript
-const mockSearch = vi.fn();
-const mockClient = { crm: { objects: { searchApi: { doSearch: mockSearch }, basicApi: { update: vi.fn(), create: vi.fn() } } } } as any;
+const mockFetch = vi.fn();
+vi.stubGlobal('fetch', mockFetch);
 
 it('returns null when no record exists', async () => {
-  mockSearch.mockResolvedValue({ results: [] });
-  expect(await getCurrentStage(mockClient, '2-content', 'lin-999')).toBeNull();
+  mockFetch.mockResolvedValue({ ok: true, json: async () => ({ results: [] }) });
+  expect(await getCurrentStage('2-content', 'lin-999')).toBeNull();
 });
 ```

@@ -1,0 +1,364 @@
+import { getPortalConfig } from '../lib/portal-config';
+import { hsUpdate, readYouTubeChannelId } from '../lib/hubspot-client';
+import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
+import { getYouTubeAccessToken } from '../lib/youtube-auth';
+import {
+  chunkVideoIds,
+  fetchVideoAnalytics,
+  fetchVideoBatch,
+  type VideoAnalytics,
+  type YouTubeVideo,
+} from '../lib/youtube-client';
+
+/**
+ * YouTube metrics sync. Ported from the Firebase Creator Console's
+ * `syncAllUsers` / `dailySync` / `triggerSync` / `updateVideoRecord`.
+ *
+ * WHAT COLLAPSED
+ * --------------
+ * The original needed four pieces because state lived in Firestore and HubSpot
+ * was a remote system it pushed into: a scheduler, a per-user fan-out, an HTTP
+ * trigger, and an endpoint whose only job was to write a CRM record. Here the
+ * CRM is the store and this app is already inside the portal, so:
+ *
+ *   syncAllUsers      -> gone. One app install is one portal is one channel.
+ *                        There are no "users" to fan out over.
+ *   updateVideoRecord -> gone. It is `hsUpdate` at the bottom of this file.
+ *   dailySync         -> this handler, enrolled on a daily workflow.
+ *   triggerSync       -> this handler, called directly.
+ *
+ * THE ETAG IS THE POINT
+ * ---------------------
+ * YouTube's videos.list is quota-metered. Sending the previous run's ETag turns
+ * an unchanged batch into a 304 with no body, which costs a fraction of the
+ * quota and skips every downstream write. On a channel whose back catalogue
+ * rarely moves, that is almost every batch, almost every day — so the ETag path
+ * is the normal case, not the optimisation. `youtube-client` returns
+ * `notModified` for it; treat a 304 as success and move on.
+ *
+ * WRITES ARE PER-RECORD AND BEST-EFFORT
+ * -------------------------------------
+ * One failed record must not abandon the rest of the batch. Each update is
+ * counted and errors are collected, because a sync that silently processes
+ * three of fifty videos and reports success is the failure mode this codebase
+ * has been bitten by before.
+ */
+
+/** Live metrics, refreshed every run. */
+const METRIC_PROPERTIES = ['view_count', 'like_count', 'comment_count'] as const;
+
+/** YouTube Analytics figures — a separate API, so a separate failure domain. */
+const ANALYTICS_PROPERTIES = ['impressions', 'click_through_rate', 'average_view_duration'] as const;
+
+/** Properties read off each video record. `youtube_video_id` is the join key. */
+const READ_PROPERTIES = ['youtube_video_id', 'title', ...METRIC_PROPERTIES, ...ANALYTICS_PROPERTIES];
+
+/** Search page size. HubSpot caps `limit` at 100 on the search endpoint. */
+const SEARCH_PAGE_SIZE = 100;
+
+interface VideoRecord {
+  id: string;
+  youtubeVideoId: string;
+}
+
+export interface SyncOutcome {
+  /** Video records found in HubSpot carrying a youtube_video_id. */
+  recordsFound: number;
+  /** Records whose properties were actually written. */
+  recordsUpdated: number;
+  /** Batches YouTube answered 304 for — skipped without a write. */
+  batchesNotModified: number;
+  batchesFetched: number;
+  /** Non-fatal per-record failures. The run still reports the rest. */
+  errors: string[];
+  /**
+   * `ok`, or why the analytics figures were not fetched.
+   *
+   * Without this, "analytics ran and found nothing" and "analytics never ran"
+   * produce an identical outcome and identical blank properties. That ambiguity
+   * cost real debugging time.
+   *
+   * ALWAYS A STRING, NEVER NULL. This field was `string | null` for exactly one
+   * build. HubSpot serialises a handler that returns `body` as an OBJECT by
+   * dropping null properties, so the success case vanished from the response
+   * entirely and looked identical to a stale deploy. (`YouTubeAuth` does not
+   * hit this because it calls `JSON.stringify` itself — hence its `lastSync:
+   * null` surviving.) Verified on build #267.
+   */
+  analyticsStatus: string;
+}
+
+function getToken(): string {
+  const token = process.env.PRIVATE_APP_ACCESS_TOKEN ?? process.env.HS_ACCESS_TOKEN;
+  if (!token) throw new Error('No HubSpot access token available');
+  return token;
+}
+
+/**
+ * Every video record that has a YouTube id, paged. `HAS_PROPERTY` rather than a
+ * `NEQ ''` filter: a record created by hand with the field left blank stores
+ * null, not empty string, and `NEQ` would miss it in the wrong direction.
+ */
+export async function findVideosWithYouTubeIds(objectTypeId: string): Promise<VideoRecord[]> {
+  const token = getToken();
+  const found: VideoRecord[] = [];
+  let after: string | undefined = '0';
+
+  while (after !== undefined) {
+    const res: Response = await fetch(`${HS_BASE}${objectSearchPath(objectTypeId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        filterGroups: [{ filters: [{ propertyName: 'youtube_video_id', operator: 'HAS_PROPERTY' }] }],
+        properties: READ_PROPERTIES,
+        limit: SEARCH_PAGE_SIZE,
+        sorts: [],
+        query: '',
+        after,
+      }),
+    });
+    if (!res.ok) throw new Error(`HubSpot video search failed ${res.status}: ${await res.text()}`);
+
+    const body = (await res.json()) as {
+      results?: Array<{ id: string; properties: Record<string, string | null> }>;
+      paging?: { next?: { after?: string } };
+    };
+
+    for (const r of body.results ?? []) {
+      const ytId = r.properties.youtube_video_id;
+      if (ytId) found.push({ id: r.id, youtubeVideoId: ytId });
+    }
+    after = body.paging?.next?.after;
+  }
+
+  return found;
+}
+
+/**
+ * One video record by id, in the shape `findVideosWithYouTubeIds` returns.
+ *
+ * Read directly rather than searched, which matters twice. A search does not
+ * see a record until HubSpot has indexed it — the lag that makes a freshly
+ * created record report `recordsFound: 0` — and a card syncing the record
+ * already on screen knows its id, so there is nothing to search for.
+ *
+ * Returns an empty list, not an error, when the record has no YouTube id:
+ * "nothing to sync" is a legitimate outcome, not a failure.
+ */
+export async function readVideoById(
+  objectTypeId: string,
+  recordId: string,
+): Promise<VideoRecord[]> {
+  const token = getToken();
+  const url = `${HS_BASE}${objectPath(objectTypeId, recordId)}?properties=${READ_PROPERTIES.join(',')}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`HubSpot video read failed ${res.status}: ${await res.text()}`);
+
+  const body = (await res.json()) as { id: string; properties?: Record<string, string | null> };
+  const ytId = body.properties?.youtube_video_id;
+  return ytId ? [{ id: body.id, youtubeVideoId: ytId }] : [];
+}
+
+/**
+ * Map a YouTube payload onto HubSpot property values. Counts arrive as strings
+ * and are passed through as strings — HubSpot number properties accept them,
+ * and parsing to a JS number then back risks precision loss on a large channel.
+ * A missing count is omitted rather than written as "0"; absent and zero are
+ * different facts and only one of them is true.
+ */
+export function mapVideoToProperties(video: YouTubeVideo): Record<string, string> {
+  const props: Record<string, string> = {};
+  const stats = video.statistics;
+  if (stats?.viewCount !== undefined) props.view_count = stats.viewCount;
+  if (stats?.likeCount !== undefined) props.like_count = stats.likeCount;
+  if (stats?.commentCount !== undefined) props.comment_count = stats.commentCount;
+  return props;
+}
+
+/**
+ * Analytics onto HubSpot properties, following the same absent-versus-zero rule
+ * as `mapVideoToProperties`: a figure the API never returned is omitted rather
+ * than written as "0".
+ *
+ * That matters more here than it looks. `impressions` and `click_through_rate`
+ * are not served by `reports.query` at all, and the previous version defaulted
+ * them to 0 — so every synced video asserted "zero impressions", which is a
+ * claim YouTube never made and which nobody could distinguish from a real zero.
+ */
+export function mapAnalyticsToProperties(analytics: VideoAnalytics): Record<string, string> {
+  const props: Record<string, string> = {
+    average_view_duration: String(analytics.averageViewDuration),
+  };
+  if (analytics.impressions !== undefined) props.impressions = String(analytics.impressions);
+  if (analytics.clickThroughRate !== undefined) {
+    props.click_through_rate = String(analytics.clickThroughRate);
+  }
+  return props;
+}
+
+/**
+ * `recordId` narrows the sync to one video. Absent, every Video record on the
+ * portal is synced — which is right for the nightly workflow and wrong for a
+ * button on one record's card, where it quietly touches every other video too.
+ */
+export interface SyncOptions {
+  recordId?: string;
+}
+
+export async function runSync(
+  portalId: number,
+  options: SyncOptions = {},
+): Promise<SyncOutcome> {
+  const config = getPortalConfig(portalId);
+  const objectTypeId = config.video.objectTypeId;
+
+  const accessToken = await getYouTubeAccessToken();
+  const records = options.recordId
+    ? await readVideoById(objectTypeId, options.recordId)
+    : await findVideosWithYouTubeIds(objectTypeId);
+
+  const outcome: SyncOutcome = {
+    recordsFound: records.length,
+    recordsUpdated: 0,
+    batchesNotModified: 0,
+    batchesFetched: 0,
+    errors: [],
+    analyticsStatus: 'ok',
+  };
+  if (records.length === 0) return outcome;
+
+  const byYouTubeId = new Map(records.map((r) => [r.youtubeVideoId, r.id]));
+
+  // Analytics is a separate API with its own quota and permissions. It failing
+  // must not cost us the statistics we already have, so it is attempted once,
+  // up front, and a failure degrades the run rather than ending it.
+  let analytics = new Map<string, VideoAnalytics>();
+  const channelId = await readYouTubeChannelId(portalId);
+  if (!channelId) {
+    // Not an error: a portal that has never authorised YouTube has no channel
+    // to report on. It is recorded because blank analytics properties are
+    // otherwise indistinguishable from a channel with no impressions.
+    outcome.analyticsStatus =
+      'skipped: no channel id — authorise YouTube, or set YOUTUBE_CHANNEL_ID to override';
+  } else {
+    try {
+      analytics = await fetchVideoAnalytics(accessToken, channelId, [...byYouTubeId.keys()]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      outcome.analyticsStatus = `failed: ${message}`;
+      outcome.errors.push(`analytics unavailable: ${message}`);
+    }
+  }
+
+  for (const batch of chunkVideoIds([...byYouTubeId.keys()])) {
+    // No ETag is persisted yet — app_configs has no property for one. Passing
+    // null means every batch is fetched in full. See the note in the handler.
+    const result = await fetchVideoBatch(accessToken, batch, null);
+    outcome.batchesFetched += 1;
+
+    if (result.notModified) {
+      outcome.batchesNotModified += 1;
+      continue;
+    }
+
+    for (const video of result.items) {
+      const recordId = byYouTubeId.get(video.id);
+      if (!recordId) continue;
+
+      const videoAnalytics = analytics.get(video.id);
+      const props = {
+        ...mapVideoToProperties(video),
+        ...(videoAnalytics ? mapAnalyticsToProperties(videoAnalytics) : {}),
+      };
+      if (Object.keys(props).length === 0) continue;
+
+      try {
+        await hsUpdate(objectTypeId, recordId, props);
+        outcome.recordsUpdated += 1;
+      } catch (err) {
+        outcome.errors.push(`${video.id}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
+  return outcome;
+}
+
+interface SyncContext {
+  accountId?: number;
+  params?: Record<string, string | string[] | undefined>;
+  parameters?: Record<string, string | undefined>;
+  query?: Record<string, string | undefined>;
+  body?: Record<string, unknown>;
+}
+
+/**
+ * HubSpot delivers the same value in different places depending on how the
+ * function was called: query params on a public URL arrive in `params` AS
+ * ARRAYS, a UI extension's `hubspot.serverless()` call puts them in
+ * `parameters`, and a plain POST puts them in the body.
+ */
+function param(ctx: SyncContext, key: string): string | undefined {
+  const q = ctx.params?.[key];
+  const fromQuery = Array.isArray(q) ? q[0] : q;
+  const fromBody = ctx.body?.[key];
+  return (
+    fromQuery ??
+    ctx.parameters?.[key] ??
+    ctx.query?.[key] ??
+    (typeof fromBody === 'string' ? fromBody : undefined)
+  );
+}
+
+/**
+ * Workflow-action output, alongside the plain outcome the card reads.
+ *
+ * This function has two callers with different expectations: the Video card
+ * calls it over `hubspot.serverless()` and reads the outcome directly, while a
+ * workflow step reads `outputFields` out of the response body. Returning both
+ * lets one function serve both — the same thing `VideoAttribution` does.
+ *
+ * Every value is a string because that is what a workflow field holds.
+ */
+function outputFieldsFor(outcome: SyncOutcome): Record<string, string> {
+  return {
+    syncStatus: outcome.errors.length > 0 ? 'partial' : 'success',
+    recordsFound: String(outcome.recordsFound),
+    recordsUpdated: String(outcome.recordsUpdated),
+    analyticsStatus: outcome.analyticsStatus,
+  };
+}
+
+export const main = async (
+  context: SyncContext,
+): Promise<{
+  statusCode: number;
+  body: (SyncOutcome & { outputFields: Record<string, string> }) | { message: string; outputFields: Record<string, string> };
+}> => {
+  // accountId is present on a gateway request and absent on a card's
+  // `hubspot.serverless()` call, which is why the card passes portalId
+  // explicitly. Reading only accountId made every card sync a 500.
+  const portalId = context.accountId ?? parseInt(param(context, 'portalId') ?? '0', 10);
+  if (!portalId) {
+    return {
+      statusCode: 400,
+      body: { message: 'Missing portalId', outputFields: { syncStatus: 'error' } },
+    };
+  }
+
+  const recordId = param(context, 'recordId') || undefined;
+
+  try {
+    const outcome = await runSync(portalId, { recordId });
+    return { statusCode: 200, body: { ...outcome, outputFields: outputFieldsFor(outcome) } };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('YouTube sync failed:', message);
+    // 500 deliberately. A sync that cannot authenticate or cannot reach YouTube
+    // has done nothing, and returning 200 with an empty outcome is how a broken
+    // integration goes unnoticed for a fortnight.
+    return { statusCode: 500, body: { message, outputFields: { syncStatus: 'error' } } };
+  }
+};
+
+export default main;

@@ -1,0 +1,12 @@
+{
+  "uid": "video_card",
+  "type": "card",
+  "config": {
+    "name": "YouTube",
+    "location": "crm.record.tab",
+    "entrypoint": "/app/cards/VideoCard.tsx",
+    "objectTypes": [
+      "p_video"
+    ]
+  }
+}

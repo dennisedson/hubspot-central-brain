@@ -1,9 +1,9 @@
-# CI — runs on every pull request targeting main, staging, or develop
+# CI — runs on every pull request targeting master or develop
 name: CI
 
 on:
   pull_request:
-    branches: [main, staging, develop]
+    branches: [master, develop]
 
 concurrency:
   group: ci-${{ github.head_ref }}
@@ -32,16 +32,45 @@ jobs:
       - name: Test
         run: npm test
 
+      # UI extension directories carry their own tsconfig and toolchain, so the
+      # root typecheck cannot see them. Without these, card and page .tsx files
+      # are only validated at `hs project upload` — after a push. (#6)
+      - name: Typecheck UI extensions
+        run: npm run typecheck:cards && npm run typecheck:pages && npm run typecheck:settings
+
   validate:
     name: HubSpot Dry-Run Validate
     runs-on: ubuntu-latest
     needs: lint-typecheck-test
+    # Required, not decorative. HUBSPOT_DEV_* are ENVIRONMENT secrets, and a job
+    # that does not declare an environment cannot see them — `secrets.X` quietly
+    # resolves to an empty string rather than failing.
+    #
+    # The symptom points somewhere else entirely: project-validate reads
+    # DEFAULT_ACCOUNT_ID, then sets HUBSPOT_ACCOUNT_ID from it, so an empty
+    # secret surfaces as "HUBSPOT_ACCOUNT_ID environment variable or account_id
+    # input is required but was not set" — naming a variable this file never
+    # mentions. Both deploy workflows always declared their environment, which
+    # is why only CI failed.
+    environment: dev
     steps:
       - uses: actions/checkout@v4
 
+      # 20, not 18, and it differs from the job above on purpose.
+      #
+      # The HubSpot CLI pulls ink → string-width, which uses the `v` regex flag
+      # (unicodeSets). That flag landed in Node 20, so on 18 the CLI does not
+      # merely misbehave — it fails to parse:
+      #
+      #   SyntaxError: Invalid regular expression flags
+      #
+      # Both deploy workflows already run 20, which is why only CI hit this.
+      # The test job stays on 18 because that is what the serverless bundle
+      # targets (esbuild --target=node18); running tests on the runtime the
+      # code actually ships to is worth the inconsistency.
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: npm
 
       - run: npm ci

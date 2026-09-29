@@ -1,0 +1,12 @@
+{
+  "uid": "video_ai_suggestions",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/VideoAiSuggestions.js",
+    "endpoint": {
+      "path": "video-ai-suggestions",
+      "methods": ["POST"]
+    },
+    "secretKeys": ["HS_ACCESS_TOKEN", "ANTHROPIC_API_KEY"]
+  }
+}

@@ -1,0 +1,98 @@
+# Vault template
+
+**New to Obsidian? Read [SETUP.md](SETUP.md) first** — it walks through installing it, what a vault
+actually is, and the folder-name trap. This file covers the conventions.
+
+A skeleton for the Obsidian vault described in the strategy doc, §6 "Obsidian + Cowork Layer".
+Copy it to wherever the vault lives — it is version-controlled here because the vault sits on a
+different machine from this repo, and Cowork on another again.
+
+## Materializing it
+
+```bash
+cp -R vault-template/ ~/path/to/your-vault/
+```
+
+1. Open the folder in Obsidian once, so it creates `.obsidian/`
+2. Connect the folder in Cowork
+3. Put your vault's name into `prompts/README.md` where the `obsidian://` URI needs it
+
+Re-running the copy is safe for the folders but **overwrites templates and prompts**. After the
+first time, copy selectively.
+
+## Folders
+
+| Folder | Holds |
+|---|---|
+| `daily/` | daily notes, journal, quick captures |
+| `meetings/` | meeting notes, from Fellow via Cowork |
+| `content/` | drafts and outlines for content tracked in HubSpot |
+| `changelogs/` | changelog drafts |
+| `references/` | research, links, saved resources |
+| `references/enterpret/themes/` | one note per Enterpret friction theme |
+| `templates/` | reusable note templates |
+| `prompts/` | saved Cowork prompts |
+
+## The linkage contract
+
+A note and a HubSpot record point at each other. Both sides are written **once, when the note is
+created**, and are never maintained by a background process.
+
+### Note → HubSpot, in frontmatter
+
+```yaml
+---
+promote: false                   # tick it to send this note to HubSpot
+hubspot_object: content_piece
+hubspot_id: "60962462621"
+hubspot_portal: 51869810
+hubspot_pipeline: content        # content | changelog
+content_type: blog_post
+topic_tags: [api, crm]
+enterpret_theme: webhook retries
+---
+```
+
+`promote` is the switch, and it only exists on content briefs. Ideas never reach HubSpot on
+their own — **this vault is the idea stage.** Ticking `promote` and running
+`prompts/promote-note.md` creates the record at **Outline**, skipping Idea entirely, because
+Outline is the threshold where the app opens a Linear issue and an Asana task. Nothing fans
+out below it.
+
+`hubspot_id` + `hubspot_portal` are the durable pointer. The other fields mirror HubSpot
+properties so Cowork can filter notes without a round-trip — they are a **cache**, and HubSpot
+wins if they disagree.
+
+### HubSpot → note, in `source_url`
+
+```
+obsidian://open?vault=Dev-Central-Brain&file=changelogs%2Fwebhook-retries.md
+```
+
+The vault is `Dev-Central-Brain`. The path is percent-encoded — separators become `%2F`. The
+vault name needs no encoding, which is the whole reason it has no space in it.
+
+`source_url` is defined in the strategy doc as "Link to the draft (Google Doc, Obsidian note, etc.)".
+
+### Why it is not continuously synced
+
+The Linear sync in this project needed `[hs-sync]` origin markers to stop echo loops — a change in
+one system triggering a change in the other, triggering the first again. A continuously synced
+local file would reintroduce that, with no webhook and no revision history to arbitrate with.
+
+Writing each side once avoids it. If a note is renamed the link breaks **visibly** and is repaired
+by hand, which beats a loop that corrupts quietly.
+
+### `hubspot_object` is always `content_piece`
+
+A `changelog_entry` object exists on the portals (`2-67505888` on dev) but is vestigial — zero
+records, referenced only by `src/scripts/provision-asana-property.ts`, predating the consolidation
+of changelog into `content_piece`'s second pipeline. Changelog notes use `content_piece` with
+`hubspot_pipeline: changelog`.
+
+## Portal reference
+
+| Portal | id | content_piece | video |
+|---|---|---|---|
+| dev | 51869810 | `2-67505887` | `2-67505890` |
+| prod | 22047910 | `2-67508928` | `2-67508933` |

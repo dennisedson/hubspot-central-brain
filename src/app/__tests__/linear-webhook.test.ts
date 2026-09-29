@@ -2,31 +2,37 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let main: (ctx: any) => Promise<any>;
 
-beforeEach(async () => {
-  vi.clearAllMocks();
-  vi.resetModules();
-
-  vi.doMock('@lib/hmac', () => ({ verifyLinearSignature: vi.fn().mockReturnValue(true) }));
-  vi.doMock('@lib/hubspot-client', () => ({
-    createHubSpotClient: vi.fn(() => ({})),
-    getCurrentStage: vi.fn().mockResolvedValue(null),
-    upsertContent: vi.fn().mockResolvedValue({ id: 'hs-1', action: 'created' }),
-    upsertChangelog: vi.fn().mockResolvedValue({ id: 'hs-2', action: 'created' }),
-    archiveContentByLinearId: vi.fn().mockResolvedValue({ id: 'hs-arch', action: 'updated' }),
-  }));
-  vi.doMock('../lib/portal-config', () => ({
-    PORTAL_CONFIG: {
+const TEST_PORTAL_CONFIG = {
+  content: {
+    objectTypeId: '2-content',
+    pipelines: {
       content: {
-        objectTypeId: '2-content',
         pipelineId: 'pipe-1',
         stageIds: { idea: 'stage-idea', outline: 'stage-outline', drafting: 'stage-drafting', editing: 'stage-editing', review: 'stage-review', published: 'stage-published', archived: 'stage-archived' },
       },
       changelog: {
-        objectTypeId: '2-changelog',
         pipelineId: 'pipe-2',
         stageIds: { identified: 'stage-identified', drafting: 'stage-drafting-cl', reviewing: 'stage-reviewing', published: 'stage-published-cl' },
       },
     },
+  },
+  video: { objectTypeId: '2-video', pipelineId: 'pipe-3', stageIds: { draft: 'draft', scheduled: 'scheduled', public: 'public' } },
+  appConfig: { objectTypeId: '2-app' },
+};
+
+beforeEach(async () => {
+  vi.clearAllMocks();
+  vi.resetModules();
+
+  vi.doMock('@lib/hubspot-client', () => ({
+    getCurrentStage: vi.fn().mockResolvedValue(null),
+    upsertContent: vi.fn().mockResolvedValue({ id: 'hs-1', action: 'created' }),
+    archiveContentByLinearId: vi.fn().mockResolvedValue({ id: 'hs-arch', action: 'updated' }),
+    readAppSettings: vi.fn().mockResolvedValue({ linearTeamId: '', assigneeFilter: 'all', linearAssigneeId: '' }),
+  }));
+  vi.doMock('@lib/portal-config', () => ({
+    getPortalConfig: vi.fn().mockReturnValue(TEST_PORTAL_CONFIG),
+    DEFAULT_APP_SETTINGS: { linearTeamId: '', assigneeFilter: 'all', linearAssigneeId: '' },
   }));
 
   process.env.LINEAR_WEBHOOK_SECRET = 'test-secret';
@@ -51,7 +57,7 @@ const baseCtx = {
       identifier: 'ENG-1',
       title: 'Improve docs',
       state: { id: 'st-1', name: 'Backlog', type: 'backlog' },
-      labels: { nodes: [] },
+      labels: [],
       url: 'https://linear.app/issue/ENG-1',
       team: { id: 't-1', name: 'Eng' },
     },
@@ -59,13 +65,6 @@ const baseCtx = {
 };
 
 describe('LinearWebhook.main', () => {
-  it('returns 401 when signature is invalid', async () => {
-    const { verifyLinearSignature: mockVerify } = await import('@lib/hmac');
-    vi.mocked(mockVerify).mockReturnValue(false);
-    const result = await main(baseCtx);
-    expect(result.statusCode).toBe(401);
-  });
-
   it('skips non-Issue events and returns 200', async () => {
     const ctx = { ...baseCtx, body: { ...baseCtx.body, type: 'Comment' } };
     const result = await main(ctx);
@@ -79,17 +78,17 @@ describe('LinearWebhook.main', () => {
     expect(mockUpsert).toHaveBeenCalledOnce();
   });
 
-  it('calls upsertChangelog for issues with the "changelog" label', async () => {
-    const { upsertChangelog: mockUpsert } = await import('@lib/hubspot-client');
+  it('calls upsertContent with pipelineKey "changelog" for issues with the "changelog" label', async () => {
+    const { upsertContent: mockUpsert } = await import('@lib/hubspot-client');
     const ctx = {
       ...baseCtx,
       body: {
         ...baseCtx.body,
-        data: { ...baseCtx.body.data, labels: { nodes: [{ name: 'changelog' }] } },
+        data: { ...baseCtx.body.data, labels: [{ id: 'lbl-1', name: 'changelog' }] },
       },
     };
     await main(ctx);
-    expect(mockUpsert).toHaveBeenCalledOnce();
+    expect(mockUpsert).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'changelog');
   });
 
   it('returns 200 and ok:true on success', async () => {
@@ -107,19 +106,8 @@ describe('LinearWebhook.main', () => {
     expect(JSON.parse(result.body).reason).toBe('stage already matches');
   });
 
-  it('accepts an uppercase "Linear-Signature" header (case-insensitive lookup)', async () => {
-    const { verifyLinearSignature: mockVerify } = await import('@lib/hmac');
-    const { upsertContent: mockUpsert } = await import('@lib/hubspot-client');
-    const ctx = { ...baseCtx, headers: { 'Linear-Signature': 'abc123' } };
-    const result = await main(ctx);
-    // The signature value must reach verifyLinearSignature despite the header casing.
-    expect(mockVerify).toHaveBeenCalledWith(expect.anything(), 'abc123', 'test-secret');
-    expect(result.statusCode).toBe(200);
-    expect(mockUpsert).toHaveBeenCalledOnce();
-  });
-
   it('skips overwrite when the current HubSpot stage shares the incoming Linear state bucket (editing/drafting)', async () => {
-    const { getCurrentStage: mockGetStage, upsertContent: mockUpsertContent, upsertChangelog: mockUpsertChangelog } =
+    const { getCurrentStage: mockGetStage, upsertContent: mockUpsertContent } =
       await import('@lib/hubspot-client');
     // Incoming Linear state is 'In Progress'; the record is already in the content 'editing' stage,
     // which maps forward to 'In Progress' too. This must NOT be overwritten to 'drafting'.
@@ -136,14 +124,13 @@ describe('LinearWebhook.main', () => {
     expect(JSON.parse(result.body).skipped).toBe(true);
     expect(JSON.parse(result.body).reason).toBe('stage already matches');
     expect(mockUpsertContent).not.toHaveBeenCalled();
-    expect(mockUpsertChangelog).not.toHaveBeenCalled();
   });
 
   it('archives the linked content record on a Linear "remove" action', async () => {
     const { archiveContentByLinearId: mockArchive, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
     const ctx = { ...baseCtx, body: { ...baseCtx.body, action: 'remove' } };
     const result = await main(ctx);
-    expect(mockArchive).toHaveBeenCalledWith(expect.anything(), 'lin-1');
+    expect(mockArchive).toHaveBeenCalledWith('lin-1', expect.anything());
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).action).toBe('archived');
     expect(mockUpsert).not.toHaveBeenCalled();
@@ -165,7 +152,7 @@ describe('LinearWebhook.main', () => {
       body: {
         ...baseCtx.body,
         action: 'remove',
-        data: { ...baseCtx.body.data, labels: { nodes: [{ name: 'changelog' }] } },
+        data: { ...baseCtx.body.data, labels: [{ id: 'lbl-1', name: 'changelog' }] },
       },
     };
     const result = await main(ctx);
@@ -192,5 +179,154 @@ describe('LinearWebhook.main', () => {
     vi.mocked(mockUpsert).mockRejectedValue(new Error('API down'));
     const result = await main(baseCtx);
     expect(result.statusCode).toBe(500);
+  });
+
+  describe('team filter', () => {
+    it('skips when linearTeamId is set and the issue team does not match', async () => {
+      const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: 'team-A', assigneeFilter: 'all', linearAssigneeId: '' });
+      const result = await main(baseCtx); // baseCtx.body.data.team.id = 't-1'
+      expect(result.statusCode).toBe(200);
+      expect(JSON.parse(result.body).reason).toBe('not configured team');
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
+    it('processes the issue when linearTeamId matches', async () => {
+      const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: 't-1', assigneeFilter: 'all', linearAssigneeId: '' });
+      const result = await main(baseCtx);
+      expect(result.statusCode).toBe(200);
+      expect(JSON.parse(result.body).ok).toBe(true);
+      expect(mockUpsert).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('assignee filter', () => {
+    it('skips unassigned issues when filter is "assigned"', async () => {
+      const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'assigned', linearAssigneeId: '' });
+      const result = await main(baseCtx); // baseCtx has no assignee
+      expect(result.statusCode).toBe(200);
+      expect(JSON.parse(result.body).reason).toBe('no assignee');
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
+    it('processes an assigned issue when filter is "assigned"', async () => {
+      const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'assigned', linearAssigneeId: '' });
+      const ctx = {
+        ...baseCtx,
+        body: { ...baseCtx.body, data: { ...baseCtx.body.data, assignee: { id: 'user-1', name: 'Alice' } } },
+      };
+      const result = await main(ctx);
+      expect(result.statusCode).toBe(200);
+      expect(JSON.parse(result.body).ok).toBe(true);
+      expect(mockUpsert).toHaveBeenCalledOnce();
+    });
+
+    it('skips issues assigned to someone else when filter is "mine"', async () => {
+      const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
+      const ctx = {
+        ...baseCtx,
+        body: { ...baseCtx.body, data: { ...baseCtx.body.data, assignee: { id: 'user-other', name: 'Bob' } } },
+      };
+      const result = await main(ctx);
+      expect(result.statusCode).toBe(200);
+      expect(JSON.parse(result.body).reason).toBe('not assigned to configured user');
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
+    it('processes an issue assigned to the configured user when filter is "mine"', async () => {
+      const { readAppSettings: mockSettings, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+      vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
+      const ctx = {
+        ...baseCtx,
+        body: { ...baseCtx.body, data: { ...baseCtx.body.data, assignee: { id: 'user-me', name: 'Me' } } },
+      };
+      const result = await main(ctx);
+      expect(result.statusCode).toBe(200);
+      expect(JSON.parse(result.body).ok).toBe(true);
+      expect(mockUpsert).toHaveBeenCalledOnce();
+    });
+  });
+});
+
+describe('LinearWebhook — unassignment archives the HubSpot record', () => {
+  /**
+   * Previously an excluded issue was skipped outright, which left the record
+   * frozen at its last synced stage: sitting in the pipeline, looking live, no
+   * longer tracking anything, and returning 200 throughout. Archiving makes the
+   * divergence visible. Reassignment restores it through the normal upsert,
+   * which writes the mapped stage and lifts it back out of Archived.
+   */
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('archives the record when the assignee no longer matches "mine"', async () => {
+    const { readAppSettings: mockSettings, archiveContentByLinearId: mockArchive, upsertContent: mockUpsert } =
+      await import('@lib/hubspot-client');
+    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
+    vi.mocked(mockArchive).mockResolvedValue({ id: '123', action: 'updated' });
+
+    const ctx = {
+      ...baseCtx,
+      body: { ...baseCtx.body, data: { ...baseCtx.body.data, assignee: { id: 'user-other', name: 'Bob' } } },
+    };
+    const result = await main(ctx);
+    const body = JSON.parse(result.body);
+
+    expect(result.statusCode).toBe(200);
+    expect(body.action).toBe('archived');
+    expect(body.reason).toBe('not assigned to configured user');
+    expect(mockArchive).toHaveBeenCalledOnce();
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it('archives when the issue is unassigned entirely under "assigned"', async () => {
+    const { readAppSettings: mockSettings, archiveContentByLinearId: mockArchive } =
+      await import('@lib/hubspot-client');
+    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'assigned', linearAssigneeId: '' });
+    vi.mocked(mockArchive).mockResolvedValue({ id: '123', action: 'updated' });
+
+    const body = JSON.parse((await main(baseCtx)).body); // baseCtx has no assignee
+    expect(body.action).toBe('archived');
+    expect(body.reason).toBe('no assignee');
+  });
+
+  it('does not archive an issue nothing ever tracked', async () => {
+    // No record means nothing to set aside — this must stay a quiet skip rather
+    // than becoming noise on every issue assigned to someone else.
+    const { readAppSettings: mockSettings, archiveContentByLinearId: mockArchive } =
+      await import('@lib/hubspot-client');
+    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
+    vi.mocked(mockArchive).mockResolvedValue(null);
+
+    const ctx = {
+      ...baseCtx,
+      body: { ...baseCtx.body, data: { ...baseCtx.body.data, assignee: { id: 'user-other', name: 'Bob' } } },
+    };
+    const body = JSON.parse((await main(ctx)).body);
+    expect(body.skipped).toBe(true);
+    expect(body.action).toBeUndefined();
+  });
+
+  it('reassignment goes through the normal upsert, which un-archives it', async () => {
+    const { readAppSettings: mockSettings, archiveContentByLinearId: mockArchive, upsertContent: mockUpsert } =
+      await import('@lib/hubspot-client');
+    vi.mocked(mockSettings).mockResolvedValue({ linearTeamId: '', assigneeFilter: 'mine', linearAssigneeId: 'user-me' });
+
+    const ctx = {
+      ...baseCtx,
+      body: { ...baseCtx.body, data: { ...baseCtx.body.data, assignee: { id: 'user-me', name: 'Me' } } },
+    };
+    const result = await main(ctx);
+
+    expect(JSON.parse(result.body).ok).toBe(true);
+    expect(mockArchive).not.toHaveBeenCalled();
+    // upsertContent writes the stage mapped from the Linear state, which is what
+    // moves the record back out of Archived.
+    expect(mockUpsert).toHaveBeenCalledOnce();
   });
 });

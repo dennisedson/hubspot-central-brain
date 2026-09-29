@@ -1,4 +1,5 @@
 import type { LinearState } from './types';
+import { HS_SYNC_TAG } from './mapping';
 
 const LINEAR_API = 'https://api.linear.app/graphql';
 
@@ -7,7 +8,7 @@ interface GraphQLResponse<T> {
   errors?: Array<{ message: string }>;
 }
 
-async function gql<T>(apiKey: string, query: string, variables: Record<string, string>): Promise<T> {
+async function gql<T>(apiKey: string, query: string, variables: Record<string, unknown>): Promise<T> {
   const response = await fetch(LINEAR_API, {
     method: 'POST',
     headers: {
@@ -31,15 +32,16 @@ async function gql<T>(apiKey: string, query: string, variables: Record<string, s
 export async function getLinearStates(apiKey: string, teamId: string): Promise<LinearState[]> {
   const query = `
     query GetTeamStates($teamId: String!) {
-      teams(filter: { key: { eq: $teamId } }) {
-        nodes { states { nodes { id name type } } }
+      team(id: $teamId) {
+        states { nodes { id name type } }
       }
     }
   `;
-  const data = await gql<{ teams: { nodes: Array<{ states: { nodes: LinearState[] } }> } }>(apiKey, query, { teamId });
-  const team = data.teams.nodes[0];
-  if (!team) throw new Error(`Linear team not found: ${teamId}`);
-  return team.states.nodes;
+  const data = await gql<{ team: { states: { nodes: LinearState[] } } | null }>(apiKey, query, { teamId });
+  if (!data.team) throw new Error(`Linear team not found: ${teamId}`);
+  const states = data.team.states.nodes;
+  console.log(`Linear team ${teamId} states: ${states.map(s => s.name).join(', ')}`);
+  return states;
 }
 
 export async function findStateIdByName(
@@ -48,7 +50,8 @@ export async function findStateIdByName(
   stateName: string,
 ): Promise<string | null> {
   const states = await getLinearStates(apiKey, teamId);
-  return states.find(s => s.name === stateName)?.id ?? null;
+  const lower = stateName.toLowerCase();
+  return states.find(s => s.name.toLowerCase() === lower)?.id ?? null;
 }
 
 export async function updateLinearIssueState(
@@ -68,4 +71,114 @@ export async function updateLinearIssueState(
   if (!data.issueUpdate.success) {
     throw new Error(`Linear issueUpdate returned success: false for issue ${issueId}`);
   }
+}
+
+export interface CreatedLinearIssue {
+  id: string;
+  identifier: string;
+  url: string;
+}
+
+export interface CreateIssueInput {
+  teamId: string;
+  title: string;
+  description?: string;
+  /** Omit to let Linear use the team's default state (normally Backlog). */
+  stateId?: string;
+}
+
+/**
+ * Create a Linear issue.
+ *
+ * The description ALWAYS carries HS_SYNC_TAG, and this function appends it
+ * rather than trusting the caller to remember. Linear fires a webhook for every
+ * issue that appears, including the ones we create; `LinearWebhook` skips any
+ * payload whose description contains the tag, and that skip is the only thing
+ * standing between this call and a second HubSpot record for work that already
+ * has one.
+ *
+ * Putting the tag here rather than at the call site is the point. A caller who
+ * forgot it would not fail here — it would succeed, and fail a minute later
+ * somewhere else, as a duplicate record nobody can trace back to this line.
+ */
+export async function createIssue(
+  apiKey: string,
+  input: CreateIssueInput,
+): Promise<CreatedLinearIssue> {
+  const description = input.description?.includes(HS_SYNC_TAG)
+    ? input.description
+    : [input.description?.trim(), HS_SYNC_TAG].filter(Boolean).join('\n\n');
+
+  const mutation = `
+    mutation CreateIssue($input: IssueCreateInput!) {
+      issueCreate(input: $input) {
+        success
+        issue { id identifier url }
+      }
+    }
+  `;
+
+  const data = await gql<{ issueCreate: { success: boolean; issue: CreatedLinearIssue | null } }>(
+    apiKey,
+    mutation,
+    {
+      input: {
+        teamId: input.teamId,
+        title: input.title,
+        description,
+        ...(input.stateId ? { stateId: input.stateId } : {}),
+      },
+    },
+  );
+
+  // success: false with no error array is Linear's way of refusing without
+  // explaining. Returning a half-built object here would hand the caller an
+  // undefined issue id to write into HubSpot.
+  if (!data.issueCreate.success || !data.issueCreate.issue) {
+    throw new Error(`Linear issueCreate returned success: false for team ${input.teamId}`);
+  }
+  return data.issueCreate.issue;
+}
+
+export interface LinearIssueDetail {
+  identifier: string;
+  title: string;
+  state: string;
+  assignee: string | null;
+  updatedAt: string;
+  url: string;
+}
+
+interface LinearIssueNode {
+  identifier: string;
+  title: string;
+  updatedAt: string;
+  url: string;
+  state: { name: string } | null;
+  assignee: { displayName: string } | null;
+}
+
+export async function getLinearIssue(apiKey: string, issueId: string): Promise<LinearIssueDetail | null> {
+  const query = `
+    query GetIssue($issueId: String!) {
+      issue(id: $issueId) {
+        identifier
+        title
+        updatedAt
+        url
+        state { name }
+        assignee { displayName }
+      }
+    }
+  `;
+  const data = await gql<{ issue: LinearIssueNode | null }>(apiKey, query, { issueId });
+  if (!data.issue) return null;
+  return {
+    identifier: data.issue.identifier,
+    title: data.issue.title,
+    state: data.issue.state?.name ?? 'Unknown',
+    assignee: data.issue.assignee?.displayName ?? null,
+    updatedAt: data.issue.updatedAt,
+    url: data.issue.url,
+  };
 }

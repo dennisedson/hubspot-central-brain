@@ -1,0 +1,12 @@
+{
+  "uid": "generate_social_draft",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/GenerateSocialDraft.js",
+    "endpoint": {
+      "path": "generate-social-draft",
+      "methods": ["POST"]
+    },
+    "secretKeys": ["HS_ACCESS_TOKEN"]
+  }
+}

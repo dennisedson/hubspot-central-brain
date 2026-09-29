@@ -1,0 +1,37 @@
+{
+  "uid": "fellow_sync_v1",
+  "type": "workflow-action",
+  "config": {
+    "actionUrl": "https://51869810.hs-sites.com/hs/serverless/fellow-sync",
+    "isPublished": true,
+    "supportedClients": [{ "client": "WORKFLOWS" }],
+    "objectTypes": [],
+    "inputFields": [],
+    "outputFields": [
+      {
+        "typeDefinition": { "name": "syncStatus", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "projectsCreated", "type": "string", "fieldType": "text" }
+      },
+      {
+        "typeDefinition": { "name": "projectsUpdated", "type": "string", "fieldType": "text" }
+      }
+    ],
+    "labels": {
+      "en": {
+        "actionName": "Sync Fellow Action Items to HubSpot Projects",
+        "appDisplayName": "Central Brain",
+        "actionDescription": "Polls Fellow API for meeting action items and creates or updates HubSpot Projects associated to matching contacts",
+        "actionCardContent": "Poll Fellow → create HubSpot Projects",
+        "inputFieldLabels": {},
+        "inputFieldDescriptions": {},
+        "outputFieldLabels": {
+          "syncStatus": "Sync Status",
+          "projectsCreated": "Projects Created",
+          "projectsUpdated": "Projects Updated"
+        }
+      }
+    }
+  }
+}

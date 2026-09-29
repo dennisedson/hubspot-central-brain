@@ -12,6 +12,9 @@
         "crm.schemas.custom.read",
         "crm.schemas.custom.write",
         "crm.objects.contacts.read",
+        "crm.objects.projects.read",
+        "crm.objects.projects.write",
+        "crm.schemas.projects.write",
         "timeline",
         "automation",
         "oauth"
@@ -23,8 +26,12 @@
         "https://app.asana.com",
         "https://api.fellow.app",
         "https://51869810.hs-sites.com/hs/serverless/settings-api",
-        "https://51869787.hs-sites.com/hs/serverless/settings-api",
-        "https://22047910.hs-sites.com/hs/serverless/settings-api"
+        "https://22047910.hs-sites.com/hs/serverless/settings-api",
+        "https://oauth2.googleapis.com",
+        "https://www.googleapis.com",
+        "https://youtubeanalytics.googleapis.com",
+        "https://api.anthropic.com",
+        "https://pubsubhubbub.appspot.com"
       ],
       "iframe": [],
       "img": []

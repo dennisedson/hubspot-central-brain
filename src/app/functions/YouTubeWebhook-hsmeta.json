@@ -1,0 +1,12 @@
+{
+  "uid": "youtube_webhook",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/YouTubeWebhook.js",
+    "endpoint": {
+      "path": "youtube-webhook",
+      "methods": ["GET", "POST"]
+    },
+    "secretKeys": ["HS_ACCESS_TOKEN"]
+  }
+}

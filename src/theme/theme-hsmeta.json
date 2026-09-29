@@ -1,0 +1,8 @@
+{
+  "uid": "cbrain-theme",
+  "type": "theme",
+  "config": {
+    "themePath": "central-brain-dashboard",
+    "secretNames": []
+  }
+}

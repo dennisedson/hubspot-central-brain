@@ -25,6 +25,8 @@ export interface ContentProperties {
   topic_tags?: string;
   enterpret_theme?: string;
   enterpret_quote_count?: string;
+  /** JSON array of quote objects, batch-synced from Enterpret out-of-band. */
+  enterpret_quotes?: string;
   notes?: string;
   social_post_draft?: string;
   social_published_at?: string;
@@ -61,7 +63,7 @@ export interface LinearIssue {
   title: string;
   description?: string;
   state: LinearState;
-  labels: { nodes: Array<{ name: string }> };
+  labels: Array<{ id: string; name: string; color?: string }>;
   url: string;
   team: { id: string; name: string };
   assignee?: { id: string; name: string } | null;
@@ -86,7 +88,7 @@ export interface HubSpotRecord {
 
 export interface UpsertResult {
   id: string;
-  action: 'created' | 'updated';
+  action: 'created' | 'updated' | 'skipped';
 }
 
 export interface SyncToLinearInput {

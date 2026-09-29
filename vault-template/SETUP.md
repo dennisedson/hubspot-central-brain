@@ -1,0 +1,175 @@
+# Setting this up — start here
+
+Written for someone who has never used Obsidian. If you already know it, `README.md` has the
+conventions and you can skip this.
+
+## What Obsidian actually is
+
+A text editor for a folder of `.md` files on your disk. That is the whole thing.
+
+- **A "vault" is just a folder.** Obsidian does not store anything in a cloud or a database.
+- **Every note is a plain markdown file.** You could open them in TextEdit or VS Code.
+- **The vault's name is the folder's name.** There is no separate setting for it.
+
+That last point matters more than it sounds — see step 3.
+
+Because it is only files on disk, Cowork can read and write them directly. No API, no
+integration, no auth. That is exactly why the strategy doc puts Obsidian here.
+
+---
+
+## 1. Install Obsidian
+
+Download from [obsidian.md](https://obsidian.md) and install it. It is free for personal use.
+
+## 2. Get the vault template onto the machine
+
+The template lives in the `hubspot-central-brain` repo, on the **`develop`** branch. You do not
+need the repo itself — this is 21 files and about 56 KB, and nothing in the vault ever refers
+back to it.
+
+**The one-liner.** Creates the vault folder and fills it, no git involved, nothing left behind:
+
+```bash
+mkdir -p ~/Dev-Central-Brain
+curl -sL https://github.com/dennisedson/hubspot-central-brain/archive/refs/heads/develop.tar.gz \
+  | tar -xz --strip-components=2 -C ~/Dev-Central-Brain hubspot-central-brain-develop/vault-template
+```
+
+That does step 3 as well — skip to step 4.
+
+> **If you clone instead, ask for `develop` explicitly.** The repo's default branch is `master`,
+> and **`vault-template/` does not exist on it**. A plain `git clone` leaves you in a checkout
+> with no template to copy:
+> ```bash
+> git clone --branch develop --depth 1 https://github.com/dennisedson/hubspot-central-brain.git
+> ```
+
+**Already have the repo on this machine?** Copy straight out of wherever it lives — `cd` into it
+first, or give the full path:
+
+```bash
+cp -R /path/to/hubspot-central-brain/vault-template/ ~/Dev-Central-Brain
+```
+
+The vault does not have to be on the same machine as the repo.
+
+## 3. Mind the folder name
+
+**The folder you copy into becomes the vault name.** The prompts in here build links like
+`obsidian://open?vault=Dev-Central-Brain`, so it must be named exactly:
+
+```
+Dev-Central-Brain
+```
+
+No spaces — that is deliberate, and explained under "If a link does not open" below. Put it
+somewhere sensible — your home folder or Documents, **not** inside the git repo. The one-liner
+above already uses the right name.
+
+> **If you want a different name**, that is fine — but change it in two files afterwards
+> (`prompts/README.md` and `prompts/changelog-from-linear.md`), remembering that a space becomes
+> `%20`. There is a test in the repo that checks this: `npx vitest run src/app/__tests__/vault-template.test.ts`
+
+## 4. Open it in Obsidian
+
+1. Launch Obsidian
+2. **Open folder as vault**
+3. Choose the `Dev-Central-Brain` folder you just created
+4. Trust the author when prompted — it is your own folder
+
+Obsidian creates a hidden `.obsidian/` folder inside it for your settings. That is normal, and it
+is yours — nothing in this template touches it.
+
+You will see the folders from `README.md`: `daily/`, `meetings/`, `content/`, and so on. They look
+empty because they are. The `.gitkeep` files inside them start with a dot, so Obsidian hides them.
+They exist only so the empty folders survive being copied out of git.
+
+## 5. Turn on Templates
+
+The files in `templates/` do nothing until you tell Obsidian where they are.
+
+1. **Settings** (gear, bottom left) → **Core plugins**
+2. Turn on **Templates**
+3. Go to **Settings → Templates** and set **Template folder location** to `templates`
+
+Now: create a new note, then use the command palette (`Cmd+P`) → **Templates: Insert template** →
+pick one. It drops the whole structure in, frontmatter included.
+
+## 6. Understand the `---` block at the top
+
+Every template starts with something like this:
+
+```yaml
+---
+hubspot_object: content_piece
+hubspot_id: ""
+hubspot_portal: 51869810
+content_type: blog_post
+---
+```
+
+That is **frontmatter** — structured data about the note, which Obsidian shows as "properties" and
+Cowork can read and filter on. It must be the very first thing in the file, fenced by `---` above
+and below.
+
+The important pair is `hubspot_id` and `hubspot_portal`. Together they say *which HubSpot record
+this note is about*. You fill `hubspot_id` in when the record is created; leave it as `""` until
+then.
+
+Full explanation of every field is in `README.md` under "The linkage contract".
+
+## 7. Connect the folder in Cowork
+
+**Create a project first, then connect the folder to it.** The prompts here are long, and meant
+to be re-run — a project is where a persistent instruction set and a connected folder live
+together, so you attach the vault once rather than per conversation.
+
+1. Create a Cowork project for this work.
+2. Add `~/Dev-Central-Brain` as a connected folder. Cowork reads and writes the notes directly —
+   no integration, no auth.
+
+Then open `prompts/README.md`. Those are ready-made instructions you **copy and paste into a
+Cowork conversation** — there is no scheduler and nothing runs on its own. That README explains
+how, including the HubSpot token every prompt needs.
+
+Start with `prompts/daily-pipeline-digest.md`: it touches only HubSpot and the vault, so there
+are just two things it can be when it fails.
+
+> **The project-first ordering is an assumption, not an observation.** Nobody has watched this
+> being set up. If Cowork turns out to connect folders some other way, fix this step.
+
+> **The prompts are unverified.** The HubSpot ids and property names in them are checked against
+> the live portal, but nobody has watched Cowork run them. Expect to edit them. When one is wrong,
+> fix the file so the next run starts better.
+
+---
+
+## Things that confuse everyone at first
+
+**`[[Double brackets]]` make a link.** `[[webhook-retries]]` links to a note of that name anywhere
+in the vault. That is how a draft points at the Enterpret theme behind it.
+
+**There is no save button.** Obsidian writes to disk as you type.
+
+**Folders are a convenience, not a rule.** Links work across the whole vault regardless of where a
+note sits. Do not agonise over which folder something belongs in.
+
+**Dotfiles are invisible.** `.gitkeep` and `.obsidian/` exist on disk but Obsidian hides them.
+
+**This vault is not in git.** You copied the template *out* of the repo. Your actual notes are
+just files on your machine — back them up however you back up anything else.
+
+## If a link does not open
+
+`obsidian://` links only work when the vault name matches exactly. Given a vault named
+`Dev-Central-Brain`, a correct link is:
+
+```
+obsidian://open?vault=Dev-Central-Brain&file=content%2Fmy-note.md
+```
+
+`%2F` is the `/` between folder and filename. **This is why the vault name has no space in it.**
+A space is legal in a folder name but must be written `%20` in the URI, and a raw one produces a
+link that silently does nothing — no error, no dialog. Removing the space removes the trap. If a
+link from HubSpot does not open, check the name matches character for character.

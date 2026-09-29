@@ -1,0 +1,12 @@
+{
+  "uid": "youtube_sync",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/YouTubeSync.js",
+    "endpoint": {
+      "path": "youtube-sync",
+      "methods": ["POST"]
+    },
+    "secretKeys": ["HS_ACCESS_TOKEN", "YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET", "YOUTUBE_REFRESH_TOKEN"]
+  }
+}

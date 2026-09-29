@@ -1,0 +1,12 @@
+{
+  "uid": "video_attribution",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/VideoAttribution.js",
+    "endpoint": {
+      "path": "video-attribution",
+      "methods": ["POST"]
+    },
+    "secretKeys": ["HS_ACCESS_TOKEN"]
+  }
+}

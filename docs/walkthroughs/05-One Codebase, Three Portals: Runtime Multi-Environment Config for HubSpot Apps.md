@@ -10,10 +10,10 @@
 *   **The Architecture (1:00 - 3:00):** HubSpot serverless functions receive a `context` object with an `accountId` field — that's your portal ID. We build a static lookup map keyed by portal ID, with each entry containing all the provisioned IDs for that environment. A `getPortalConfig(portalId)` function does the lookup and throws a clear error if the portal isn't registered. No env vars, no secrets needed for IDs — it's all baked into the deployed JS.
 
 *   **Step-by-Step Implementation (3:00 - 8:00):**
-    1.  **The `PortalConfig` interface** — Define the shape: `content`, `changelog`, `video` each with `objectTypeId`, `pipelineId`, and a `stageIds` record. TypeScript ensures every portal entry is complete.
+    1.  **The `PortalConfig` interface** — Define the shape: a single `content_piece` object type under `content`, with `objectTypeId` and a nested `pipelines` map. Each pipeline entry (`content` and `changelog`) has `pipelineId` and a `stageIds` record. TypeScript ensures every portal entry is complete.
     2.  **The `CONFIGS` map** — Keyed by portal ID (number). Show all three environments side-by-side. Each was populated by pasting the output of `npm run provision`.
     3.  **`getPortalConfig(portalId)`** — The lookup function. Throws if the portal isn't found so misconfiguration is loud, not silent.
-    4.  **Threading `portalId` through the function** — `LinearWebhook.ts` receives `context.accountId`. Pass it to `upsertContent(client, payload, portalId)`. Inside, call `getPortalConfig(portalId)` and use the result instead of a global constant.
+    4.  **Threading `portalId` through the function** — `LinearWebhook.ts` receives `context.accountId`. Determine `pipelineKey` from the issue labels, then call `upsertContent(payload, portalId, pipelineKey)`. Inside, call `getPortalConfig(portalId)` and index into `config.content.pipelines[pipelineKey]` to get the right pipeline and stage IDs.
 
 *   **Testing & Wrap-up (8:00 - 10:00):** Show the `context` object in a HubSpot serverless function. Call `getPortalConfig(context.accountId)` and log the result. Verify it returns dev IDs on the dev portal. Recap: provision each portal once, paste the IDs into the map, deploy once — done.
 
@@ -21,16 +21,18 @@
 
 ```typescript
 // portal-config.ts
+interface PipelineConfig {
+  pipelineId: string;
+  stageIds: Record<string, string>;
+}
+
 export interface PortalConfig {
   content: {
     objectTypeId: string;
-    pipelineId: string;
-    stageIds: { idea: string; drafting: string; published: string; archived: string; /* ... */ };
-  };
-  changelog: {
-    objectTypeId: string;
-    pipelineId: string;
-    stageIds: { identified: string; drafting: string; published: string; };
+    pipelines: {
+      content: PipelineConfig;   // Content Lifecycle: idea/outline/drafting/editing/review/published/archived
+      changelog: PipelineConfig; // Changelog Lifecycle: identified/drafting/reviewing/published
+    };
   };
 }
 
@@ -39,20 +41,22 @@ const CONFIGS: Record<number, PortalConfig> = {
   51869810: {
     content: {
       objectTypeId: '2-67505887',
-      pipelineId: '926238627',
-      stageIds: { idea: '1418659999', drafting: '1418660001', published: '1418660004', archived: '1418660005', /* ... */ },
+      pipelines: {
+        content: {
+          pipelineId: '926238627',
+          stageIds: { idea: '1418659999', drafting: '1418660001', published: '1418660004', archived: '1418660005', /* ... */ },
+        },
+        changelog: { pipelineId: 'FILL_IN', stageIds: { identified: 'FILL_IN', /* ... */ } },
+      },
     },
-    changelog: { /* ... */ },
   },
   // staging
   51869787: {
-    content: { objectTypeId: '2-67508770', /* ... */ },
-    changelog: { /* ... */ },
+    content: { objectTypeId: '2-67508770', pipelines: { content: { /* ... */ }, changelog: { /* ... */ } } },
   },
   // prod
   22047910: {
-    content: { objectTypeId: '2-67508928', /* ... */ },
-    changelog: { /* ... */ },
+    content: { objectTypeId: '2-67508928', pipelines: { content: { /* ... */ }, changelog: { /* ... */ } } },
   },
 };
 
@@ -69,20 +73,20 @@ export function getPortalConfig(portalId: number): PortalConfig {
 // LinearWebhook.ts — threading portalId through
 export async function main(context: PublicFunctionContext) {
   // context.accountId is the HubSpot portal ID
-  const result = isChangelog
-    ? await upsertChangelog(client, payload, context.accountId)
-    : await upsertContent(client, payload, context.accountId);
+  const pipelineKey: 'content' | 'changelog' = isChangelog ? 'changelog' : 'content';
+  const result = await upsertContent(payload, context.accountId, pipelineKey);
 }
 
 // hubspot-client.ts — using it
 export async function upsertContent(
-  client: Client,
   payload: LinearWebhookPayload,
   portalId: number,
+  pipelineKey: 'content' | 'changelog' = 'content',
 ): Promise<UpsertResult> {
   const config = getPortalConfig(portalId);
   const objectTypeId = config.content.objectTypeId;
-  const stageId = config.content.stageIds[stageName];
+  const pipelineConfig = config.content.pipelines[pipelineKey];
+  const stageId = pipelineConfig.stageIds[stageName];
   // ...
 }
 ```

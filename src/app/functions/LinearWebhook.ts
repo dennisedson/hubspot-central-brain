@@ -1,7 +1,6 @@
 import {
   getCurrentStage,
   upsertContent,
-  upsertChangelog,
   archiveContentByLinearId,
   readAppSettings,
 } from '../lib/hubspot-client';
@@ -46,8 +45,10 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'hs-sync echo' }) };
   }
 
-  const labels = payload.data.labels?.nodes?.map(l => l.name) ?? [];
+  const labels = payload.data.labels?.map(l => l.name) ?? [];
   const isChangelog = labels.includes(LINEAR_CHANGELOG_LABEL);
+
+  console.log(`LinearWebhook: action=${payload.action} issueId=${payload.data.id} labels=${JSON.stringify(labels)} isChangelog=${isChangelog}`);
 
   try {
     const settings = await readAppSettings(context.accountId);
@@ -75,12 +76,42 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     }
 
     // Apply assignee filter.
+    //
+    // An excluded issue is ARCHIVED rather than skipped. Skipping left the
+    // HubSpot record frozen at its last synced stage: still sitting in the
+    // pipeline, looking live, no longer tracking anything, and reporting 200 the
+    // whole time. A record visibly set aside is better than one that has quietly
+    // stopped being true.
+    //
+    // Reassignment restores it with no extra code — once the filter passes,
+    // upsertContent writes the stage mapped from the Linear state, which moves
+    // the record back out of Archived.
     const assigneeId = payload.data.assignee?.id;
-    if (settings.assigneeFilter === 'assigned' && !assigneeId) {
-      return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'no assignee' }) };
-    }
-    if (settings.assigneeFilter === 'mine' && assigneeId !== settings.linearAssigneeId) {
-      return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'not assigned to configured user' }) };
+    const filterReason =
+      settings.assigneeFilter === 'assigned' && !assigneeId
+        ? 'no assignee'
+        : settings.assigneeFilter === 'mine' && assigneeId !== settings.linearAssigneeId
+          ? 'not assigned to configured user'
+          : null;
+
+    if (filterReason) {
+      if (isChangelog) {
+        // The changelog pipeline has no archived stage, as with deletion above.
+        return {
+          statusCode: 200,
+          body: JSON.stringify({ skipped: true, reason: `changelog ${filterReason} (no archive stage)` }),
+        };
+      }
+      const archived = await archiveContentByLinearId(payload.data.id, context.accountId);
+      if (!archived) {
+        // Nothing ever tracked this issue, so there is nothing to set aside.
+        return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: filterReason }) };
+      }
+      console.log(`Archived content ${archived.id} for Linear ${payload.data.id}: ${filterReason}`);
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ ok: true, action: 'archived', reason: filterReason, id: archived.id }),
+      };
     }
 
     // Echo prevention: skip if the current HubSpot stage already maps FORWARD to the
@@ -88,21 +119,23 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     // many-to-one case (e.g. both 'editing' and 'drafting' map to 'In Progress'), so an
     // inbound webhook triggered by our own outbound sync does not overwrite the user's stage.
     const portalConfig = getPortalConfig(context.accountId);
-    const config = isChangelog ? portalConfig.changelog : portalConfig.content;
+    const pipelineKey: 'content' | 'changelog' = isChangelog ? 'changelog' : 'content';
+    const pipelineConfig = portalConfig.content.pipelines[pipelineKey];
     const forwardMap = isChangelog ? CHANGELOG_STAGE_TO_LINEAR_STATE : CONTENT_STAGE_TO_LINEAR_STATE;
-    const currentStageId = await getCurrentStage(config.objectTypeId, payload.data.id);
+    const currentStageId = await getCurrentStage(portalConfig.content.objectTypeId, payload.data.id);
+    console.log(`LinearWebhook: getCurrentStage=${currentStageId} incomingState=${payload.data.state.name} issueId=${payload.data.id}`);
     if (currentStageId) {
-      const stageIds = config.stageIds as Record<string, string>;
+      const stageIds = pipelineConfig.stageIds;
       const currentStageName = Object.keys(stageIds).find(name => stageIds[name] === currentStageId);
-      if (currentStageName && (forwardMap as Record<string, string>)[currentStageName] === payload.data.state.name) {
+      const mappedLinearState = currentStageName ? (forwardMap as Record<string, string>)[currentStageName] : null;
+      console.log(`LinearWebhook: currentStageName=${currentStageName} mappedLinearState=${mappedLinearState}`);
+      if (currentStageName && mappedLinearState === payload.data.state.name) {
         console.log(`Skipping echo for Linear ${payload.data.id}: stage already matches`);
         return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'stage already matches' }) };
       }
     }
 
-    const result = isChangelog
-      ? await upsertChangelog(payload, context.accountId)
-      : await upsertContent(payload, context.accountId);
+    const result = await upsertContent(payload, context.accountId, pipelineKey);
 
     console.log(`${result.action} ${isChangelog ? 'changelog' : 'content'} ${result.id} for Linear ${payload.data.id}`);
     return { statusCode: 200, body: JSON.stringify({ ok: true, ...result }) };
