@@ -108,11 +108,10 @@ async function fetchTeamIssues(apiKey: string, teamId: string): Promise<Issue[]>
 
 async function main() {
   const apply = process.argv.includes('--apply');
-  const { token, portalId, portal } = loadEnv();
+  const { token, portalId, portal, linearApiKey } = loadEnv();
 
-  const linearApiKey = process.env.LINEAR_API_KEY;
   if (!linearApiKey) {
-    console.error('LINEAR_API_KEY is not set in .env or environment.');
+    console.error('LINEAR_API_KEY is empty in .env.');
     process.exit(1);
   }
 

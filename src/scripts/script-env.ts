@@ -20,6 +20,7 @@ export interface ScriptEnv {
   personalKey: string;     // HUBSPOT_*_PERSONAL_ACCESS_KEY (for hs CLI / SDK client init)
   sharedSecret: string;    // HUBSPOT_*_SYNC_SECRET
   asanaApiKey: string;     // ASANA_API_KEY
+  linearApiKey: string;    // LINEAR_API_KEY — optional, only the backfill needs it
   developerApiKey: string; // HUBSPOT_*_DEVELOPER_KEY (per-portal developer key)
 }
 
@@ -75,6 +76,9 @@ export function loadEnv(): ScriptEnv {
     personalKey:     requireVar(vars, `HUBSPOT_${prefix}_PERSONAL_ACCESS_KEY`),
     sharedSecret:    requireVar(vars, `HUBSPOT_${prefix}_SYNC_SECRET`),
     asanaApiKey:     requireVar(vars, 'ASANA_API_KEY'),
+    // Not requireVar: most scripts never touch Linear, and making it mandatory
+    // would fail provisioning runs that have no business needing it.
+    linearApiKey:    vars.LINEAR_API_KEY ?? '',
     developerApiKey: requireVar(vars, `HUBSPOT_${prefix}_DEVELOPER_KEY`),
   };
 }
