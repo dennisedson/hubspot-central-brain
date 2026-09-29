@@ -59,6 +59,14 @@ const SettingsPage = ({ portalId }: { portalId: number }) => {
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorDetail, setErrorDetail] = useState<string>('');
 
+  // The import runs a page per request and is driven from here, so closing the
+  // tab stops it rather than losing it — the cursor lives on the App Config
+  // record and the next run picks up from there.
+  const [importing, setImporting] = useState(false);
+  const [importDone, setImportDone] = useState(false);
+  const [importCount, setImportCount] = useState(0);
+  const [importError, setImportError] = useState('');
+
   useEffect(() => {
     callApi('getSettings', { portalId: String(portalId) })
       .then(res => {
@@ -142,6 +150,35 @@ const SettingsPage = ({ portalId }: { portalId: number }) => {
   const canSave = !!settings.linearTeamId &&
     (settings.assigneeFilter !== 'mine' || !!settings.linearAssigneeId);
 
+  const runImport = useCallback(async (reset: boolean) => {
+    setImporting(true);
+    setImportError('');
+    setImportDone(false);
+
+    try {
+      let finished = false;
+      let first = true;
+
+      // Loop until Linear says there are no more pages. Each call imports a
+      // small page and persists its cursor, so a failure here leaves progress
+      // intact rather than starting over.
+      while (!finished) {
+        const res = await callApi('backfill', first && reset ? { reset: 'true' } : {});
+        const parsed = JSON.parse(res.body || '{}');
+        if (res.statusCode !== 200) throw new Error(parsed.error || `HTTP ${res.statusCode}`);
+
+        setImportCount(parsed.totalImported ?? 0);
+        finished = !!parsed.done;
+        first = false;
+      }
+      setImportDone(true);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setImporting(false);
+    }
+  }, []);
+
   return (
     <Form>
       <Heading>Linear Sync Settings</Heading>
@@ -201,6 +238,37 @@ const SettingsPage = ({ portalId }: { portalId: number }) => {
       >
         {saving ? 'Saving…' : 'Save settings'}
       </Button>
+
+      <Heading>Import existing issues</Heading>
+      <Text variant="microcopy">
+        The webhook only picks up issues as they change, so anything tagged before you
+        connected Linear will not appear on its own. This imports them once, using the team
+        and filter above. It reads from Linear and writes here — nothing in Linear is changed.
+      </Text>
+
+      {importing && <LoadingSpinner label={`Imported ${importCount} so far…`} />}
+
+      {importDone && (
+        <Alert title={`Imported ${importCount} issue${importCount === 1 ? '' : 's'}`} variant="success">
+          <Text>Running it again is safe — existing records are updated, not duplicated.</Text>
+        </Alert>
+      )}
+
+      {importError && (
+        <Alert title="Import stopped" variant="error">
+          <Text>{importError}</Text>
+          <Text>Progress was saved. Choosing Resume continues from where it stopped.</Text>
+        </Alert>
+      )}
+
+      <Flex direction="row" gap="small">
+        <Button onClick={() => void runImport(false)} disabled={importing || !canSave}>
+          {importing ? 'Importing…' : 'Resume import'}
+        </Button>
+        <Button onClick={() => void runImport(true)} disabled={importing || !canSave}>
+          Start over
+        </Button>
+      </Flex>
     </Form>
   );
 };

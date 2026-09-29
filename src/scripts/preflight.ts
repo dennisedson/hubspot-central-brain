@@ -87,6 +87,8 @@ const REQUIRED_PROPERTIES: Record<'content' | 'video' | 'appConfig', string[]> =
     'youtube_channel_title',
     'youtube_connection_status',
     'youtube_last_sync',
+    'linear_backfill_cursor', // the resumable import stores its position here
+    'linear_backfill_count',
   ],
 };
 
