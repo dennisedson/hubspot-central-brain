@@ -198,7 +198,12 @@ async function main() {
   const { token, portalId, portal } = loadEnv();
   const config = getPortalConfig(portalId);
 
-  console.log(`\nPreflight — portal ${portalId} (${portal})\n`);
+  // Last four characters only. A rotated key has two homes — local .env and the
+  // GitHub environment secret — and updating one leaves the other dead while the
+  // local run goes green. Printing a fingerprint makes "same script, different
+  // credential" visible instead of looking like flaky behaviour.
+  const fingerprint = token.slice(-4);
+  console.log(`\nPreflight — portal ${portalId} (${portal}), key …${fingerprint}\n`);
 
   await checkObjectTypes(token, {
     content: config.content.objectTypeId,
@@ -214,6 +219,27 @@ async function main() {
   await checkProperties(token, 'content', config.content.objectTypeId, REQUIRED_PROPERTIES.content);
   await checkProperties(token, 'video', config.video.objectTypeId, REQUIRED_PROPERTIES.video);
   await checkProperties(token, 'app_configs', config.appConfig.objectTypeId, REQUIRED_PROPERTIES.appConfig);
+
+  // The standard Projects object, which FellowSync writes to. Checked because
+  // it was invisible here and cost an afternoon: on 22047910 it was DEACTIVATED,
+  // which cannot be seen from the custom objects above and which fails an app
+  // install outright — a scope against a deactivated object cannot be granted,
+  // and one unfulfillable scope fails the whole install without naming itself.
+  // A developer sandbox has it on by default; a real portal need not.
+  try {
+    const res = await fetch(`${HS_BASE}${propertiesPath('projects')}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 403 || res.status === 404) {
+      fail('projects', 'the standard Projects object is not readable — check it is activated in the Data Model Builder, and that the service key has project scopes');
+    } else if (!res.ok) {
+      fail('projects', `Projects check returned ${res.status}`);
+    } else {
+      pass('standard Projects object is active and readable');
+    }
+  } catch (err) {
+    fail('projects', `could not reach the Projects object: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   // Not reachable from HubSpot, but a blank gid means every Asana sync silently
   // targets nothing, so it is worth asserting it was configured at all.
