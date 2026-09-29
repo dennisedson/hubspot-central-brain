@@ -1,9 +1,9 @@
-# CI — runs on every pull request targeting master, staging, or develop
+# CI — runs on every pull request targeting master or develop
 name: CI
 
 on:
   pull_request:
-    branches: [master, staging, develop]
+    branches: [master, develop]
 
 concurrency:
   group: ci-${{ github.head_ref }}

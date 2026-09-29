@@ -34,7 +34,7 @@ jobs:
       # Rewrites every workflow-action actionUrl to this portal and FAILS the
       # deploy if any is left pointing elsewhere. The per-file seds this
       # replaced matched ${...} placeholders that no longer exist, so they
-      # silently no-opped and shipped dev URLs to staging and prod.
+      # silently no-opped and shipped dev URLs to prod.
       - name: Point workflow action URLs at this portal
         run: .github/scripts/set-action-urls.sh 51869810
 

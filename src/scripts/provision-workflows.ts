@@ -4,7 +4,6 @@
  *
  * Usage:
  *   HUBSPOT_ACCESS_KEY=your-key npm run provision:workflows
- *   HUBSPOT_ACCESS_KEY=your-key PORTAL=staging npm run provision:workflows
  *   HUBSPOT_ACCESS_KEY=your-key PORTAL=prod npm run provision:workflows
  */
 

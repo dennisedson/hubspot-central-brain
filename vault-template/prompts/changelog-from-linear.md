@@ -22,7 +22,7 @@
 
 **Portal:** dev `51869810` · `content_piece` = `2-67505887` · changelog pipeline = `929918080`
 
-Use dev. Staging and prod have no changelog pipeline configured (issue #21).
+Use dev. Prod has no changelog pipeline configured (issue #21).
 
 ## 1. Read the Linear issue over MCP
 

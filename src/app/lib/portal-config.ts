@@ -89,46 +89,6 @@ const CONFIGS: Record<number, PortalConfig> = {
       },
     },
   },
-  // staging
-  51869787: {
-    appConfig: { objectTypeId: '2-68180080' },
-    asanaWorkspaceGid: '8587152060687',  // hubspot.com
-    asanaProjectGid: '1202179514576728', // BuildRel | Advocacy Content Factory
-    asanaSections: {
-      content: '1210601763434613',   // Developer Blog
-      changelog: '1210743009828493', // Developer Changelog
-    },
-    content: {
-      objectTypeId: '2-67508770',
-      pipelines: {
-        content: {
-          pipelineId: '926239377',
-          stageIds: {
-            idea: '1418723701',
-            outline: '1418723702',
-            drafting: '1418723703',
-            editing: '1418723704',
-            review: '1418723705',
-            published: '1418723706',
-            archived: '1418723707',
-          },
-        },
-        changelog: {
-          pipelineId: '',
-          stageIds: {},
-        },
-      },
-    },
-    video: {
-      objectTypeId: '2-67508774',
-      pipelineId: '926239378',
-      stageIds: {
-        draft: '1418723708',
-        scheduled: '1418723709',
-        public: '1418723710',
-      },
-    },
-  },
   // prod
   22047910: {
     appConfig: { objectTypeId: '2-68180129' },

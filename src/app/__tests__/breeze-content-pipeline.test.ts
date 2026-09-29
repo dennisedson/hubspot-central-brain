@@ -229,7 +229,7 @@ describe('BreezeContentPipeline.main — stage filter', () => {
 describe('BreezeContentPipeline.main — guards', () => {
   it('returns 400 when the requested pipeline is not configured for the portal', async () => {
     // Staging has no changelog pipeline id.
-    const res = await main(ctx({ pipeline: 'changelog' }, 51869787));
+    const res = await main(ctx({ pipeline: 'changelog' }, 22047910));
 
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body).error).toContain('changelog');

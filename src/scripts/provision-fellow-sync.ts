@@ -8,7 +8,6 @@
  *
  * Usage:
  *   npm run provision:fellow-sync
- *   PORTAL=staging npm run provision:fellow-sync
  *   PORTAL=prod npm run provision:fellow-sync
  */
 

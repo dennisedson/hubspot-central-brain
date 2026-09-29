@@ -13,7 +13,6 @@
  *
  * Usage:
  *   npx tsx src/scripts/provision-enterpret-quotes.ts
- *   PORTAL=staging npx tsx src/scripts/provision-enterpret-quotes.ts
  *   PORTAL=prod    npx tsx src/scripts/provision-enterpret-quotes.ts
  */
 

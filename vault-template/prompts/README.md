@@ -78,7 +78,6 @@ rename the vault, update it here and in `changelog-from-linear.md` — and note 
 | Portal | id | content_piece | video |
 |---|---|---|---|
 | dev | 51869810 | `2-67505887` | `2-67505890` |
-| staging | 51869787 | `2-67508770` | `2-67508774` |
 | prod | 22047910 | `2-67508928` | `2-67508933` |
 
 **Use dev for anything involving the changelog pipeline.** Staging and prod have no changelog

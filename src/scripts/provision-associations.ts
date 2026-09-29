@@ -18,7 +18,6 @@
  *
  * Usage:
  *   npx tsx src/scripts/provision-associations.ts
- *   PORTAL=staging npx tsx src/scripts/provision-associations.ts
  *   PORTAL=prod npx tsx src/scripts/provision-associations.ts
  */
 

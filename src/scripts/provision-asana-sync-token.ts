@@ -6,7 +6,6 @@
  *
  * Usage:
  *   npm run provision:asana-sync-token
- *   PORTAL=staging npm run provision:asana-sync-token
  *   PORTAL=prod npm run provision:asana-sync-token
  */
 

@@ -6,7 +6,7 @@ A HubSpot Projects app that powers the "Central Brain" system — syncing conten
 
 - Node 18+
 - HubSpot CLI (`@hubspot/cli` — installed as a dev dependency)
-- Three HubSpot portals: dev sandbox, staging sandbox, production
+- Two HubSpot portals: dev sandbox and production
 
 ## Quick Start
 
@@ -27,7 +27,7 @@ app depends on. A freshly deployed portal has no Content, Changelog, Video or Ap
 Settings objects, no pipelines and no association definitions — every function will
 fail until the provisioning scripts below have run.
 
-Scripts select a portal with `PORTAL=dev|staging|prod` (defaults to `dev`) and read
+Scripts select a portal with `PORTAL=dev|prod` (defaults to `dev`) and read
 the matching `HUBSPOT_<PORTAL>_*` variables from `.env`. All of them read before they
 write, so they are safe to re-run.
 
@@ -120,10 +120,10 @@ All pipelines live in `.github/workflows/`:
 
 | Workflow          | Trigger              | What it does                           |
 | ----------------- | -------------------- | -------------------------------------- |
-| `ci.yml`          | PR → master/staging/develop | Lint, typecheck, test, project-validate |
+| `ci.yml`          | PR → master/develop  | Lint, typecheck, test, project-validate |
 | `deploy-dev.yml`  | Push to `develop`    | Upload to dev sandbox                  |
-| `deploy-staging.yml` | Push to `staging` | Upload to staging sandbox              |
 | `deploy-prod.yml` | Manual (`workflow_dispatch`) | Upload to production portal    |
+| `youtube-sync.yml` | Daily cron + manual | Sync YouTube metrics, asserting postconditions |
 
 ### GitHub Secrets (per environment)
 
@@ -131,23 +131,34 @@ All pipelines live in `.github/workflows/`:
 | ------------------------------------ | ----------- | ------------------------------ |
 | `HUBSPOT_DEV_ACCOUNT_ID`            | dev         | Dev sandbox portal ID          |
 | `HUBSPOT_DEV_PERSONAL_ACCESS_KEY`   | dev         | Dev sandbox PAK                |
-| `HUBSPOT_STAGING_ACCOUNT_ID`        | staging     | Staging sandbox portal ID      |
-| `HUBSPOT_STAGING_PERSONAL_ACCESS_KEY` | staging   | Staging sandbox PAK            |
 | `HUBSPOT_PROD_ACCOUNT_ID`           | production  | Production portal ID           |
 | `HUBSPOT_PROD_PERSONAL_ACCESS_KEY`  | production  | Production portal PAK          |
 
 ### Branch Strategy
 
 ```
-develop  →  staging  →  master
-  ↓            ↓           ↓
- dev         staging    production
+feature/*  →  develop  →  master
+                 ↓            ↓
+                dev       production
 ```
 
-Work lands directly on `develop` → auto-deploys to dev.
-Promote to staging by merging `develop` → `staging`.
-Release to production by merging into `master`, then triggering
-**Deploy › Prod** manually — production never deploys on push.
+**Work happens on a feature branch, not on `develop`.** Branch from `develop`,
+open a PR back into it — that PR is what runs CI. Merging deploys to the dev
+sandbox automatically.
+
+Release to production by merging `develop` into `master`, then triggering
+**Deploy › Prod** manually. Production never deploys on push.
+
+> **There is no staging portal.** There was one, and it was carried unmaintained
+> long enough to become a hazard: it pointed at the *real* BuildRel Asana
+> project — the same project and sections as production — while having no
+> changelog pipeline of its own. An environment nobody keeps current gives
+> false confidence and is somewhere wrong-portal writes can originate.
+>
+> Dev already does the job: it runs the same code against a dedicated test Asana
+> project with a fully provisioned data model. What staging could uniquely have
+> caught is per-portal provisioning drift, and the answer to that is a check that
+> fails loudly before a prod deploy, not a third portal that fails silently.
 
 ### Branch Protection (recommended)
 
@@ -156,7 +167,7 @@ On `master`:
 - Require status checks to pass (CI)
 - No direct pushes
 
-On `staging`:
+On `develop`:
 - Require status checks to pass
 
 ## Local Development

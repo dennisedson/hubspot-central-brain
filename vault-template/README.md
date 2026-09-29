@@ -95,5 +95,4 @@ of changelog into `content_piece`'s second pipeline. Changelog notes use `conten
 | Portal | id | content_piece | video |
 |---|---|---|---|
 | dev | 51869810 | `2-67505887` | `2-67505890` |
-| staging | 51869787 | `2-67508770` | `2-67508774` |
 | prod | 22047910 | `2-67508928` | `2-67508933` |

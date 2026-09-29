@@ -4,7 +4,6 @@
  *
  * Usage:
  *   npm run patch:unique-property
- *   PORTAL=staging npm run patch:unique-property
  *   PORTAL=prod npm run patch:unique-property
  */
 
@@ -13,7 +12,6 @@ import { HS_BASE, propertiesPath } from '../app/lib/hs-api';
 
 const OBJECT_TYPE_IDS: Record<string, string> = {
   dev:     '2-67505887',
-  staging: '2-67508770',
   prod:    '2-67508928',
 };
 
@@ -61,7 +59,7 @@ async function ensureProperty(
 async function main() {
   const { token, portal } = loadEnv();
   const objectTypeId = OBJECT_TYPE_IDS[portal];
-  if (!objectTypeId) { console.error(`Unknown portal "${portal}". Use PORTAL=dev|staging|prod`); process.exit(1); }
+  if (!objectTypeId) { console.error(`Unknown portal "${portal}". Use PORTAL=dev|prod`); process.exit(1); }
 
   console.log(`[${portal}] Ensuring unique linear_id property on ${objectTypeId}`);
 

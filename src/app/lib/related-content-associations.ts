@@ -33,7 +33,7 @@
  * typeIds ARE PER-PORTAL
  * ----------------------
  * "Related Content" is typeId 99 on the dev portal. It will be a different
- * number on staging and prod. Nothing here hardcodes one: callers read
+ * number on prod. Nothing here hardcodes one: callers read
  * `GET /crm/associations/2026-03/{type}/{type}/labels` and match on the name/label
  * they provisioned, which is exactly what `findAssociationTypeId` does.
  *

@@ -17,7 +17,7 @@ import {
  *    `conflicts with unlabeled association name … (case-insensitive match)`.
  *    That 400 is the original bug.
  * 2. The typeId is READ, never written down. 99 is the dev portal's number for
- *    "Related Content" and means nothing on staging or prod.
+ *    "Related Content" and means nothing on prod.
  */
 
 describe('collidesWithUnlabeledName', () => {

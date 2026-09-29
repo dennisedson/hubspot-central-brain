@@ -88,7 +88,7 @@ function toCandidate(record: HsRecord, tagProp: string, themeProp: string | null
  * default association to PUT — the app associates through the labeled
  * definition `provision-associations.ts` creates. Its typeId is assigned by
  * HubSpot and differs per portal ("Related Content" is 99 on dev and will not
- * be 99 on staging or prod), so it is looked up here rather than hardcoded.
+ * be 99 on prod), so it is looked up here rather than hardcoded.
  *
  * `null` means the portal has no such label yet: not an error, just
  * unprovisioned.

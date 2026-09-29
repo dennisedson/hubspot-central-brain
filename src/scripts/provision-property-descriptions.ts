@@ -29,7 +29,6 @@
  *
  * Usage:
  *   npx tsx src/scripts/provision-property-descriptions.ts
- *   PORTAL=staging npx tsx src/scripts/provision-property-descriptions.ts
  *   PORTAL=prod    npx tsx src/scripts/provision-property-descriptions.ts
  */
 

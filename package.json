@@ -31,7 +31,6 @@
     "dev": "hs project dev",
     "upload": "npm run build && hs project upload",
     "upload:dev": "npm run build && hs project upload --account=Dev-HubSpot-Brain",
-    "upload:staging": "npm run build && .github/scripts/upload-to-portal.sh 51869787 Dennis-Staging",
     "upload:prod": "npm run build && .github/scripts/upload-to-portal.sh 22047910 DevRelTeamHub"
   },
   "devDependencies": {

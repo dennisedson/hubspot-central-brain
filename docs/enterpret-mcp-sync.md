@@ -46,7 +46,6 @@ On the **Content Piece** custom object:
 | Portal | ID | content_piece objectTypeId |
 |---|---|---|
 | dev | 51869810 | `2-67505887` |
-| staging | 51869787 | `2-67508770` |
 | prod | 22047910 | `2-67508928` |
 
 ## Paste this into Claude on the work machine
@@ -63,7 +62,7 @@ On the **Content Piece** custom object:
 >
 > Skip records with no theme. Don't overwrite `enterpret_quotes` with an empty array if Enterpret returns nothing — leave the existing value alone. Report how many records you updated and how many you skipped.
 
-The HubSpot connector is already scoped to your portal — no token or portal ID needed. For staging/prod, reconnect the HubSpot connector to the target portal before running.
+The HubSpot connector is already scoped to your portal — no token or portal ID needed. For prod, reconnect the HubSpot connector to that portal before running.
 
 ## Checking it worked
 

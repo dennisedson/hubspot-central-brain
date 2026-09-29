@@ -17,7 +17,7 @@
 #
 # which had silently become no-ops. The `${...}` placeholders they matched were
 # removed from the hsmeta files in 5db1c67, and sed exits 0 when it matches
-# nothing — so staging and prod deploys kept "succeeding" while shipping dev
+# nothing — so prod deploys kept "succeeding" while shipping dev
 # URLs. Two things follow from that failure:
 #
 #   1. The rewrite is by PORTAL ID across the whole directory, so a newly added

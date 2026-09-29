@@ -135,12 +135,11 @@ describe('Cowork prompts', () => {
     }
   });
 
-  it('no prompt uses the changelog pipeline against staging or prod', () => {
+  it('no prompt uses the changelog pipeline against prod', () => {
     for (const file of PROMPTS) {
       const body = read(path.join('prompts', file));
       if (body.includes('929918080')) {
         expect(body, `${file} must scope changelog work to dev`).toContain('51869810');
-        expect(body).not.toContain('51869787');
         expect(body).not.toContain('22047910');
       }
     }

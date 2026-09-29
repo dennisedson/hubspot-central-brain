@@ -6,7 +6,7 @@
  *   import { loadEnv } from './script-env';
  *   const { token, portalId, portal } = loadEnv();
  *
- * Portal selection: set PORTAL=dev|staging|prod (defaults to dev)
+ * Portal selection: set PORTAL=dev|prod (defaults to dev)
  */
 
 import fs from 'fs';
@@ -25,14 +25,12 @@ export interface ScriptEnv {
 
 const PORTAL_IDS: Record<string, number> = {
   dev:     51869810,
-  staging: 51869787,
   prod:    22047910,
 };
 
 // Numeric app IDs for the Central Brain project (distribution: private) per portal
 const APP_IDS: Record<string, number> = {
   dev:     49103173,
-  staging: 49115036,
   prod:    49129343,
 };
 
@@ -66,7 +64,7 @@ export function loadEnv(): ScriptEnv {
 
   const portal = vars.PORTAL ?? 'dev';
   const portalId = PORTAL_IDS[portal];
-  if (!portalId) { console.error(`Unknown portal "${portal}". Set PORTAL=dev|staging|prod`); process.exit(1); }
+  if (!portalId) { console.error(`Unknown portal "${portal}". Set PORTAL=dev|prod`); process.exit(1); }
 
   const prefix = portal.toUpperCase();
   return {
