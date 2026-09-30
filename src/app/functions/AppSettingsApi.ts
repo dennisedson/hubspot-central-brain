@@ -2,7 +2,7 @@ import { getPortalConfig, DEFAULT_APP_SETTINGS, isConfigured } from '../lib/port
 import type { AppSettings } from '../lib/portal-config';
 import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 import { upsertContent } from '../lib/hubspot-client';
-import { HS_SYNC_TAG, LINEAR_CHANGELOG_LABEL, isAnyTeam } from '../lib/mapping';
+import { HS_SYNC_TAG, isAnyTeam, isChangelogIssue } from '../lib/mapping';
 
 interface SettingsContext {
   accountId?: number;
@@ -185,6 +185,7 @@ interface BackfillIssue {
   state: { id: string; name: string; type: string };
   labels: { nodes: Array<{ id: string; name: string }> };
   team: { id: string; name: string };
+  project?: { id: string; name: string } | null;
   assignee?: { id: string; name: string } | null;
 }
 
@@ -210,6 +211,7 @@ async function fetchAssignedPage(
              state { id name type }
              labels { nodes { id name } }
              team { id name }
+             project { id name }
              assignee { id name }
            }
            pageInfo { hasNextPage endCursor }
@@ -244,6 +246,7 @@ async function fetchIssuePage(
              state { id name type }
              labels { nodes { id name } }
              team { id name }
+             project { id name }
              assignee { id name }
            }
            pageInfo { hasNextPage endCursor }
@@ -445,7 +448,8 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
             title: i.title,
             state: i.state.name,
             team: i.team.name,
-            kind: i.labels.nodes.some(l => l.name === LINEAR_CHANGELOG_LABEL) ? 'changelog' : 'content',
+            project: i.project?.name ?? null,
+            kind: isChangelogIssue(i.labels.nodes, i.project?.name) ? 'changelog' : 'content',
           })),
         }),
       };
@@ -472,7 +476,7 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
       let created = 0, updated = 0;
       const errors: string[] = [];
       for (const issue of chosen) {
-        const pipelineKey = issue.labels.nodes.some(l => l.name === LINEAR_CHANGELOG_LABEL) ? 'changelog' : 'content';
+        const pipelineKey = isChangelogIssue(issue.labels.nodes, issue.project?.name) ? 'changelog' : 'content';
         try {
           // The same upsert the webhook calls, matching on linear_id — so a
           // repeated or overlapping import updates rather than duplicating.

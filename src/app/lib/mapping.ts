@@ -43,6 +43,31 @@ export const CHANGELOG_STAGE_TO_LINEAR_STATE: Record<ChangelogStage, string> = {
 export const LINEAR_CHANGELOG_LABEL = 'changelog';
 
 /**
+ * Linear projects whose issues are changelog entries regardless of labels.
+ *
+ * The label alone was not enough. Measured on the production workspace:
+ * 69 of 83 assigned issues sit in "🚀 Developer Launch Tool Rollouts" and are
+ * all changelogs, and **not one issue in the workspace carries the changelog
+ * label**. Classifying by label only would have filed every one of them as
+ * content — wrong for 83% of the import, with nothing to flag it.
+ *
+ * Hardcoded, which is the weak part: it is one workspace's project name, in a
+ * constant, rather than a setting. It belongs on app_configs beside the team
+ * and assignee. Doing that needs a property, provisioning and a settings
+ * control, so it is deliberately deferred rather than half-built here.
+ */
+export const LINEAR_CHANGELOG_PROJECTS = ['🚀 Developer Launch Tool Rollouts'];
+
+/** Whether an issue is a changelog entry: by label, or by the project it sits in. */
+export function isChangelogIssue(
+  labels: Array<{ name: string }>,
+  projectName: string | null | undefined,
+): boolean {
+  if (labels.some(l => l.name === LINEAR_CHANGELOG_LABEL)) return true;
+  return Boolean(projectName && LINEAR_CHANGELOG_PROJECTS.includes(projectName));
+}
+
+/**
  * Stored in `linear_team_id` to mean "every team, filtered by assignee".
  *
  * A sentinel rather than an empty string because `linear_team_id` is the App

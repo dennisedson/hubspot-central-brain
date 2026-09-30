@@ -33,7 +33,7 @@
  */
 
 import { loadEnv } from './script-env';
-import { isAnyTeam } from '../app/lib/mapping';
+import { isAnyTeam, isChangelogIssue } from '../app/lib/mapping';
 
 const LINEAR_API = 'https://api.linear.app/graphql';
 
@@ -51,6 +51,7 @@ interface Issue {
   state: { id: string; name: string; type: string };
   labels: { nodes: Array<{ id: string; name: string }> };
   team: { id: string; name: string };
+  project?: { id: string; name: string } | null;
   assignee?: { id: string; name: string } | null;
 }
 
@@ -87,6 +88,7 @@ async function fetchTeamIssues(apiKey: string, teamId: string): Promise<Issue[]>
                state { id name type }
                labels { nodes { id name } }
                team { id name }
+               project { id name }
                assignee { id name }
              }
              pageInfo { hasNextPage endCursor }
@@ -123,6 +125,7 @@ async function fetchAssignedIssues(apiKey: string, assigneeId: string): Promise<
                state { id name type }
                labels { nodes { id name } }
                team { id name }
+               project { id name }
                assignee { id name }
              }
              pageInfo { hasNextPage endCursor }
@@ -219,8 +222,9 @@ async function main() {
 
   if (!apply) {
     for (const issue of chosen.slice(0, 20)) {
-      const kind = issue.labels.nodes.some((l) => l.name === LINEAR_CHANGELOG_LABEL) ? 'changelog' : 'content';
-      console.log(`  ${issue.identifier.padEnd(12)} ${kind.padEnd(9)} ${issue.state.name.padEnd(12)} ${issue.title.slice(0, 60)}`);
+      const kind = isChangelogIssue(issue.labels.nodes, issue.project?.name) ? 'changelog' : 'content';
+      const project = (issue.project?.name ?? '(no project)').slice(0, 28);
+      console.log(`  ${issue.identifier.padEnd(12)} ${kind.padEnd(9)} ${issue.state.name.padEnd(12)} ${project.padEnd(30)} ${issue.title.slice(0, 44)}`);
     }
     if (chosen.length > 20) console.log(`  … and ${chosen.length - 20} more`);
     console.log('\nNothing written. Re-run with --apply to create these records,');
@@ -232,7 +236,7 @@ async function main() {
   const errors: string[] = [];
 
   for (const issue of chosen) {
-    const pipelineKey = issue.labels.nodes.some((l) => l.name === LINEAR_CHANGELOG_LABEL) ? 'changelog' : 'content';
+    const pipelineKey = isChangelogIssue(issue.labels.nodes, issue.project?.name) ? 'changelog' : 'content';
     try {
       // Shaped as the webhook would deliver it, and handed to the same upsert —
       // which matches on linear_id, so re-running this updates rather than
