@@ -33,7 +33,7 @@
  */
 
 import { loadEnv } from './script-env';
-import { isAnyTeam, isChangelogIssue } from '../app/lib/mapping';
+import { isAnyTeam, classifyIssue, parseProjectMap } from '../app/lib/mapping';
 
 const LINEAR_API = 'https://api.linear.app/graphql';
 
@@ -174,6 +174,19 @@ async function main() {
 
   const settings = await readAppSettings(portalId);
 
+  // The project map lives on the same record but is not part of AppSettings,
+  // which is deliberately the three values a person chooses in the form.
+  const { HS_BASE, objectSearchPath } = await import('../app/lib/hs-api');
+  const { getPortalConfig } = await import('../app/lib/portal-config');
+  const appConfigType = getPortalConfig(portalId).appConfig.objectTypeId;
+  const mapRes = await fetch(`${HS_BASE}${objectSearchPath(appConfigType)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ filterGroups: [], properties: ['linear_project_map'], limit: 1, sorts: [], query: '', after: '0' }),
+  });
+  const mapBody = (await mapRes.json()) as { results?: Array<{ properties: Record<string, string | null> }> };
+  const projectMap = parseProjectMap(mapBody.results?.[0]?.properties.linear_project_map);
+
   // The same gate the webhook applies. Backfilling a portal nobody has
   // configured is how 34 unwanted records arrived on prod in the first place.
   if (!isConfigured(settings)) {
@@ -194,7 +207,7 @@ async function main() {
     : await fetchTeamIssues(linearApiKey, settings.linearTeamId);
   console.log(`Issues on the team: ${all.length}`);
 
-  const skipped = { echo: 0, assignee: 0 };
+  const skipped = { echo: 0, assignee: 0, ignored: 0 };
   const eligible = all.filter((issue) => {
     // Issues our own sync created. Re-importing them would be circular.
     if (issue.description?.includes(HS_SYNC_TAG)) { skipped.echo++; return false; }
@@ -204,11 +217,17 @@ async function main() {
     if (settings.assigneeFilter === 'mine' && assigneeId !== settings.linearAssigneeId) {
       skipped.assignee++; return false;
     }
+    // A project mapped to "ignore" is not content and not a changelog — it is
+    // work that has no business in the pipeline at all.
+    if (classifyIssue(issue.labels.nodes, issue.project?.id, projectMap) === 'ignore') {
+      skipped.ignored++; return false;
+    }
     return true;
   });
 
   console.log(`  skipped, our own sync tag: ${skipped.echo}`);
   console.log(`  skipped, assignee filter "${settings.assigneeFilter}": ${skipped.assignee}`);
+  console.log(`  skipped, project mapped to ignore: ${skipped.ignored}`);
 
   const chosen = only ? eligible.filter(i => only.has(i.identifier)) : eligible;
   if (only) {
@@ -222,7 +241,7 @@ async function main() {
 
   if (!apply) {
     for (const issue of chosen.slice(0, 20)) {
-      const kind = isChangelogIssue(issue.labels.nodes, issue.project?.name) ? 'changelog' : 'content';
+      const kind = classifyIssue(issue.labels.nodes, issue.project?.id, projectMap);
       const project = (issue.project?.name ?? '(no project)').slice(0, 28);
       console.log(`  ${issue.identifier.padEnd(12)} ${kind.padEnd(9)} ${issue.state.name.padEnd(12)} ${project.padEnd(30)} ${issue.title.slice(0, 44)}`);
     }
@@ -236,7 +255,7 @@ async function main() {
   const errors: string[] = [];
 
   for (const issue of chosen) {
-    const pipelineKey = isChangelogIssue(issue.labels.nodes, issue.project?.name) ? 'changelog' : 'content';
+    const pipelineKey = classifyIssue(issue.labels.nodes, issue.project?.id, projectMap) === 'changelog' ? 'changelog' : 'content';
     try {
       // Shaped as the webhook would deliver it, and handed to the same upsert —
       // which matches on linear_id, so re-running this updates rather than

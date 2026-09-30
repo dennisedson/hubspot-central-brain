@@ -43,29 +43,63 @@ export const CHANGELOG_STAGE_TO_LINEAR_STATE: Record<ChangelogStage, string> = {
 export const LINEAR_CHANGELOG_LABEL = 'changelog';
 
 /**
- * Linear projects whose issues are changelog entries regardless of labels.
+ * What a Linear project's issues become in HubSpot.
  *
- * The label alone was not enough. Measured on the production workspace:
- * 69 of 83 assigned issues sit in "🚀 Developer Launch Tool Rollouts" and are
- * all changelogs, and **not one issue in the workspace carries the changelog
- * label**. Classifying by label only would have filed every one of them as
- * content — wrong for 83% of the import, with nothing to flag it.
- *
- * Hardcoded, which is the weak part: it is one workspace's project name, in a
- * constant, rather than a setting. It belongs on app_configs beside the team
- * and assignee. Doing that needs a property, provisioning and a settings
- * control, so it is deliberately deferred rather than half-built here.
+ * `ignore` matters as much as the other two. Not every issue assigned to
+ * someone is content — on the production workspace, 69 of 83 are rollout
+ * changelogs and the remaining 14 are a mix of content and plain tasks. A map
+ * with no way to say "none of these" forces the tasks in and leaves someone
+ * pruning records by hand.
  */
-export const LINEAR_CHANGELOG_PROJECTS = ['🚀 Developer Launch Tool Rollouts'];
+export type ProjectKind = 'content' | 'changelog' | 'ignore';
 
-/** Whether an issue is a changelog entry: by label, or by the project it sits in. */
-export function isChangelogIssue(
-  labels: Array<{ name: string }>,
-  projectName: string | null | undefined,
-): boolean {
-  if (labels.some(l => l.name === LINEAR_CHANGELOG_LABEL)) return true;
-  return Boolean(projectName && LINEAR_CHANGELOG_PROJECTS.includes(projectName));
+/** Linear project id → what its issues become. Stored as JSON on app_configs. */
+export type ProjectMap = Record<string, ProjectKind>;
+
+/**
+ * Parse the stored map, tolerating anything.
+ *
+ * It is operator-entered JSON in a text property, so it can be empty, stale or
+ * malformed. A broken map must not take the sync down — it falls back to
+ * "nothing is mapped", which means label-only classification, which is what
+ * the code did before the map existed.
+ */
+export function parseProjectMap(raw: string | null | undefined): ProjectMap {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out: ProjectMap = {};
+    for (const [id, kind] of Object.entries(parsed as Record<string, unknown>)) {
+      if (kind === 'content' || kind === 'changelog' || kind === 'ignore') out[id] = kind;
+    }
+    return out;
+  } catch {
+    return {};
+  }
 }
+
+/**
+ * What to do with an issue: which pipeline, or skip it.
+ *
+ * The project map wins where it has an opinion. The label is the fallback,
+ * which keeps portals working that predate the map — the dev workspace
+ * classifies by label and the production one has never used a single one.
+ *
+ * An unmapped project defaults to `content` rather than `ignore`, because
+ * silently dropping issues is a worse failure than filing them in the obvious
+ * place: one is visible and fixable, the other looks like the sync is broken.
+ */
+export function classifyIssue(
+  labels: Array<{ name: string }>,
+  projectId: string | null | undefined,
+  map: ProjectMap = {},
+): ProjectKind {
+  if (projectId && map[projectId]) return map[projectId];
+  if (labels.some(l => l.name === LINEAR_CHANGELOG_LABEL)) return 'changelog';
+  return 'content';
+}
+
 
 /**
  * Stored in `linear_team_id` to mean "every team, filtered by assignee".

@@ -48,6 +48,7 @@ interface PreviewIssue {
   title: string;
   state: string;
   team: string;
+  project: string | null;
   kind: 'content' | 'changelog';
 }
 
@@ -56,7 +57,11 @@ interface LinearOption {
   name: string;
 }
 
+type ProjectKind = 'content' | 'changelog' | 'ignore';
+
 interface SettingsResponse extends AppSettings {
+  projects?: LinearOption[];
+  projectMap?: Record<string, ProjectKind>;
   teams: LinearOption[];
   teamMembers: LinearOption[];
 }
@@ -261,6 +266,8 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
   });
   const [teams, setTeams] = useState<LinearOption[]>([]);
   const [teamMembers, setTeamMembers] = useState<LinearOption[]>([]);
+  const [projects, setProjects] = useState<LinearOption[]>([]);
+  const [projectMap, setProjectMap] = useState<Record<string, ProjectKind>>({});
   const [loading, setLoading] = useState(true);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -287,6 +294,8 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
           });
           setTeams(data.teams ?? []);
           setTeamMembers(data.teamMembers ?? []);
+          setProjects(data.projects ?? []);
+          setProjectMap(data.projectMap ?? {});
         } else {
           const data = JSON.parse(res.body) as { error?: string; detail?: string };
           setErrorDetail(`${res.statusCode}: ${data.detail ?? data.error ?? res.body}`);
@@ -322,6 +331,7 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
       linearTeamId: settings.linearTeamId,
       assigneeFilter: settings.assigneeFilter,
       linearAssigneeId: settings.linearAssigneeId,
+      projectMap: JSON.stringify(projectMap),
     })
       .then(res => {
         if (res.statusCode === 200) {
@@ -488,6 +498,44 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
 
       <Divider />
 
+      <Heading>Project mapping</Heading>
+      <Text variant="microcopy">
+        What issues in each Linear project become here. Unmapped projects default to
+        Content. Choose <strong>Do not import</strong> for projects that are plain work
+        rather than something you publish.
+      </Text>
+
+      {projects.length === 0 ? (
+        <Text variant="microcopy">
+          No Linear projects found. Check LINEAR_API_KEY, or this workspace has none.
+        </Text>
+      ) : (
+        projects.slice(0, 60).map(project => (
+          <Select
+            key={project.id}
+            label={project.name}
+            name={`project-${project.id}`}
+            value={projectMap[project.id] ?? 'content'}
+            onChange={value =>
+              setProjectMap(prev => ({ ...prev, [project.id]: value as ProjectKind }))
+            }
+            options={[
+              { label: 'Content', value: 'content' },
+              { label: 'Changelog', value: 'changelog' },
+              { label: 'Do not import', value: 'ignore' },
+            ]}
+          />
+        ))
+      )}
+
+      {projects.length > 60 && (
+        <Text variant="microcopy">
+          Showing the first 60 of {projects.length} projects.
+        </Text>
+      )}
+
+      <Divider />
+
       <Heading>Import existing issues</Heading>
       <Text variant="microcopy">
         The webhook only picks up issues as they change, so anything that existed before you
@@ -523,7 +571,7 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
               checked={!!selected[issue.id]}
               onChange={on => setSelected(prev => ({ ...prev, [issue.id]: !!on }))}
             >
-              {`${issue.identifier} · ${issue.kind} · ${issue.state} · ${issue.title}`}
+              {`${issue.identifier} · ${issue.kind} · ${issue.state} · ${issue.project ?? 'no project'} · ${issue.title}`}
             </Checkbox>
           ))}
 

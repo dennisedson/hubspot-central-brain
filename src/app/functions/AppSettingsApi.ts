@@ -2,7 +2,7 @@ import { getPortalConfig, DEFAULT_APP_SETTINGS, isConfigured } from '../lib/port
 import type { AppSettings } from '../lib/portal-config';
 import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 import { upsertContent } from '../lib/hubspot-client';
-import { HS_SYNC_TAG, isAnyTeam, isChangelogIssue } from '../lib/mapping';
+import { HS_SYNC_TAG, isAnyTeam, classifyIssue, parseProjectMap } from '../lib/mapping';
 
 interface SettingsContext {
   accountId?: number;
@@ -109,6 +109,21 @@ export async function getLinearTeams(apiKey: string): Promise<LinearTeam[]> {
  * workspace fits comfortably under one page — but the count is capped so a
  * very large org cannot stall the settings page.
  */
+/** Every Linear project, so the settings page can offer a row per project. */
+async function getLinearProjects(apiKey: string): Promise<LinearTeam[]> {
+  try {
+    const data = await linearQuery(
+      `query { projects(first: 250) { nodes { id name } } }`,
+      {},
+      apiKey,
+    );
+    const nodes = (data.data?.projects as { nodes: LinearTeam[] } | undefined)?.nodes ?? [];
+    return nodes.sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    return [];
+  }
+}
+
 async function getWorkspaceMembers(apiKey: string): Promise<LinearMember[]> {
   try {
     const data = await linearQuery(
@@ -296,7 +311,7 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
     try {
       const result = await hsSearch(
         objectTypeId,
-        ['linear_team_id', 'assignee_filter', 'linear_assignee_id'],
+        ['linear_team_id', 'assignee_filter', 'linear_assignee_id', 'linear_project_map'],
         token,
       );
       const record = result.results[0];
@@ -317,7 +332,18 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
           : Promise.resolve<LinearMember[]>([]),
       ]);
 
-      return { statusCode: 200, body: JSON.stringify({ ...settings, teams, teamMembers }) };
+      const projects = linearApiKey ? await getLinearProjects(linearApiKey) : [];
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          ...settings,
+          teams,
+          teamMembers,
+          projects,
+          projectMap: parseProjectMap(record?.properties.linear_project_map),
+        }),
+      };
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       return { statusCode: 500, body: JSON.stringify({ error: 'Failed to load settings', detail }) };
@@ -365,6 +391,13 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
       linear_assignee_id: linearAssigneeId ?? '',
     };
 
+    // Re-parsed before storing, so a malformed value from the page cannot be
+    // written and then break every later read.
+    const projectMapRaw = param(context, 'projectMap');
+    if (projectMapRaw !== undefined) {
+      properties.linear_project_map = JSON.stringify(parseProjectMap(projectMapRaw));
+    }
+
     try {
       const existing = await hsSearch(objectTypeId, ['linear_team_id'], token);
       const existingId = existing.results[0]?.id;
@@ -385,7 +418,7 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
   async function eligibleIssues(hsToken: string) {
     const current = await hsSearch(
       objectTypeId,
-      ['linear_team_id', 'assignee_filter', 'linear_assignee_id'],
+      ['linear_team_id', 'assignee_filter', 'linear_assignee_id', 'linear_project_map'],
       hsToken,
     );
     const record = current.results[0];
@@ -394,6 +427,8 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
       assigneeFilter: (record?.properties.assignee_filter as AppSettings['assigneeFilter']) ?? 'all',
       linearAssigneeId: record?.properties.linear_assignee_id ?? '',
     };
+
+    const projectMap = parseProjectMap(record?.properties.linear_project_map);
 
     if (!isConfigured(settings)) {
       throw new Error('Choose a Linear team, or filter by "mine" and pick yourself, then save.');
@@ -415,7 +450,7 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
       after = result.endCursor;
     }
 
-    let skippedEcho = 0, skippedAssignee = 0;
+    let skippedEcho = 0, skippedAssignee = 0, skippedIgnored = 0;
     const eligible = issues.filter(issue => {
       if (issue.description?.includes(HS_SYNC_TAG)) { skippedEcho++; return false; }
       const assigneeId = issue.assignee?.id ?? null;
@@ -423,10 +458,14 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
       if (settings.assigneeFilter === 'mine' && assigneeId !== settings.linearAssigneeId) {
         skippedAssignee++; return false;
       }
+      // Mapped to "ignore": not content, not a changelog, not wanted.
+      if (classifyIssue(issue.labels.nodes, issue.project?.id, projectMap) === 'ignore') {
+        skippedIgnored++; return false;
+      }
       return true;
     });
 
-    return { eligible, scanned: issues.length, skippedEcho, skippedAssignee };
+    return { eligible, scanned: issues.length, skippedEcho, skippedAssignee, skippedIgnored, projectMap };
   }
 
   // Read-only. Nothing is written, so this is safe to run repeatedly and is
@@ -435,13 +474,14 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
   // the wrong way round.
   if (action === 'backfillPreview') {
     try {
-      const { eligible, scanned, skippedEcho, skippedAssignee } = await eligibleIssues(token);
+      const { eligible, scanned, skippedEcho, skippedAssignee, skippedIgnored, projectMap } = await eligibleIssues(token);
       return {
         statusCode: 200,
         body: JSON.stringify({
           scanned,
           skippedEcho,
           skippedAssignee,
+          skippedIgnored,
           issues: eligible.map(i => ({
             id: i.id,
             identifier: i.identifier,
@@ -449,7 +489,7 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
             state: i.state.name,
             team: i.team.name,
             project: i.project?.name ?? null,
-            kind: isChangelogIssue(i.labels.nodes, i.project?.name) ? 'changelog' : 'content',
+            kind: classifyIssue(i.labels.nodes, i.project?.id, projectMap),
           })),
         }),
       };
@@ -470,13 +510,13 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
     const wanted = new Set(idsParam.split(',').map(x => x.trim()).filter(Boolean));
 
     try {
-      const { eligible } = await eligibleIssues(token);
+      const { eligible, projectMap } = await eligibleIssues(token);
       const chosen = eligible.filter(i => wanted.has(i.id));
 
       let created = 0, updated = 0;
       const errors: string[] = [];
       for (const issue of chosen) {
-        const pipelineKey = isChangelogIssue(issue.labels.nodes, issue.project?.name) ? 'changelog' : 'content';
+        const pipelineKey = classifyIssue(issue.labels.nodes, issue.project?.id, projectMap) === 'changelog' ? 'changelog' : 'content';
         try {
           // The same upsert the webhook calls, matching on linear_id — so a
           // repeated or overlapping import updates rather than duplicating.

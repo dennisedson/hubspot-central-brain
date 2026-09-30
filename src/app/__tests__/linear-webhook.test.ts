@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { isConfigured, DEFAULT_APP_SETTINGS } from '@lib/portal-config';
+import { classifyIssue, parseProjectMap } from '@lib/mapping';
 
 let main: (ctx: any) => Promise<any>;
 
@@ -387,3 +388,49 @@ describe('LinearWebhook — refuses to sync an unconfigured portal', () => {
     expect(isConfigured(DEFAULT_APP_SETTINGS)).toBe(false);
   });
 });
+
+describe('classifyIssue — the project map', () => {
+  /**
+   * Classification used to read labels only. On the production workspace that
+   * was wrong for 69 of 83 issues: they are changelogs by project, and not one
+   * issue in the workspace carries the changelog label.
+   */
+
+  it('the map decides, over the label', () => {
+    expect(classifyIssue([{ name: 'changelog' }], 'p1', { p1: 'content' })).toBe('content');
+    expect(classifyIssue([], 'p1', { p1: 'changelog' })).toBe('changelog');
+  });
+
+  it('falls back to the label when the project is unmapped', () => {
+    // Keeps portals working that predate the map — dev classifies by label.
+    expect(classifyIssue([{ name: 'changelog' }], 'unmapped', {})).toBe('changelog');
+    expect(classifyIssue([{ name: 'changelog' }], null, {})).toBe('changelog');
+  });
+
+  it('defaults an unmapped, unlabelled issue to content', () => {
+    // Not 'ignore': silently dropping issues looks like a broken sync, while
+    // filing them in the obvious place is visible and fixable.
+    expect(classifyIssue([], 'unmapped', {})).toBe('content');
+    expect(classifyIssue([], null, {})).toBe('content');
+  });
+
+  it('honours ignore', () => {
+    expect(classifyIssue([{ name: 'changelog' }], 'p1', { p1: 'ignore' })).toBe('ignore');
+  });
+});
+
+describe('parseProjectMap — it must never throw', () => {
+  it('survives anything an operator can put in a text property', () => {
+    // A broken map must not take the sync down; it degrades to label-only.
+    expect(parseProjectMap(null)).toEqual({});
+    expect(parseProjectMap('')).toEqual({});
+    expect(parseProjectMap('not json')).toEqual({});
+    expect(parseProjectMap('[1,2,3]')).toEqual({});
+    expect(parseProjectMap('"a string"')).toEqual({});
+  });
+
+  it('drops entries whose value is not a known kind', () => {
+    expect(parseProjectMap('{"a":"content","b":"nonsense","c":"ignore"}'))
+      .toEqual({ a: 'content', c: 'ignore' });
+  });
+})
