@@ -31,6 +31,9 @@ beforeEach(async () => {
     upsertContent: vi.fn().mockResolvedValue({ id: 'hs-1', action: 'created' }),
     archiveContentByLinearId: vi.fn().mockResolvedValue({ id: 'hs-arch', action: 'updated' }),
     readAppSettings: vi.fn().mockResolvedValue({ linearTeamId: 't-1', assigneeFilter: 'all', linearAssigneeId: '' }),
+    // Empty by default: classification falls back to the label, which is what
+    // the rest of this file was written against.
+    readProjectMap: vi.fn().mockResolvedValue({}),
   }));
   vi.doMock('@lib/portal-config', async () => ({
     ...(await vi.importActual<typeof import('@lib/portal-config')>('@lib/portal-config')),
@@ -386,6 +389,50 @@ describe('LinearWebhook — refuses to sync an unconfigured portal', () => {
   it('the shipped defaults are NOT configured', () => {
     // The whole point. If this ever passes, an unconfigured portal syncs again.
     expect(isConfigured(DEFAULT_APP_SETTINGS)).toBe(false);
+  });
+});
+
+describe('LinearWebhook — routing live issues by project', () => {
+  /**
+   * The import honoured the project map before the webhook did, which made the
+   * map half a feature: history filed correctly, everything arriving after it
+   * classified by a label this workspace has never used.
+   */
+
+  it('files an issue by its project, not its labels', async () => {
+    const { readProjectMap, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+    vi.mocked(readProjectMap).mockResolvedValue({ 'proj-1': 'changelog' });
+
+    await main({
+      ...baseCtx,
+      body: { ...baseCtx.body, data: { ...baseCtx.body.data, project: { id: 'proj-1', name: 'Rollouts' } } },
+    } as unknown as typeof baseCtx);
+
+    expect(mockUpsert).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'changelog');
+  });
+
+  it('writes nothing at all for a project mapped to ignore', async () => {
+    // Not "files it somewhere harmless" — an ignored project is work that does
+    // not belong in the pipeline, so nothing should be created or updated.
+    const { readProjectMap, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+    vi.mocked(readProjectMap).mockResolvedValue({ 'proj-1': 'ignore' });
+
+    const res = await main({
+      ...baseCtx,
+      body: { ...baseCtx.body, data: { ...baseCtx.body.data, project: { id: 'proj-1', name: 'Chores' } } },
+    } as unknown as typeof baseCtx);
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).reason).toContain('ignore');
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the label when the project is unmapped', async () => {
+    const { readProjectMap, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+    vi.mocked(readProjectMap).mockResolvedValue({ 'other': 'ignore' });
+
+    await main(baseCtx);
+    expect(mockUpsert).toHaveBeenCalled();
   });
 });
 

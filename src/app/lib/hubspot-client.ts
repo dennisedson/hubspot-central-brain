@@ -1,5 +1,6 @@
 import type { LinearWebhookPayload, UpsertResult } from './types';
 import { LINEAR_STATE_TO_CONTENT_STAGE, LINEAR_STATE_TO_CHANGELOG_STAGE } from './mapping';
+import { parseProjectMap, type ProjectMap } from './mapping';
 import { getPortalConfig, DEFAULT_APP_SETTINGS } from './portal-config';
 import type { AppSettings } from './portal-config';
 import {
@@ -350,6 +351,25 @@ export async function readAppSettings(portalId: number): Promise<AppSettings> {
     };
   } catch {
     return { ...DEFAULT_APP_SETTINGS };
+  }
+}
+
+/**
+ * The Linear project map, as stored on app_configs.
+ *
+ * Separate from readAppSettings because that returns the three values a person
+ * chooses in the form, and this is a lookup table. Returns an empty map on any
+ * failure, which means label-only classification — the behaviour that predates
+ * the map, and a safer degradation than refusing to sync.
+ */
+export async function readProjectMap(portalId: number): Promise<ProjectMap> {
+  const objectTypeId = getPortalConfig(portalId).appConfig.objectTypeId;
+  if (!objectTypeId) return {};
+  try {
+    const response = await hsSearch(objectTypeId, [], ['linear_project_map']);
+    return parseProjectMap(response.results[0]?.properties.linear_project_map);
+  } catch {
+    return {};
   }
 }
 

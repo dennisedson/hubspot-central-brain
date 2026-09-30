@@ -158,6 +158,30 @@ interface LinearIssueNode {
   assignee: { displayName: string } | null;
 }
 
+/**
+ * The project an issue belongs to, or null.
+ *
+ * Separate from getLinearIssue because it is on the webhook's hot path and
+ * needs one field, not a record summary. Called only when a project map is
+ * configured AND the payload carried no project — with no map the label
+ * decides and this is never reached.
+ */
+export async function getIssueProjectId(apiKey: string, issueId: string): Promise<string | null> {
+  try {
+    const data = await gql<{ issue: { project?: { id: string } | null } | null }>(
+      apiKey,
+      `query($issueId: String!) { issue(id: $issueId) { project { id } } }`,
+      { issueId },
+    );
+    return data.issue?.project?.id ?? null;
+  } catch (err) {
+    // An unreachable lookup must not fail the webhook. Returning null means
+    // the label decides, which is the behaviour that predates the map.
+    console.error('Could not read the issue project:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 export async function getLinearIssue(apiKey: string, issueId: string): Promise<LinearIssueDetail | null> {
   const query = `
     query GetIssue($issueId: String!) {
