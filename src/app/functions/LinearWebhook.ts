@@ -8,6 +8,7 @@ import type { LinearWebhookPayload } from '../lib/types';
 import {
   LINEAR_CHANGELOG_LABEL,
   HS_SYNC_TAG,
+  isAnyTeam,
   CONTENT_STAGE_TO_LINEAR_STATE,
   CHANGELOG_STAGE_TO_LINEAR_STATE,
 } from '../lib/mapping';
@@ -77,7 +78,7 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     // empty team now means "any team, filtered by assignee", not "no filter at
     // all". Without that gate above this line, this is the code that accepted
     // every team on an unconfigured portal.
-    if (settings.linearTeamId && payload.data.team.id !== settings.linearTeamId) {
+    if (!isAnyTeam(settings.linearTeamId) && payload.data.team.id !== settings.linearTeamId) {
       return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'not configured team' }) };
     }
 

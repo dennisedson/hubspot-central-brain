@@ -33,6 +33,7 @@
  */
 
 import { loadEnv } from './script-env';
+import { isAnyTeam } from '../app/lib/mapping';
 
 const LINEAR_API = 'https://api.linear.app/graphql';
 
@@ -144,6 +145,14 @@ async function fetchAssignedIssues(apiKey: string, assigneeId: string): Promise<
 
 async function main() {
   const apply = process.argv.includes('--apply');
+
+  // --only BLDREL-1,BLDREL-2 imports just those, by identifier. The settings
+  // page will send a selection the same way; keeping the CLI able to do it
+  // means the selection path is exercised somewhere I can actually run.
+  const onlyArg = process.argv.find(a => a.startsWith('--only='));
+  const only = onlyArg
+    ? new Set(onlyArg.slice('--only='.length).split(',').map(x => x.trim()).filter(Boolean))
+    : null;
   const { token, portalId, portal, linearApiKey } = loadEnv();
 
   if (!linearApiKey) {
@@ -171,15 +180,15 @@ async function main() {
     process.exit(1);
   }
 
-  const scope = settings.linearTeamId
-    ? `team ${settings.linearTeamId}`
-    : `assigned to ${settings.linearAssigneeId}, all teams`;
+  const scope = isAnyTeam(settings.linearTeamId)
+    ? `assigned to ${settings.linearAssigneeId}, all teams`
+    : `team ${settings.linearTeamId}`;
   console.log(`\n[${portal}] Backfill — portal ${portalId}, ${scope}`);
   console.log(`Mode: ${apply ? 'APPLY — records will be written' : 'dry run — nothing will be written'}\n`);
 
-  const all = settings.linearTeamId
-    ? await fetchTeamIssues(linearApiKey, settings.linearTeamId)
-    : await fetchAssignedIssues(linearApiKey, settings.linearAssigneeId);
+  const all = isAnyTeam(settings.linearTeamId)
+    ? await fetchAssignedIssues(linearApiKey, settings.linearAssigneeId)
+    : await fetchTeamIssues(linearApiKey, settings.linearTeamId);
   console.log(`Issues on the team: ${all.length}`);
 
   const skipped = { echo: 0, assignee: 0 };
@@ -197,22 +206,32 @@ async function main() {
 
   console.log(`  skipped, our own sync tag: ${skipped.echo}`);
   console.log(`  skipped, assignee filter "${settings.assigneeFilter}": ${skipped.assignee}`);
-  console.log(`Eligible: ${eligible.length}\n`);
+
+  const chosen = only ? eligible.filter(i => only.has(i.identifier)) : eligible;
+  if (only) {
+    const missing = [...only].filter(id => !eligible.some(i => i.identifier === id));
+    console.log(`Selected: ${chosen.length} of ${eligible.length} eligible`);
+    if (missing.length) console.log(`  not eligible or not found: ${missing.join(', ')}`);
+  } else {
+    console.log(`Eligible: ${eligible.length}`);
+  }
+  console.log();
 
   if (!apply) {
-    for (const issue of eligible.slice(0, 20)) {
+    for (const issue of chosen.slice(0, 20)) {
       const kind = issue.labels.nodes.some((l) => l.name === LINEAR_CHANGELOG_LABEL) ? 'changelog' : 'content';
       console.log(`  ${issue.identifier.padEnd(12)} ${kind.padEnd(9)} ${issue.state.name.padEnd(12)} ${issue.title.slice(0, 60)}`);
     }
-    if (eligible.length > 20) console.log(`  … and ${eligible.length - 20} more`);
-    console.log('\nNothing written. Re-run with --apply to create these records.\n');
+    if (chosen.length > 20) console.log(`  … and ${chosen.length - 20} more`);
+    console.log('\nNothing written. Re-run with --apply to create these records,');
+    console.log('or --only=ID,ID to import a subset.\n');
     return;
   }
 
   let created = 0, updated = 0;
   const errors: string[] = [];
 
-  for (const issue of eligible) {
+  for (const issue of chosen) {
     const pipelineKey = issue.labels.nodes.some((l) => l.name === LINEAR_CHANGELOG_LABEL) ? 'changelog' : 'content';
     try {
       // Shaped as the webhook would deliver it, and handed to the same upsert —

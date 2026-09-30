@@ -42,6 +42,29 @@ export const CHANGELOG_STAGE_TO_LINEAR_STATE: Record<ChangelogStage, string> = {
 // The Linear label that marks an issue as a changelog entry (not a Content record)
 export const LINEAR_CHANGELOG_LABEL = 'changelog';
 
+/**
+ * Stored in `linear_team_id` to mean "every team, filtered by assignee".
+ *
+ * A sentinel rather than an empty string because `linear_team_id` is the App
+ * Config object's PRIMARY DISPLAY PROPERTY, which HubSpot requires. Clearing it
+ * fails:
+ *
+ *   Error updating app_settings. Some required properties were cleared.
+ *   "properties": ["linear_team_id"]
+ *
+ * So "no team" cannot be expressed as an absent value on this object. The
+ * alternative was changing the primary display property on two live portals to
+ * work around a constraint that only exists because configuration is stored in
+ * a CRM record at all — see issue #62.
+ */
+export const ANY_TEAM = 'any';
+
+/** True when the configuration means "every team". Accepts the empty string
+ *  as well, since portals configured before the sentinel existed store that. */
+export function isAnyTeam(linearTeamId: string): boolean {
+  return !linearTeamId || linearTeamId === ANY_TEAM;
+}
+
 // Tag added to Linear issue descriptions by our sync to prevent echo loops
 export const HS_SYNC_TAG = '[hs-sync]';
 
