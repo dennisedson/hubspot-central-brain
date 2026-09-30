@@ -519,8 +519,8 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
       )}
       <Text variant="microcopy">
         What issues in each Linear project become here. Unmapped projects default to
-        Content. Choose <strong>Do not import</strong> for projects that are plain work
-        rather than something you publish.
+        Content. Choose &quot;Do not import&quot; for projects that are plain work rather
+        than something you publish.
       </Text>
 
       {projects.length === 0 ? (
