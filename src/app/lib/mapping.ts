@@ -79,6 +79,29 @@ export function parseProjectMap(raw: string | null | undefined): ProjectMap {
   }
 }
 
+/** A project the sync has seen issues from but nobody has mapped yet. */
+export interface UnmappedProject {
+  id: string;
+  name: string;
+}
+
+/** Parse the recorded list, tolerating anything, like the map itself. */
+export function parseUnmappedProjects(raw: string | null | undefined): UnmappedProject[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (x): x is UnmappedProject =>
+        !!x && typeof x === 'object' &&
+        typeof (x as UnmappedProject).id === 'string' &&
+        typeof (x as UnmappedProject).name === 'string',
+    );
+  } catch {
+    return [];
+  }
+}
+
 /**
  * What to do with an issue: which pipeline, or skip it.
  *

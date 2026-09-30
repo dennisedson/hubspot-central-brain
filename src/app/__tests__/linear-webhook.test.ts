@@ -33,7 +33,8 @@ beforeEach(async () => {
     readAppSettings: vi.fn().mockResolvedValue({ linearTeamId: 't-1', assigneeFilter: 'all', linearAssigneeId: '' }),
     // Empty by default: classification falls back to the label, which is what
     // the rest of this file was written against.
-    readProjectMap: vi.fn().mockResolvedValue({}),
+    readProjectState: vi.fn().mockResolvedValue({ recordId: 'cfg-1', map: {}, unmapped: [] }),
+    recordUnmappedProject: vi.fn().mockResolvedValue(undefined),
   }));
   vi.doMock('@lib/portal-config', async () => ({
     ...(await vi.importActual<typeof import('@lib/portal-config')>('@lib/portal-config')),
@@ -400,8 +401,8 @@ describe('LinearWebhook — routing live issues by project', () => {
    */
 
   it('files an issue by its project, not its labels', async () => {
-    const { readProjectMap, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
-    vi.mocked(readProjectMap).mockResolvedValue({ 'proj-1': 'changelog' });
+    const { readProjectState, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+    vi.mocked(readProjectState).mockResolvedValue({ recordId: 'cfg-1', map: { 'proj-1': 'changelog' }, unmapped: [] });
 
     await main({
       ...baseCtx,
@@ -414,8 +415,8 @@ describe('LinearWebhook — routing live issues by project', () => {
   it('writes nothing at all for a project mapped to ignore', async () => {
     // Not "files it somewhere harmless" — an ignored project is work that does
     // not belong in the pipeline, so nothing should be created or updated.
-    const { readProjectMap, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
-    vi.mocked(readProjectMap).mockResolvedValue({ 'proj-1': 'ignore' });
+    const { readProjectState, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+    vi.mocked(readProjectState).mockResolvedValue({ recordId: 'cfg-1', map: { 'proj-1': 'ignore' }, unmapped: [] });
 
     const res = await main({
       ...baseCtx,
@@ -428,8 +429,8 @@ describe('LinearWebhook — routing live issues by project', () => {
   });
 
   it('falls back to the label when the project is unmapped', async () => {
-    const { readProjectMap, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
-    vi.mocked(readProjectMap).mockResolvedValue({ 'other': 'ignore' });
+    const { readProjectState, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+    vi.mocked(readProjectState).mockResolvedValue({ recordId: 'cfg-1', map: { other: 'ignore' }, unmapped: [] });
 
     await main(baseCtx);
     expect(mockUpsert).toHaveBeenCalled();
@@ -481,3 +482,60 @@ describe('parseProjectMap — it must never throw', () => {
       .toEqual({ a: 'content', c: 'ignore' });
   });
 })
+
+describe('LinearWebhook — noticing a project nobody has mapped', () => {
+  /**
+   * An unmapped project defaults to content, deliberately — silently dropping
+   * issues is worse than filing them somewhere visible. But a silent default
+   * with no prompt is how you end up with records in the wrong place and no
+   * idea when it started. This is the prompt.
+   */
+
+  function ctxWithProject(id: string, name: string) {
+    return {
+      ...baseCtx,
+      body: { ...baseCtx.body, data: { ...baseCtx.body.data, project: { id, name } } },
+    } as unknown as typeof baseCtx;
+  }
+
+  it('records a project it has never seen', async () => {
+    const { readProjectState, recordUnmappedProject } = await import('@lib/hubspot-client');
+    vi.mocked(readProjectState).mockResolvedValue({ recordId: 'cfg-1', map: {}, unmapped: [] });
+
+    await main(ctxWithProject('p-new', 'Q3 Docs'));
+
+    expect(recordUnmappedProject).toHaveBeenCalledWith(
+      expect.anything(), 'cfg-1', [], { id: 'p-new', name: 'Q3 Docs' },
+    );
+  });
+
+  it('does not record a project that is already mapped', async () => {
+    const { readProjectState, recordUnmappedProject } = await import('@lib/hubspot-client');
+    vi.mocked(readProjectState).mockResolvedValue({
+      recordId: 'cfg-1', map: { 'p-known': 'changelog' }, unmapped: [],
+    });
+
+    await main(ctxWithProject('p-known', 'Rollouts'));
+    expect(recordUnmappedProject).not.toHaveBeenCalled();
+  });
+
+  it('does not record the same project twice', async () => {
+    // Otherwise every issue from an unmapped project is another write, and the
+    // banner lists the same name repeatedly.
+    const { readProjectState, recordUnmappedProject } = await import('@lib/hubspot-client');
+    vi.mocked(readProjectState).mockResolvedValue({
+      recordId: 'cfg-1', map: {}, unmapped: [{ id: 'p-seen', name: 'Already Noticed' }],
+    });
+
+    await main(ctxWithProject('p-seen', 'Already Noticed'));
+    expect(recordUnmappedProject).not.toHaveBeenCalled();
+  });
+
+  it('still syncs the issue — noticing must not cost the record', async () => {
+    const { readProjectState, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+    vi.mocked(readProjectState).mockResolvedValue({ recordId: 'cfg-1', map: {}, unmapped: [] });
+
+    await main(ctxWithProject('p-new', 'Q3 Docs'));
+    expect(mockUpsert).toHaveBeenCalled();
+  });
+});

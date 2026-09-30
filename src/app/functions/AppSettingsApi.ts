@@ -2,7 +2,7 @@ import { getPortalConfig, DEFAULT_APP_SETTINGS, isConfigured } from '../lib/port
 import type { AppSettings } from '../lib/portal-config';
 import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 import { upsertContent } from '../lib/hubspot-client';
-import { HS_SYNC_TAG, isAnyTeam, classifyIssue, parseProjectMap } from '../lib/mapping';
+import { HS_SYNC_TAG, isAnyTeam, classifyIssue, parseProjectMap, parseUnmappedProjects } from '../lib/mapping';
 
 interface SettingsContext {
   accountId?: number;
@@ -311,7 +311,7 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
     try {
       const result = await hsSearch(
         objectTypeId,
-        ['linear_team_id', 'assignee_filter', 'linear_assignee_id', 'linear_project_map'],
+        ['linear_team_id', 'assignee_filter', 'linear_assignee_id', 'linear_project_map', 'linear_unmapped_projects'],
         token,
       );
       const record = result.results[0];
@@ -342,6 +342,7 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
           teamMembers,
           projects,
           projectMap: parseProjectMap(record?.properties.linear_project_map),
+          unmappedProjects: parseUnmappedProjects(record?.properties.linear_unmapped_projects),
         }),
       };
     } catch (err) {
@@ -395,7 +396,17 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
     // written and then break every later read.
     const projectMapRaw = param(context, 'projectMap');
     if (projectMapRaw !== undefined) {
-      properties.linear_project_map = JSON.stringify(parseProjectMap(projectMapRaw));
+      const map = parseProjectMap(projectMapRaw);
+      properties.linear_project_map = JSON.stringify(map);
+
+      // Anything the new map covers is decided, so it stops being a prompt.
+      // Done here rather than in the page so the list cannot drift from the
+      // map that supposedly resolved it.
+      const existing = await hsSearch(objectTypeId, ['linear_unmapped_projects'], token);
+      const stillUnmapped = parseUnmappedProjects(
+        existing.results[0]?.properties.linear_unmapped_projects,
+      ).filter(u => !map[u.id]);
+      properties.linear_unmapped_projects = JSON.stringify(stillUnmapped);
     }
 
     try {

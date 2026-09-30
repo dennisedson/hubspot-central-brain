@@ -38,30 +38,36 @@ async function main() {
   const groupName = await resolveGroupName(objectTypeId, token);
   console.log(`Property group: ${groupName}`);
 
-  const res = await fetch(`${HS_BASE}${propertiesPath(objectTypeId)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({
-      name: 'linear_project_map',
-      label: 'Linear Project Map',
-      // textarea: the JSON outgrows a single-line text field once a workspace
-      // has more than a handful of projects.
-      type: 'string',
-      fieldType: 'textarea',
-      groupName,
-    }),
-  });
+  const properties = [
+    { name: 'linear_project_map', label: 'Linear Project Map' },
+    // Projects the sync has seen issues from that nobody has mapped. Unmapped
+    // defaults to content, so this is what turns a silent default into a prompt.
+    { name: 'linear_unmapped_projects', label: 'Linear Unmapped Projects' },
+  ];
 
-  if (res.ok) {
-    console.log('  ✓ Added linear_project_map\n');
-    return;
+  for (const property of properties) {
+    const res = await fetch(`${HS_BASE}${propertiesPath(objectTypeId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        name: property.name,
+        label: property.label,
+        // textarea: the JSON outgrows a single-line text field once a
+        // workspace has more than a handful of projects.
+        type: 'string',
+        fieldType: 'textarea',
+        groupName,
+      }),
+    });
+
+    if (res.ok) { console.log(`  ✓ Added ${property.name}`); continue; }
+    const body = await res.text();
+    if (res.status === 409 || body.includes('already exists') || body.includes('PROPERTY_ALREADY_EXISTS')) {
+      console.log(`  – ${property.name} already exists`); continue;
+    }
+    throw new Error(`Failed to add ${property.name}: ${res.status} ${body.slice(0, 300)}`);
   }
-  const body = await res.text();
-  if (res.status === 409 || body.includes('already exists') || body.includes('PROPERTY_ALREADY_EXISTS')) {
-    console.log('  – linear_project_map already exists\n');
-    return;
-  }
-  throw new Error(`Failed: ${res.status} ${body.slice(0, 300)}`);
+  console.log();
 }
 
 main().catch(err => {

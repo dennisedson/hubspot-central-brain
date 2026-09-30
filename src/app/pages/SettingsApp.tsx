@@ -62,6 +62,7 @@ type ProjectKind = 'content' | 'changelog' | 'ignore';
 interface SettingsResponse extends AppSettings {
   projects?: LinearOption[];
   projectMap?: Record<string, ProjectKind>;
+  unmappedProjects?: Array<{ id: string; name: string }>;
   teams: LinearOption[];
   teamMembers: LinearOption[];
 }
@@ -268,6 +269,7 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
   const [teamMembers, setTeamMembers] = useState<LinearOption[]>([]);
   const [projects, setProjects] = useState<LinearOption[]>([]);
   const [projectMap, setProjectMap] = useState<Record<string, ProjectKind>>({});
+  const [unmapped, setUnmapped] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -296,6 +298,7 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
           setTeamMembers(data.teamMembers ?? []);
           setProjects(data.projects ?? []);
           setProjectMap(data.projectMap ?? {});
+          setUnmapped(data.unmappedProjects ?? []);
         } else {
           const data = JSON.parse(res.body) as { error?: string; detail?: string };
           setErrorDetail(`${res.statusCode}: ${data.detail ?? data.error ?? res.body}`);
@@ -499,6 +502,21 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
       <Divider />
 
       <Heading>Project mapping</Heading>
+
+      {unmapped.length > 0 && (
+        <Alert
+          title={`${unmapped.length} new project${unmapped.length === 1 ? '' : 's'} with issues assigned to you`}
+          variant="warning"
+        >
+          <Text>
+            {unmapped.map(u => u.name).join(', ')}
+          </Text>
+          <Text>
+            These are syncing as Content because nothing says otherwise. Set each one below
+            and save — this notice clears once they are mapped.
+          </Text>
+        </Alert>
+      )}
       <Text variant="microcopy">
         What issues in each Linear project become here. Unmapped projects default to
         Content. Choose <strong>Do not import</strong> for projects that are plain work
