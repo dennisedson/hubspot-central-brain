@@ -66,6 +66,9 @@ export interface LinearIssue {
   labels: Array<{ id: string; name: string; color?: string }>;
   url: string;
   team: { id: string; name: string };
+  /** Optional: it is not confirmed that Linear's webhook payload carries this,
+   *  so the webhook looks it up when it needs it and the payload has none. */
+  project?: { id: string; name: string } | null;
   assignee?: { id: string; name: string } | null;
 }
 

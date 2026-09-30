@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { isConfigured, DEFAULT_APP_SETTINGS } from '@lib/portal-config';
+import { classifyIssue, parseProjectMap } from '@lib/mapping';
 
 let main: (ctx: any) => Promise<any>;
 
@@ -30,6 +31,9 @@ beforeEach(async () => {
     upsertContent: vi.fn().mockResolvedValue({ id: 'hs-1', action: 'created' }),
     archiveContentByLinearId: vi.fn().mockResolvedValue({ id: 'hs-arch', action: 'updated' }),
     readAppSettings: vi.fn().mockResolvedValue({ linearTeamId: 't-1', assigneeFilter: 'all', linearAssigneeId: '' }),
+    // Empty by default: classification falls back to the label, which is what
+    // the rest of this file was written against.
+    readProjectMap: vi.fn().mockResolvedValue({}),
   }));
   vi.doMock('@lib/portal-config', async () => ({
     ...(await vi.importActual<typeof import('@lib/portal-config')>('@lib/portal-config')),
@@ -387,3 +391,93 @@ describe('LinearWebhook — refuses to sync an unconfigured portal', () => {
     expect(isConfigured(DEFAULT_APP_SETTINGS)).toBe(false);
   });
 });
+
+describe('LinearWebhook — routing live issues by project', () => {
+  /**
+   * The import honoured the project map before the webhook did, which made the
+   * map half a feature: history filed correctly, everything arriving after it
+   * classified by a label this workspace has never used.
+   */
+
+  it('files an issue by its project, not its labels', async () => {
+    const { readProjectMap, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+    vi.mocked(readProjectMap).mockResolvedValue({ 'proj-1': 'changelog' });
+
+    await main({
+      ...baseCtx,
+      body: { ...baseCtx.body, data: { ...baseCtx.body.data, project: { id: 'proj-1', name: 'Rollouts' } } },
+    } as unknown as typeof baseCtx);
+
+    expect(mockUpsert).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'changelog');
+  });
+
+  it('writes nothing at all for a project mapped to ignore', async () => {
+    // Not "files it somewhere harmless" — an ignored project is work that does
+    // not belong in the pipeline, so nothing should be created or updated.
+    const { readProjectMap, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+    vi.mocked(readProjectMap).mockResolvedValue({ 'proj-1': 'ignore' });
+
+    const res = await main({
+      ...baseCtx,
+      body: { ...baseCtx.body, data: { ...baseCtx.body.data, project: { id: 'proj-1', name: 'Chores' } } },
+    } as unknown as typeof baseCtx);
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).reason).toContain('ignore');
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the label when the project is unmapped', async () => {
+    const { readProjectMap, upsertContent: mockUpsert } = await import('@lib/hubspot-client');
+    vi.mocked(readProjectMap).mockResolvedValue({ 'other': 'ignore' });
+
+    await main(baseCtx);
+    expect(mockUpsert).toHaveBeenCalled();
+  });
+});
+
+describe('classifyIssue — the project map', () => {
+  /**
+   * Classification used to read labels only. On the production workspace that
+   * was wrong for 69 of 83 issues: they are changelogs by project, and not one
+   * issue in the workspace carries the changelog label.
+   */
+
+  it('the map decides, over the label', () => {
+    expect(classifyIssue([{ name: 'changelog' }], 'p1', { p1: 'content' })).toBe('content');
+    expect(classifyIssue([], 'p1', { p1: 'changelog' })).toBe('changelog');
+  });
+
+  it('falls back to the label when the project is unmapped', () => {
+    // Keeps portals working that predate the map — dev classifies by label.
+    expect(classifyIssue([{ name: 'changelog' }], 'unmapped', {})).toBe('changelog');
+    expect(classifyIssue([{ name: 'changelog' }], null, {})).toBe('changelog');
+  });
+
+  it('defaults an unmapped, unlabelled issue to content', () => {
+    // Not 'ignore': silently dropping issues looks like a broken sync, while
+    // filing them in the obvious place is visible and fixable.
+    expect(classifyIssue([], 'unmapped', {})).toBe('content');
+    expect(classifyIssue([], null, {})).toBe('content');
+  });
+
+  it('honours ignore', () => {
+    expect(classifyIssue([{ name: 'changelog' }], 'p1', { p1: 'ignore' })).toBe('ignore');
+  });
+});
+
+describe('parseProjectMap — it must never throw', () => {
+  it('survives anything an operator can put in a text property', () => {
+    // A broken map must not take the sync down; it degrades to label-only.
+    expect(parseProjectMap(null)).toEqual({});
+    expect(parseProjectMap('')).toEqual({});
+    expect(parseProjectMap('not json')).toEqual({});
+    expect(parseProjectMap('[1,2,3]')).toEqual({});
+    expect(parseProjectMap('"a string"')).toEqual({});
+  });
+
+  it('drops entries whose value is not a known kind', () => {
+    expect(parseProjectMap('{"a":"content","b":"nonsense","c":"ignore"}'))
+      .toEqual({ a: 'content', c: 'ignore' });
+  });
+})

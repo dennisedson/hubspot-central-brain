@@ -2,7 +2,7 @@ import { getPortalConfig, DEFAULT_APP_SETTINGS, isConfigured } from '../lib/port
 import type { AppSettings } from '../lib/portal-config';
 import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 import { upsertContent } from '../lib/hubspot-client';
-import { HS_SYNC_TAG, LINEAR_CHANGELOG_LABEL } from '../lib/mapping';
+import { HS_SYNC_TAG, isAnyTeam, classifyIssue, parseProjectMap } from '../lib/mapping';
 
 interface SettingsContext {
   accountId?: number;
@@ -109,6 +109,21 @@ export async function getLinearTeams(apiKey: string): Promise<LinearTeam[]> {
  * workspace fits comfortably under one page — but the count is capped so a
  * very large org cannot stall the settings page.
  */
+/** Every Linear project, so the settings page can offer a row per project. */
+async function getLinearProjects(apiKey: string): Promise<LinearTeam[]> {
+  try {
+    const data = await linearQuery(
+      `query { projects(first: 250) { nodes { id name } } }`,
+      {},
+      apiKey,
+    );
+    const nodes = (data.data?.projects as { nodes: LinearTeam[] } | undefined)?.nodes ?? [];
+    return nodes.sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    return [];
+  }
+}
+
 async function getWorkspaceMembers(apiKey: string): Promise<LinearMember[]> {
   try {
     const data = await linearQuery(
@@ -185,6 +200,7 @@ interface BackfillIssue {
   state: { id: string; name: string; type: string };
   labels: { nodes: Array<{ id: string; name: string }> };
   team: { id: string; name: string };
+  project?: { id: string; name: string } | null;
   assignee?: { id: string; name: string } | null;
 }
 
@@ -199,6 +215,7 @@ async function fetchAssignedPage(
   apiKey: string,
   assigneeId: string,
   after: string | null,
+  pageSize: number = BACKFILL_PAGE_SIZE,
 ): Promise<{ nodes: BackfillIssue[]; hasNextPage: boolean; endCursor: string | null }> {
   const data = await linearQuery(
     `query($id: String!, $first: Int!, $after: String) {
@@ -209,13 +226,14 @@ async function fetchAssignedPage(
              state { id name type }
              labels { nodes { id name } }
              team { id name }
+             project { id name }
              assignee { id name }
            }
            pageInfo { hasNextPage endCursor }
          }
        }
      }`,
-    { id: assigneeId, first: BACKFILL_PAGE_SIZE, after },
+    { id: assigneeId, first: pageSize, after },
     apiKey,
   );
 
@@ -232,6 +250,7 @@ async function fetchIssuePage(
   apiKey: string,
   teamId: string,
   after: string | null,
+  pageSize: number = BACKFILL_PAGE_SIZE,
 ): Promise<{ nodes: BackfillIssue[]; hasNextPage: boolean; endCursor: string | null }> {
   const data = await linearQuery(
     `query($teamId: String!, $first: Int!, $after: String) {
@@ -242,13 +261,14 @@ async function fetchIssuePage(
              state { id name type }
              labels { nodes { id name } }
              team { id name }
+             project { id name }
              assignee { id name }
            }
            pageInfo { hasNextPage endCursor }
          }
        }
      }`,
-    { teamId, first: BACKFILL_PAGE_SIZE, after },
+    { teamId, first: pageSize, after },
     apiKey,
   );
 
@@ -291,7 +311,7 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
     try {
       const result = await hsSearch(
         objectTypeId,
-        ['linear_team_id', 'assignee_filter', 'linear_assignee_id'],
+        ['linear_team_id', 'assignee_filter', 'linear_assignee_id', 'linear_project_map'],
         token,
       );
       const record = result.results[0];
@@ -312,7 +332,18 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
           : Promise.resolve<LinearMember[]>([]),
       ]);
 
-      return { statusCode: 200, body: JSON.stringify({ ...settings, teams, teamMembers }) };
+      const projects = linearApiKey ? await getLinearProjects(linearApiKey) : [];
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          ...settings,
+          teams,
+          teamMembers,
+          projects,
+          projectMap: parseProjectMap(record?.properties.linear_project_map),
+        }),
+      };
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       return { statusCode: 500, body: JSON.stringify({ error: 'Failed to load settings', detail }) };
@@ -360,6 +391,13 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
       linear_assignee_id: linearAssigneeId ?? '',
     };
 
+    // Re-parsed before storing, so a malformed value from the page cannot be
+    // written and then break every later read.
+    const projectMapRaw = param(context, 'projectMap');
+    if (projectMapRaw !== undefined) {
+      properties.linear_project_map = JSON.stringify(parseProjectMap(projectMapRaw));
+    }
+
     try {
       const existing = await hsSearch(objectTypeId, ['linear_team_id'], token);
       const existingId = existing.results[0]?.id;
@@ -375,13 +413,13 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
     }
   }
 
-  if (action === 'backfill') {
-    // Importing into a portal nobody has configured is exactly how 34 unwanted
-    // records arrived on production. Same gate the webhook uses.
+  // Shared by the preview and the import: everything eligible, already
+  // filtered by the same rules the webhook applies.
+  async function eligibleIssues(hsToken: string) {
     const current = await hsSearch(
       objectTypeId,
-      ['linear_team_id', 'assignee_filter', 'linear_assignee_id', 'linear_backfill_cursor', 'linear_backfill_count'],
-      token,
+      ['linear_team_id', 'assignee_filter', 'linear_assignee_id', 'linear_project_map'],
+      hsToken,
     );
     const record = current.results[0];
     const settings: AppSettings = {
@@ -390,96 +428,132 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
       linearAssigneeId: record?.properties.linear_assignee_id ?? '',
     };
 
+    const projectMap = parseProjectMap(record?.properties.linear_project_map);
+
     if (!isConfigured(settings)) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: 'Choose a Linear team and save your settings before importing.' }),
-      };
+      throw new Error('Choose a Linear team, or filter by "mine" and pick yourself, then save.');
     }
-    if (!linearApiKey) {
-      return { statusCode: 500, body: JSON.stringify({ error: 'LINEAR_API_KEY is not set on this portal.' }) };
+    if (!linearApiKey) throw new Error('LINEAR_API_KEY is not set on this portal.');
+    const apiKey: string = linearApiKey;
+
+    // Every page at once. A preview writes nothing, so it is not bound by the
+    // per-request budget an import is.
+    const issues: BackfillIssue[] = [];
+    let after: string | null = null;
+    for (let page = 0; page < 40; page++) {
+      const result: { nodes: BackfillIssue[]; hasNextPage: boolean; endCursor: string | null } =
+        isAnyTeam(settings.linearTeamId)
+        ? await fetchAssignedPage(apiKey, settings.linearAssigneeId, after, 250)
+        : await fetchIssuePage(apiKey, settings.linearTeamId, after, 250);
+      issues.push(...result.nodes);
+      if (!result.hasNextPage || !result.endCursor) break;
+      after = result.endCursor;
     }
 
-    const reset = param(context, 'reset') === 'true';
-    const cursor = reset ? null : (record?.properties.linear_backfill_cursor || null);
-    const alreadyImported = reset ? 0 : parseInt(record?.properties.linear_backfill_count || '0', 10) || 0;
+    let skippedEcho = 0, skippedAssignee = 0, skippedIgnored = 0;
+    const eligible = issues.filter(issue => {
+      if (issue.description?.includes(HS_SYNC_TAG)) { skippedEcho++; return false; }
+      const assigneeId = issue.assignee?.id ?? null;
+      if (settings.assigneeFilter === 'assigned' && !assigneeId) { skippedAssignee++; return false; }
+      if (settings.assigneeFilter === 'mine' && assigneeId !== settings.linearAssigneeId) {
+        skippedAssignee++; return false;
+      }
+      // Mapped to "ignore": not content, not a changelog, not wanted.
+      if (classifyIssue(issue.labels.nodes, issue.project?.id, projectMap) === 'ignore') {
+        skippedIgnored++; return false;
+      }
+      return true;
+    });
 
+    return { eligible, scanned: issues.length, skippedEcho, skippedAssignee, skippedIgnored, projectMap };
+  }
+
+  // Read-only. Nothing is written, so this is safe to run repeatedly and is
+  // what the settings page shows before anyone commits to an import — the CLI
+  // has had a dry run since it was written and the button did not, which was
+  // the wrong way round.
+  if (action === 'backfillPreview') {
     try {
-      // No team means "assigned to me, wherever it lives" — ask Linear for the
-      // person's issues rather than a team's, so a new team is picked up
-      // without anyone remembering to change a setting.
-      const page = settings.linearTeamId
-        ? await fetchIssuePage(linearApiKey, settings.linearTeamId, cursor)
-        : await fetchAssignedPage(linearApiKey, settings.linearAssigneeId, cursor);
-
-      let created = 0, updated = 0, skipped = 0;
-      for (const issue of page.nodes) {
-        // Issues our own sync wrote. Re-importing them would be circular.
-        if (issue.description?.includes(HS_SYNC_TAG)) { skipped++; continue; }
-
-        const assigneeId = issue.assignee?.id ?? null;
-        if (settings.assigneeFilter === 'assigned' && !assigneeId) { skipped++; continue; }
-        if (settings.assigneeFilter === 'mine' && assigneeId !== settings.linearAssigneeId) { skipped++; continue; }
-
-        const pipelineKey = issue.labels.nodes.some(l => l.name === LINEAR_CHANGELOG_LABEL) ? 'changelog' : 'content';
-        // The same upsert the webhook calls, matching on linear_id — so a
-        // resumed or repeated run updates rather than duplicating.
-        const result = await upsertContent(
-          {
-            action: 'update',
-            type: 'Issue',
-            data: {
-              id: issue.id,
-              identifier: issue.identifier,
-              title: issue.title,
-              description: issue.description,
-              state: issue.state,
-              labels: issue.labels.nodes,
-              url: issue.url,
-              team: issue.team,
-              assignee: issue.assignee ?? null,
-            },
-            organizationId: 'backfill',
-            webhookTimestamp: Date.now(),
-            webhookId: 'backfill',
-          },
-          portalId,
-          pipelineKey,
-        );
-        if (result.action === 'created') created++; else updated++;
-      }
-
-      const totalImported = alreadyImported + created + updated;
-      const done = !page.hasNextPage || !page.endCursor;
-
-      // Persist before returning. A browser closed mid-import then resumes from
-      // here rather than starting over — which is the whole point of storing a
-      // cursor instead of looping inside one request.
-      if (record?.id) {
-        await hsUpdate(
-          objectTypeId,
-          record.id,
-          {
-            linear_backfill_cursor: done ? '' : (page.endCursor ?? ''),
-            linear_backfill_count: String(totalImported),
-          },
-          token,
-        );
-      }
-
+      const { eligible, scanned, skippedEcho, skippedAssignee, skippedIgnored, projectMap } = await eligibleIssues(token);
       return {
         statusCode: 200,
         body: JSON.stringify({
-          scanned: page.nodes.length,
-          created, updated, skipped,
-          totalImported,
-          done,
+          scanned,
+          skippedEcho,
+          skippedAssignee,
+          skippedIgnored,
+          issues: eligible.map(i => ({
+            id: i.id,
+            identifier: i.identifier,
+            title: i.title,
+            state: i.state.name,
+            team: i.team.name,
+            project: i.project?.name ?? null,
+            kind: classifyIssue(i.labels.nodes, i.project?.id, projectMap),
+          })),
         }),
       };
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      // The cursor is untouched on failure, so retrying repeats this page
-      // rather than skipping it. The upsert is idempotent, so that is safe.
+      return { statusCode: 400, body: JSON.stringify({ error: detail }) };
+    }
+  }
+
+  // Imports exactly the ids it is given. The caller decides what and how many,
+  // so each request is bounded by construction — no stored cursor, and closing
+  // the page cannot leave a half-walked position behind.
+  if (action === 'backfill') {
+    const idsParam = param(context, 'ids');
+    if (!idsParam) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'No issues selected.' }) };
+    }
+    const wanted = new Set(idsParam.split(',').map(x => x.trim()).filter(Boolean));
+
+    try {
+      const { eligible, projectMap } = await eligibleIssues(token);
+      const chosen = eligible.filter(i => wanted.has(i.id));
+
+      let created = 0, updated = 0;
+      const errors: string[] = [];
+      for (const issue of chosen) {
+        const pipelineKey = classifyIssue(issue.labels.nodes, issue.project?.id, projectMap) === 'changelog' ? 'changelog' : 'content';
+        try {
+          // The same upsert the webhook calls, matching on linear_id — so a
+          // repeated or overlapping import updates rather than duplicating.
+          const result = await upsertContent(
+            {
+              action: 'update',
+              type: 'Issue',
+              data: {
+                id: issue.id,
+                identifier: issue.identifier,
+                title: issue.title,
+                description: issue.description,
+                state: issue.state,
+                labels: issue.labels.nodes,
+                url: issue.url,
+                team: issue.team,
+                assignee: issue.assignee ?? null,
+              },
+              organizationId: 'backfill',
+              webhookTimestamp: Date.now(),
+              webhookId: 'backfill',
+            },
+            portalId,
+            pipelineKey,
+          );
+          if (result.action === 'created') created++; else updated++;
+        } catch (err) {
+          errors.push(`${issue.identifier}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ requested: wanted.size, imported: chosen.length, created, updated, errors }),
+      };
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
       return { statusCode: 500, body: JSON.stringify({ error: 'Import failed', detail }) };
     }
   }

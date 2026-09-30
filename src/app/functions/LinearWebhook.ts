@@ -3,11 +3,14 @@ import {
   upsertContent,
   archiveContentByLinearId,
   readAppSettings,
+  readProjectMap,
 } from '../lib/hubspot-client';
 import type { LinearWebhookPayload } from '../lib/types';
+import { getIssueProjectId } from '../lib/linear-client';
 import {
-  LINEAR_CHANGELOG_LABEL,
   HS_SYNC_TAG,
+  isAnyTeam,
+  classifyIssue,
   CONTENT_STAGE_TO_LINEAR_STATE,
   CHANGELOG_STAGE_TO_LINEAR_STATE,
 } from '../lib/mapping';
@@ -45,13 +48,34 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'hs-sync echo' }) };
   }
 
-  const labels = payload.data.labels?.map(l => l.name) ?? [];
-  const isChangelog = labels.includes(LINEAR_CHANGELOG_LABEL);
-
-  console.log(`LinearWebhook: action=${payload.action} issueId=${payload.data.id} labels=${JSON.stringify(labels)} isChangelog=${isChangelog}`);
-
   try {
     const settings = await readAppSettings(context.accountId);
+    const projectMap = await readProjectMap(context.accountId);
+
+    // The project decides the pipeline, and the payload may not carry one —
+    // it is not confirmed that Linear sends it, and no fixture shows it. So
+    // look it up, but only when a map exists to consult: with no map the label
+    // decides and the extra call would be pure cost on every webhook.
+    let projectId = payload.data.project?.id ?? null;
+    if (!projectId && Object.keys(projectMap).length > 0) {
+      const apiKey = process.env.LINEAR_API_KEY;
+      if (apiKey) projectId = await getIssueProjectId(apiKey, payload.data.id);
+    }
+
+    const kind = classifyIssue(payload.data.labels ?? [], projectId, projectMap);
+    const isChangelog = kind === 'changelog';
+
+    console.log(`LinearWebhook: action=${payload.action} issueId=${payload.data.id} project=${projectId ?? 'none'} kind=${kind}`);
+
+    // A project mapped to "ignore" is work that has no business in the
+    // pipeline. Checked after the echo and settings guards, before anything
+    // reads or writes a record.
+    if (kind === 'ignore') {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ skipped: true, reason: 'project mapped to ignore' }),
+      };
+    }
 
     // Refuse everything until the settings have actually been answered.
     //
@@ -77,7 +101,7 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     // empty team now means "any team, filtered by assignee", not "no filter at
     // all". Without that gate above this line, this is the code that accepted
     // every team on an unconfigured portal.
-    if (settings.linearTeamId && payload.data.team.id !== settings.linearTeamId) {
+    if (!isAnyTeam(settings.linearTeamId) && payload.data.team.id !== settings.linearTeamId) {
       return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'not configured team' }) };
     }
 
