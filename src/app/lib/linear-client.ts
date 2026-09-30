@@ -166,14 +166,14 @@ interface LinearIssueNode {
  * configured AND the payload carried no project — with no map the label
  * decides and this is never reached.
  */
-export async function getIssueProjectId(apiKey: string, issueId: string): Promise<string | null> {
+export async function getIssueProject(apiKey: string, issueId: string): Promise<{ id: string; name: string } | null> {
   try {
-    const data = await gql<{ issue: { project?: { id: string } | null } | null }>(
+    const data = await gql<{ issue: { project?: { id: string; name: string } | null } | null }>(
       apiKey,
-      `query($issueId: String!) { issue(id: $issueId) { project { id } } }`,
+      `query($issueId: String!) { issue(id: $issueId) { project { id name } } }`,
       { issueId },
     );
-    return data.issue?.project?.id ?? null;
+    return data.issue?.project ?? null;
   } catch (err) {
     // An unreachable lookup must not fail the webhook. Returning null means
     // the label decides, which is the behaviour that predates the map.

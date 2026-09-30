@@ -1,6 +1,6 @@
 import type { LinearWebhookPayload, UpsertResult } from './types';
 import { LINEAR_STATE_TO_CONTENT_STAGE, LINEAR_STATE_TO_CHANGELOG_STAGE } from './mapping';
-import { parseProjectMap, type ProjectMap } from './mapping';
+import { parseProjectMap, parseUnmappedProjects, type ProjectMap, type UnmappedProject } from './mapping';
 import { getPortalConfig, DEFAULT_APP_SETTINGS } from './portal-config';
 import type { AppSettings } from './portal-config';
 import {
@@ -362,14 +362,47 @@ export async function readAppSettings(portalId: number): Promise<AppSettings> {
  * failure, which means label-only classification — the behaviour that predates
  * the map, and a safer degradation than refusing to sync.
  */
-export async function readProjectMap(portalId: number): Promise<ProjectMap> {
+export async function readProjectState(
+  portalId: number,
+): Promise<{ recordId: string | null; map: ProjectMap; unmapped: UnmappedProject[] }> {
   const objectTypeId = getPortalConfig(portalId).appConfig.objectTypeId;
-  if (!objectTypeId) return {};
+  if (!objectTypeId) return { recordId: null, map: {}, unmapped: [] };
   try {
-    const response = await hsSearch(objectTypeId, [], ['linear_project_map']);
-    return parseProjectMap(response.results[0]?.properties.linear_project_map);
+    const response = await hsSearch(objectTypeId, [], ['linear_project_map', 'linear_unmapped_projects']);
+    const record = response.results[0];
+    return {
+      recordId: record?.id ?? null,
+      map: parseProjectMap(record?.properties.linear_project_map),
+      unmapped: parseUnmappedProjects(record?.properties.linear_unmapped_projects),
+    };
   } catch {
-    return {};
+    return { recordId: null, map: {}, unmapped: [] };
+  }
+}
+
+/**
+ * Record a project the sync has seen but nobody has mapped.
+ *
+ * Written only when the project is genuinely new — already-seen and
+ * already-mapped projects write nothing, so the common case costs one read
+ * that was happening anyway. A failure here is swallowed: not noticing a new
+ * project is a missed prompt, and must never cost the sync the issue itself.
+ */
+export async function recordUnmappedProject(
+  portalId: number,
+  recordId: string,
+  seen: UnmappedProject[],
+  project: UnmappedProject,
+): Promise<void> {
+  const objectTypeId = getPortalConfig(portalId).appConfig.objectTypeId;
+  if (!objectTypeId || !recordId) return;
+  try {
+    const next = [...seen, project];
+    await hsUpdate(objectTypeId, recordId, {
+      linear_unmapped_projects: JSON.stringify(next),
+    });
+  } catch (err) {
+    console.error('Could not record an unmapped project:', err instanceof Error ? err.message : err);
   }
 }
 
