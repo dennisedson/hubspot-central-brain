@@ -424,9 +424,6 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
       for (const id of Object.keys(projectMap)) {
         if (!seen.has(id)) extras.push({ id, name: id });
       }
-      for (const u of unmapped) {
-        if (!seen.has(u.id)) extras.push({ id: u.id, name: u.name });
-      }
       const projects = [...memberProjects, ...extras.sort(byName)];
 
       return {
@@ -495,14 +492,11 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
       const map = parseProjectMap(projectMapRaw);
       properties.linear_project_map = JSON.stringify(map);
 
-      // Anything the new map covers is decided, so it stops being a prompt.
-      // Done here rather than in the page so the list cannot drift from the
-      // map that supposedly resolved it.
-      const existing = await hsSearch(objectTypeId, ['linear_unmapped_projects'], token);
-      const stillUnmapped = parseUnmappedProjects(
-        existing.results[0]?.properties.linear_unmapped_projects,
-      ).filter(u => !map[u.id]);
-      properties.linear_unmapped_projects = JSON.stringify(stillUnmapped);
+      // Clear all unmapped projects on save. The routing list now shows only
+      // the assignee's projects, so the old unmapped list (recorded before
+      // filtering existed) is stale noise. The webhook will re-record any
+      // genuinely new project it encounters after this save.
+      properties.linear_unmapped_projects = JSON.stringify([]);
     }
 
     try {
