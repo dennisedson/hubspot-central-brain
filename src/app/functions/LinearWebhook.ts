@@ -181,7 +181,7 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     const pipelineKey: 'content' | 'changelog' = isChangelog ? 'changelog' : 'content';
     const pipelineConfig = portalConfig.content.pipelines[pipelineKey];
     const forwardMap = isChangelog ? CHANGELOG_STAGE_TO_LINEAR_STATE : CONTENT_STAGE_TO_LINEAR_STATE;
-    const currentStageId = await getCurrentStage(portalConfig.content.objectTypeId, payload.data.id);
+    const currentStageId = await getCurrentStage(pipelineConfig.objectTypeId, payload.data.id);
     console.log(`LinearWebhook: getCurrentStage=${currentStageId} incomingState=${payload.data.state.name} issueId=${payload.data.id}`);
     if (currentStageId) {
       const stageIds = pipelineConfig.stageIds;

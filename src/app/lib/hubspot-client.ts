@@ -147,7 +147,7 @@ export async function upsertContent(
   const stageName = stateMap[data.state.name] ?? (pipelineKey === 'changelog' ? 'identified' : 'idea');
   const pipelineConfig = config.content.pipelines[pipelineKey];
   const stageId = pipelineConfig.stageIds[stageName] ?? stageName;
-  const objectTypeId = config.content.objectTypeId;
+  const objectTypeId = pipelineConfig.objectTypeId;
 
   // Skip if the record already has this exact stage — prevents duplicate workflow
   // triggers when Linear fires two rapid webhook events for the same action

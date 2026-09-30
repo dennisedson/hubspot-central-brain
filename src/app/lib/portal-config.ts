@@ -49,6 +49,7 @@ export function isConfigured(settings: AppSettings): boolean {
 }
 
 interface PipelineConfig {
+  objectTypeId: string;
   pipelineId: string;
   stageIds: Record<string, string>;
 }
@@ -95,6 +96,7 @@ const CONFIGS: Record<number, PortalConfig> = {
       objectTypeId: '2-67505887',
       pipelines: {
         content: {
+          objectTypeId: '2-67505887',
           pipelineId: '926238627',
           stageIds: {
             idea: '1418659999',
@@ -107,6 +109,7 @@ const CONFIGS: Record<number, PortalConfig> = {
           },
         },
         changelog: {
+          objectTypeId: '2-67505888',
           pipelineId: '929918080',
           stageIds: {
             identified: '1426412984',
@@ -140,6 +143,7 @@ const CONFIGS: Record<number, PortalConfig> = {
       objectTypeId: '2-67508928',
       pipelines: {
         content: {
+          objectTypeId: '2-67508928',
           pipelineId: '926239383',
           stageIds: {
             idea: '1418723716',
@@ -152,6 +156,7 @@ const CONFIGS: Record<number, PortalConfig> = {
           },
         },
         changelog: {
+          objectTypeId: '2-67508929',
           pipelineId: '940329858',
           stageIds: {
             identified: '1448428649',
