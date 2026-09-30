@@ -155,6 +155,47 @@ export async function getLinearProjects(apiKey: string): Promise<LinearTeam[]> {
   return projects.sort(byName);
 }
 
+/**
+ * Projects where a specific person is a member.
+ *
+ * Queries through the user object (`user.projects`) rather than a top-level
+ * `projects(filter: ...)` — the collection-relation filter syntax varies
+ * between Linear API versions and silently returns nothing when wrong, while
+ * the user-scoped connection is stable.
+ */
+async function getMemberProjects(apiKey: string, memberId: string): Promise<LinearTeam[]> {
+  const projects: LinearTeam[] = [];
+  let after: string | null = null;
+
+  try {
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const data = await linearQuery(
+        `query($first: Int!, $after: String, $memberId: String!) {
+           user(id: $memberId) {
+             projects(first: $first, after: $after) {
+               nodes { id name }
+               pageInfo { hasNextPage endCursor }
+             }
+           }
+         }`,
+        { first: LINEAR_PAGE_SIZE, after, memberId },
+        apiKey,
+      );
+
+      const conn = (data.data?.user as { projects?: { nodes: LinearTeam[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } } | undefined)
+        ?.projects;
+      if (!conn) break;
+      projects.push(...(conn.nodes ?? []));
+      if (!conn.pageInfo?.hasNextPage || !conn.pageInfo.endCursor) break;
+      after = conn.pageInfo.endCursor;
+    }
+  } catch {
+    return projects;
+  }
+
+  return projects.sort(byName);
+}
+
 async function getLinearTeamMembers(teamId: string, apiKey: string): Promise<LinearMember[]> {
   try {
     const data = await linearQuery(
@@ -354,7 +395,34 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
           : Promise.resolve<LinearMember[]>([]),
       ]);
 
-      const projects = linearApiKey ? await getLinearProjects(linearApiKey) : [];
+      const projectMap = parseProjectMap(record?.properties.linear_project_map);
+      const unmapped = parseUnmappedProjects(record?.properties.linear_unmapped_projects);
+
+      const useFilter = settings.assigneeFilter === 'mine' && settings.linearAssigneeId;
+      let memberProjects: LinearTeam[] = [];
+      if (linearApiKey) {
+        if (useFilter) {
+          memberProjects = await getMemberProjects(linearApiKey, settings.linearAssigneeId);
+          // Graceful fallback: if the user-scoped query returned nothing (API
+          // mismatch, permissions, or the member genuinely has no projects),
+          // show all projects so the settings page is usable rather than empty.
+          if (memberProjects.length === 0) {
+            memberProjects = await getLinearProjects(linearApiKey);
+          }
+        } else {
+          memberProjects = await getLinearProjects(linearApiKey);
+        }
+      }
+
+      const seen = new Set(memberProjects.map(p => p.id));
+      const extras: LinearTeam[] = [];
+      for (const id of Object.keys(projectMap)) {
+        if (!seen.has(id)) extras.push({ id, name: id });
+      }
+      for (const u of unmapped) {
+        if (!seen.has(u.id)) extras.push({ id: u.id, name: u.name });
+      }
+      const projects = [...memberProjects, ...extras.sort(byName)];
 
       return {
         statusCode: 200,
@@ -363,8 +431,8 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
           teams,
           teamMembers,
           projects,
-          projectMap: parseProjectMap(record?.properties.linear_project_map),
-          unmappedProjects: parseUnmappedProjects(record?.properties.linear_unmapped_projects),
+          projectMap,
+          unmappedProjects: unmapped,
         }),
       };
     } catch (err) {
