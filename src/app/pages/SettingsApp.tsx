@@ -62,6 +62,26 @@ interface SettingsResponse extends AppSettings {
   unmappedProjects: UnmappedProject[];
 }
 
+// --- Import types ---
+
+interface PreviewIssue {
+  id: string;
+  identifier: string;
+  title: string;
+  state: string;
+  team: string;
+  project: string | null;
+  kind: ProjectKind;
+}
+
+interface ImportResult {
+  requested: number;
+  imported: number;
+  created: number;
+  updated: number;
+  errors: string[];
+}
+
 // --- Pipeline types ---
 
 interface PipelineStage {
@@ -270,6 +290,12 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorDetail, setErrorDetail] = useState<string>('');
+  const [previewIssues, setPreviewIssues] = useState<PreviewIssue[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   useEffect(() => {
     callApi('getSettings', { portalId: String(portalId) })
@@ -335,6 +361,63 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
       .catch(() => setStatus('error'))
       .finally(() => setSaving(false));
   }, [portalId, settings, projectMap]);
+
+  const handlePreview = useCallback(() => {
+    setPreviewLoading(true);
+    setImportError(null);
+    setImportResult(null);
+    callApi('backfillPreview', { portalId: String(portalId) })
+      .then(res => {
+        if (res.statusCode === 200) {
+          const data = JSON.parse(res.body) as { issues: PreviewIssue[] };
+          setPreviewIssues(data.issues);
+          setSelectedIds(new Set(data.issues.map(i => i.id)));
+        } else {
+          const data = JSON.parse(res.body) as { error?: string };
+          setImportError(data.error ?? 'Preview failed');
+        }
+      })
+      .catch((err: unknown) => {
+        setImportError(err instanceof Error ? err.message : 'Preview failed');
+      })
+      .finally(() => setPreviewLoading(false));
+  }, [portalId]);
+
+  const toggleIssue = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleAll = useCallback(() => {
+    setSelectedIds(prev =>
+      prev.size === previewIssues.length
+        ? new Set<string>()
+        : new Set(previewIssues.map(i => i.id)),
+    );
+  }, [previewIssues]);
+
+  const handleImport = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    setImportLoading(true);
+    setImportResult(null);
+    setImportError(null);
+    callApi('backfill', { portalId: String(portalId), ids: Array.from(selectedIds).join(',') })
+      .then(res => {
+        if (res.statusCode === 200) {
+          setImportResult(JSON.parse(res.body) as ImportResult);
+        } else {
+          const data = JSON.parse(res.body) as { error?: string; detail?: string };
+          setImportError(data.detail ?? data.error ?? 'Import failed');
+        }
+      })
+      .catch((err: unknown) => {
+        setImportError(err instanceof Error ? err.message : 'Import failed');
+      })
+      .finally(() => setImportLoading(false));
+  }, [portalId, selectedIds]);
 
   if (loading) {
     return (
@@ -468,6 +551,81 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
       <Button onClick={handleSave} disabled={saving || !canSave} variant="primary">
         {saving ? 'Saving…' : 'Save settings'}
       </Button>
+
+      <Divider />
+
+      <Heading>Historical Import</Heading>
+
+      {!canSave ? (
+        <Alert title="Configure settings first" variant="info">
+          <Text>Set your team, assignee, and project mappings above, then save before importing.</Text>
+        </Alert>
+      ) : (
+        <Flex direction="column" gap="small">
+          <Text>Preview existing Linear issues and choose which to import into HubSpot.</Text>
+          <Box>
+            <Button onClick={handlePreview} disabled={previewLoading} variant="secondary">
+              {previewLoading ? 'Loading preview…' : 'Preview Eligible Issues'}
+            </Button>
+          </Box>
+
+          {importError && (
+            <Alert title="Error" variant="error">
+              <Text>{importError}</Text>
+            </Alert>
+          )}
+
+          {previewIssues.length > 0 && !importResult && (
+            <Flex direction="column" gap="small">
+              <Flex justify="between" align="center">
+                <Text format={{ fontWeight: 'bold' }}>{selectedIds.size} of {previewIssues.length} issues selected</Text>
+                <Button onClick={toggleAll} variant="transparent" size="sm">
+                  {selectedIds.size === previewIssues.length ? 'Deselect All' : 'Select All'}
+                </Button>
+              </Flex>
+
+              {previewIssues.map(issue => (
+                <Flex key={issue.id} align="center" gap="small">
+                  <Button
+                    onClick={() => toggleIssue(issue.id)}
+                    variant={selectedIds.has(issue.id) ? 'primary' : 'secondary'}
+                    size="sm"
+                  >
+                    {selectedIds.has(issue.id) ? '✓' : '○'}
+                  </Button>
+                  <Tag variant={issue.kind === 'changelog' ? 'warning' : 'info'}>{issue.kind}</Tag>
+                  <Flex direction="column" gap="extra-small">
+                    <Text format={{ fontWeight: 'bold' }}>{issue.identifier}: {issue.title}</Text>
+                    <Text variant="microcopy">{issue.state}{issue.project ? ` · ${issue.project}` : ''}</Text>
+                  </Flex>
+                </Flex>
+              ))}
+
+              <Box>
+                <Button
+                  onClick={handleImport}
+                  disabled={importLoading || selectedIds.size === 0}
+                  variant="primary"
+                >
+                  {importLoading ? 'Importing…' : `Import ${selectedIds.size} Issue${selectedIds.size === 1 ? '' : 's'}`}
+                </Button>
+              </Box>
+            </Flex>
+          )}
+
+          {importResult && (
+            <Alert
+              title="Import complete"
+              variant={importResult.errors.length > 0 ? 'warning' : 'success'}
+            >
+              <Text>
+                Created {importResult.created}, updated {importResult.updated}
+                {importResult.errors.length > 0 ? `. ${importResult.errors.length} error(s).` : ''}
+              </Text>
+            </Alert>
+          )}
+        </Flex>
+      )}
     </Form>
   );
 }
