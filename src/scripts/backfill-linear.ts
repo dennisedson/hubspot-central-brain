@@ -170,7 +170,7 @@ async function main() {
 
   const { readAppSettings, upsertContent } = await import('../app/lib/hubspot-client');
   const { isConfigured } = await import('../app/lib/portal-config');
-  const { LINEAR_CHANGELOG_LABEL, HS_SYNC_TAG } = await import('../app/lib/mapping');
+  const { HS_SYNC_TAG } = await import('../app/lib/mapping');
 
   const settings = await readAppSettings(portalId);
 
