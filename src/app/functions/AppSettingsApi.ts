@@ -54,88 +54,105 @@ const LINEAR_PAGE_SIZE = 250;
 const MAX_PAGES = 25;
 
 /**
- * Every Linear team the API key can see, paged.
+ * Every node of a Linear connection, paged.
  *
- * Paging is not optional here. The query used to be `teams { nodes { … } }`
- * with no arguments, and Linear defaults a connection to **50** — so on a large
- * workspace the settings page offered the first fifty teams in whatever order
- * the API returned them, with no indication that more existed. Prod returned
- * exactly 50 out of several hundred, which reads as "my team is missing"
- * rather than "this list is truncated".
+ * Shared because this was the same bug three times. Linear defaults a
+ * connection to 50 and caps a page at 250, so a single request is a page, not
+ * a set — and a truncated list does not look truncated once it is sorted.
+ * Measured against the live workspace: 452 active users, of which one page
+ * held 250, ordered "Abby Mueller … Zhuangda Zhu" — a complete-looking A-to-Z
+ * sweep missing 202 people from the middle. The person configuring the portal
+ * was #347, so he could not find himself in the list of people he might be.
+ *
+ * Returns what it has if a later page fails: a partial list beats nothing, as
+ * long as no caller sorts it into looking whole without paging first.
  */
-export async function getLinearTeams(apiKey: string): Promise<LinearTeam[]> {
-  const teams: LinearTeam[] = [];
+async function fetchAllPages<T>(
+  apiKey: string,
+  connection: 'teams' | 'users' | 'projects',
+  query: string,
+): Promise<T[]> {
+  const nodes: T[] = [];
   let after: string | null = null;
 
   try {
     for (let page = 0; page < MAX_PAGES; page++) {
       const data: { data: Record<string, unknown> } = await linearQuery(
-        `query($first: Int!, $after: String) {
-           teams(first: $first, after: $after) {
-             nodes { id name }
-             pageInfo { hasNextPage endCursor }
-           }
-         }`,
+        query,
         { first: LINEAR_PAGE_SIZE, after },
         apiKey,
       );
 
-      const connection = data.data?.teams as
-        | { nodes: LinearTeam[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } }
+      const conn = data.data?.[connection] as
+        | { nodes: T[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } }
         | undefined;
-      if (!connection) break;
+      if (!conn) break;
 
-      teams.push(...(connection.nodes ?? []));
-      if (!connection.pageInfo?.hasNextPage || !connection.pageInfo.endCursor) break;
-      after = connection.pageInfo.endCursor;
+      nodes.push(...(conn.nodes ?? []));
+      if (!conn.pageInfo?.hasNextPage || !conn.pageInfo.endCursor) break;
+      after = conn.pageInfo.endCursor;
     }
   } catch {
-    // An empty list renders as "no teams" in the settings page, which is a
-    // better failure than a half-page presented as the whole set — but return
-    // what we already have rather than discarding it.
-    return teams;
+    return nodes;
   }
 
-  // Alphabetical, because the API's order is not meaningful and a person
-  // scanning several hundred names needs somewhere to start.
-  return teams.sort((a, b) => a.name.localeCompare(b.name));
+  return nodes;
+}
+
+/** The API's order is not meaningful, and a person scanning hundreds of names needs somewhere to start. */
+function byName<T extends { name: string }>(a: T, b: T): number {
+  return a.name.localeCompare(b.name);
+}
+
+/** Every Linear team the API key can see. */
+export async function getLinearTeams(apiKey: string): Promise<LinearTeam[]> {
+  const teams = await fetchAllPages<LinearTeam>(
+    apiKey,
+    'teams',
+    `query($first: Int!, $after: String) {
+       teams(first: $first, after: $after) {
+         nodes { id name }
+         pageInfo { hasNextPage endCursor }
+       }
+     }`,
+  );
+  return teams.sort(byName);
 }
 
 /**
- * Everyone in the workspace.
+ * Everyone active in the workspace.
  *
  * Needed because the assignee list used to come from the selected team, and
- * with "Any team" there is no team to ask. Paging is not required here — a
- * workspace fits comfortably under one page — but the count is capped so a
- * very large org cannot stall the settings page.
+ * with "Any team" there is no team to ask. Suspended accounts are filtered
+ * out — they are not people anyone should be able to declare themselves to be.
  */
-/** Every Linear project, so the settings page can offer a row per project. */
-async function getLinearProjects(apiKey: string): Promise<LinearTeam[]> {
-  try {
-    const data = await linearQuery(
-      `query { projects(first: 250) { nodes { id name } } }`,
-      {},
-      apiKey,
-    );
-    const nodes = (data.data?.projects as { nodes: LinearTeam[] } | undefined)?.nodes ?? [];
-    return nodes.sort((a, b) => a.name.localeCompare(b.name));
-  } catch {
-    return [];
-  }
+export async function getWorkspaceMembers(apiKey: string): Promise<LinearMember[]> {
+  const users = await fetchAllPages<LinearMember>(
+    apiKey,
+    'users',
+    `query($first: Int!, $after: String) {
+       users(first: $first, after: $after, filter: { active: { eq: true } }) {
+         nodes { id name }
+         pageInfo { hasNextPage endCursor }
+       }
+     }`,
+  );
+  return users.sort(byName);
 }
 
-async function getWorkspaceMembers(apiKey: string): Promise<LinearMember[]> {
-  try {
-    const data = await linearQuery(
-      `query { users(first: 250, filter: { active: { eq: true } }) { nodes { id name } } }`,
-      {},
-      apiKey,
-    );
-    const users = (data.data?.users as { nodes: LinearMember[] } | undefined)?.nodes ?? [];
-    return users.sort((a, b) => a.name.localeCompare(b.name));
-  } catch {
-    return [];
-  }
+/** Every Linear project, so the settings page can offer a row per project. */
+export async function getLinearProjects(apiKey: string): Promise<LinearTeam[]> {
+  const projects = await fetchAllPages<LinearTeam>(
+    apiKey,
+    'projects',
+    `query($first: Int!, $after: String) {
+       projects(first: $first, after: $after) {
+         nodes { id name }
+         pageInfo { hasNextPage endCursor }
+       }
+     }`,
+  );
+  return projects.sort(byName);
 }
 
 async function getLinearTeamMembers(teamId: string, apiKey: string): Promise<LinearMember[]> {

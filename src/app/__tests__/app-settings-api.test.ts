@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getLinearTeams, main } from '../functions/AppSettingsApi';
+import { getLinearTeams, getWorkspaceMembers, getLinearProjects, main } from '../functions/AppSettingsApi';
 
 /**
  * Listing Linear teams for the settings page.
@@ -219,5 +219,108 @@ describe('assignee options with the "any team" sentinel', () => {
     const body = JSON.parse(res.body) as { teamMembers: Array<{ id: string }> };
 
     expect(body.teamMembers.map(m => m.id)).toEqual(['u-team']);
+  });
+});
+
+/**
+ * Paging the other two Linear connections.
+ *
+ * This is the third time the same bug. `getLinearTeams` was fixed when prod
+ * returned 50 teams of several hundred; the two lookups written afterwards
+ * copied the shape of the broken version, asking for one page and presenting
+ * it as the whole set.
+ *
+ * Measured against the live workspace: 452 active users, of which the single
+ * page held 250 — and the person configuring the portal was #347, so he was
+ * missing from the list of people he could declare himself to be.
+ *
+ * What makes it invisible is the sort. Truncate to an arbitrary 250 and then
+ * order alphabetically and the result reads "Abby Mueller … Zhuangda Zhu" — a
+ * complete-looking A-to-Z sweep with 202 people absent from the middle. A
+ * truncated list must never be sorted into looking whole.
+ */
+
+function connectionPage(
+  key: 'users' | 'projects',
+  names: string[],
+  hasNextPage: boolean,
+  endCursor: string | null = 'CUR',
+) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      data: {
+        [key]: {
+          nodes: names.map(name => ({ id: `id-${name}`, name })),
+          pageInfo: { hasNextPage, endCursor },
+        },
+      },
+    }),
+    text: async () => '',
+  } as unknown as Response;
+}
+
+describe('getWorkspaceMembers', () => {
+  it('follows pagination instead of returning the first 250', async () => {
+    mockFetch()
+      .mockResolvedValueOnce(connectionPage('users', ['Abby'], true, 'cur-1'))
+      .mockResolvedValueOnce(connectionPage('users', ['Dennis'], false, null));
+
+    const members = await getWorkspaceMembers('key');
+
+    expect(members.map(m => m.name)).toEqual(['Abby', 'Dennis']);
+    expect(mockFetch().mock.calls).toHaveLength(2);
+  });
+
+  it('asks for 250 per page and passes the cursor', async () => {
+    mockFetch()
+      .mockResolvedValueOnce(connectionPage('users', ['A'], true, 'cur-abc'))
+      .mockResolvedValueOnce(connectionPage('users', ['B'], false, null));
+
+    await getWorkspaceMembers('key');
+
+    const first = JSON.parse(mockFetch().mock.calls[0][1].body as string);
+    const second = JSON.parse(mockFetch().mock.calls[1][1].body as string);
+    expect(first.variables.first).toBe(250);
+    expect(first.variables.after).toBeNull();
+    expect(second.variables.after).toBe('cur-abc');
+  });
+
+  it('still asks only for active users', async () => {
+    // Suspended accounts are not people anyone should be able to pick.
+    mockFetch().mockResolvedValueOnce(connectionPage('users', ['A'], false, null));
+    await getWorkspaceMembers('key');
+
+    const body = JSON.parse(mockFetch().mock.calls[0][1].body as string);
+    expect(body.query).toContain('active');
+  });
+
+  it('keeps the pages it has when a later one fails', async () => {
+    mockFetch()
+      .mockResolvedValueOnce(connectionPage('users', ['Kept'], true, 'cur-1'))
+      .mockRejectedValueOnce(new Error('network'));
+
+    expect((await getWorkspaceMembers('key')).map(m => m.name)).toEqual(['Kept']);
+  });
+});
+
+describe('getLinearProjects', () => {
+  it('follows pagination instead of returning the first 250', async () => {
+    mockFetch()
+      .mockResolvedValueOnce(connectionPage('projects', ['Rollouts'], true, 'cur-1'))
+      .mockResolvedValueOnce(connectionPage('projects', ['Advocacy'], false, null));
+
+    const projects = await getLinearProjects('key');
+
+    expect(projects.map(p => p.name)).toEqual(['Advocacy', 'Rollouts']);
+    expect(mockFetch().mock.calls).toHaveLength(2);
+  });
+
+  it('caps the page count so a bad cursor cannot spin forever', async () => {
+    mockFetch().mockResolvedValue(connectionPage('projects', ['Loop'], true, 'same-cursor'));
+    await getLinearProjects('key');
+
+    expect(mockFetch().mock.calls.length).toBeLessThanOrEqual(25);
   });
 });
