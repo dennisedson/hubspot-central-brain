@@ -11,7 +11,6 @@ import {
   Button,
   Alert,
   Divider,
-  Checkbox,
   LoadingSpinner,
 } from '@hubspot/ui-extensions';
 import { PageTitle } from '@hubspot/ui-extensions/pages';
@@ -42,26 +41,12 @@ interface AppSettings {
   linearAssigneeId: string;
 }
 
-interface PreviewIssue {
-  id: string;
-  identifier: string;
-  title: string;
-  state: string;
-  team: string;
-  project: string | null;
-  kind: 'content' | 'changelog';
-}
-
 interface LinearOption {
   id: string;
   name: string;
 }
 
-type ProjectKind = 'content' | 'changelog' | 'ignore';
-
 interface SettingsResponse extends AppSettings {
-  projects?: LinearOption[];
-  projectMap?: Record<string, ProjectKind>;
   teams: LinearOption[];
   teamMembers: LinearOption[];
 }
@@ -266,21 +251,11 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
   });
   const [teams, setTeams] = useState<LinearOption[]>([]);
   const [teamMembers, setTeamMembers] = useState<LinearOption[]>([]);
-  const [projects, setProjects] = useState<LinearOption[]>([]);
-  const [projectMap, setProjectMap] = useState<Record<string, ProjectKind>>({});
   const [loading, setLoading] = useState(true);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorDetail, setErrorDetail] = useState<string>('');
-
-  const [previewing, setPreviewing] = useState(false);
-  const [preview, setPreview] = useState<PreviewIssue[] | null>(null);
-  const [previewMeta, setPreviewMeta] = useState({ scanned: 0, skippedAssignee: 0 });
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
-  const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<string>('');
-  const [importError, setImportError] = useState('');
 
   useEffect(() => {
     callApi('getSettings', { portalId: String(portalId) })
@@ -294,8 +269,6 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
           });
           setTeams(data.teams ?? []);
           setTeamMembers(data.teamMembers ?? []);
-          setProjects(data.projects ?? []);
-          setProjectMap(data.projectMap ?? {});
         } else {
           const data = JSON.parse(res.body) as { error?: string; detail?: string };
           setErrorDetail(`${res.statusCode}: ${data.detail ?? data.error ?? res.body}`);
@@ -331,7 +304,6 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
       linearTeamId: settings.linearTeamId,
       assigneeFilter: settings.assigneeFilter,
       linearAssigneeId: settings.linearAssigneeId,
-      projectMap: JSON.stringify(projectMap),
     })
       .then(res => {
         if (res.statusCode === 200) {
@@ -366,75 +338,15 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
   }
 
   const teamOptions = [
-    { label: 'Any team — filter by assignee only', value: '' },
+    { label: 'Any team — filter by assignee only', value: 'any' },
     ...teams.map(t => ({ label: t.name, value: t.id })),
   ];
   const memberOptions = teamMembers.map(m => ({ label: m.name, value: m.id }));
-
   // Mirrors isConfigured on the server: a team bounds the sync, or a named
   // assignee does.
   const canSave = settings.assigneeFilter === 'mine'
     ? !!settings.linearAssigneeId
     : !!settings.linearTeamId;
-
-  // Read-only. Nothing is written until the import button below, which is the
-  // point — a button that silently created 83 records was the wrong design.
-  const runPreview = useCallback(async () => {
-    setPreviewing(true);
-    setImportError('');
-    setImportResult('');
-    try {
-      const res = await callApi('backfillPreview', { portalId: String(portalId) });
-      const parsed = JSON.parse(res.body || '{}');
-      if (res.statusCode !== 200) throw new Error(parsed.error || `HTTP ${res.statusCode}`);
-      const issues: PreviewIssue[] = parsed.issues ?? [];
-      setPreview(issues);
-      setPreviewMeta({ scanned: parsed.scanned ?? 0, skippedAssignee: parsed.skippedAssignee ?? 0 });
-      // Everything ticked by default: the common case is importing the lot,
-      // and unticking a few is less work than ticking eighty.
-      setSelected(Object.fromEntries(issues.map(i => [i.id, true])));
-    } catch (err) {
-      setImportError(err instanceof Error ? err.message : 'Preview failed');
-    } finally {
-      setPreviewing(false);
-    }
-  }, [portalId]);
-
-  const runImport = useCallback(async () => {
-    const ids = Object.entries(selected).filter(([, on]) => on).map(([id]) => id);
-    if (ids.length === 0) return;
-
-    setImporting(true);
-    setImportError('');
-    try {
-      // Batched so no single request has to finish the whole set. The page
-      // holds the list, so there is no stored cursor to go stale.
-      let created = 0, updated = 0;
-      const failures: string[] = [];
-      for (let i = 0; i < ids.length; i += 10) {
-        const res = await callApi('backfill', {
-          portalId: String(portalId),
-          ids: ids.slice(i, i + 10).join(','),
-        });
-        const parsed = JSON.parse(res.body || '{}');
-        if (res.statusCode !== 200) throw new Error(parsed.error || `HTTP ${res.statusCode}`);
-        created += parsed.created ?? 0;
-        updated += parsed.updated ?? 0;
-        if (parsed.errors?.length) failures.push(...parsed.errors);
-      }
-      setImportResult(
-        `Created ${created}, updated ${updated}` + (failures.length ? `, ${failures.length} failed` : '') + '.',
-      );
-      if (failures.length) setImportError(failures[0]);
-      setPreview(null);
-    } catch (err) {
-      setImportError(err instanceof Error ? err.message : 'Import failed');
-    } finally {
-      setImporting(false);
-    }
-  }, [portalId, selected]);
-
-  const selectedCount = Object.values(selected).filter(Boolean).length;
 
   return (
     <Form>
@@ -495,106 +407,6 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
       <Button onClick={handleSave} disabled={saving || !canSave} variant="primary">
         {saving ? 'Saving…' : 'Save settings'}
       </Button>
-
-      <Divider />
-
-      <Heading>Project mapping</Heading>
-      <Text variant="microcopy">
-        What issues in each Linear project become here. Unmapped projects default to
-        Content. Choose <strong>Do not import</strong> for projects that are plain work
-        rather than something you publish.
-      </Text>
-
-      {projects.length === 0 ? (
-        <Text variant="microcopy">
-          No Linear projects found. Check LINEAR_API_KEY, or this workspace has none.
-        </Text>
-      ) : (
-        projects.slice(0, 60).map(project => (
-          <Select
-            key={project.id}
-            label={project.name}
-            name={`project-${project.id}`}
-            value={projectMap[project.id] ?? 'content'}
-            onChange={value =>
-              setProjectMap(prev => ({ ...prev, [project.id]: value as ProjectKind }))
-            }
-            options={[
-              { label: 'Content', value: 'content' },
-              { label: 'Changelog', value: 'changelog' },
-              { label: 'Do not import', value: 'ignore' },
-            ]}
-          />
-        ))
-      )}
-
-      {projects.length > 60 && (
-        <Text variant="microcopy">
-          Showing the first 60 of {projects.length} projects.
-        </Text>
-      )}
-
-      <Divider />
-
-      <Heading>Import existing issues</Heading>
-      <Text variant="microcopy">
-        The webhook only picks up issues as they change, so anything that existed before you
-        connected Linear will not appear on its own. Preview first — nothing is written until
-        you choose to import. Linear itself is never modified.
-      </Text>
-
-      {previewing && <LoadingSpinner label="Reading Linear…" />}
-
-      {importResult && <Alert title={importResult} variant="success" />}
-
-      {importError && (
-        <Alert title="Import problem" variant="error">
-          <Text>{importError}</Text>
-        </Alert>
-      )}
-
-      {preview === null ? (
-        <Button onClick={() => void runPreview()} disabled={previewing || !canSave}>
-          {previewing ? 'Reading…' : 'Preview import'}
-        </Button>
-      ) : (
-        <>
-          <Text>
-            {preview.length} issue{preview.length === 1 ? '' : 's'} eligible, from{' '}
-            {previewMeta.scanned} scanned. {previewMeta.skippedAssignee} skipped by your filter.
-          </Text>
-
-          {preview.slice(0, 50).map(issue => (
-            <Checkbox
-              key={issue.id}
-              name={`sel-${issue.id}`}
-              checked={!!selected[issue.id]}
-              onChange={on => setSelected(prev => ({ ...prev, [issue.id]: !!on }))}
-            >
-              {`${issue.identifier} · ${issue.kind} · ${issue.state} · ${issue.project ?? 'no project'} · ${issue.title}`}
-            </Checkbox>
-          ))}
-
-          {preview.length > 50 && (
-            <Text variant="microcopy">
-              Showing the first 50. All {preview.length} are selected and will import.
-            </Text>
-          )}
-
-          {importing && <LoadingSpinner label={`Importing ${selectedCount}…`} />}
-
-          <Button
-            onClick={() => void runImport()}
-            disabled={importing || selectedCount === 0}
-            variant="primary"
-          >
-            {importing ? 'Importing…' : `Import ${selectedCount} issue${selectedCount === 1 ? '' : 's'}`}
-          </Button>
-          <Button onClick={() => setPreview(null)} disabled={importing} variant="secondary">
-            Cancel
-          </Button>
-        </>
-      )}
     </Form>
   );
 }

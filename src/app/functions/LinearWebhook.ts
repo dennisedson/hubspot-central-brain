@@ -3,10 +3,11 @@ import {
   upsertContent,
   archiveContentByLinearId,
   readAppSettings,
-  readProjectMap,
+  readProjectState,
+  recordUnmappedProject,
 } from '../lib/hubspot-client';
 import type { LinearWebhookPayload } from '../lib/types';
-import { getIssueProjectId } from '../lib/linear-client';
+import { getIssueProject } from '../lib/linear-client';
 import {
   HS_SYNC_TAG,
   isAnyTeam,
@@ -50,16 +51,27 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
 
   try {
     const settings = await readAppSettings(context.accountId);
-    const projectMap = await readProjectMap(context.accountId);
+    const { recordId: configRecordId, map: projectMap, unmapped } = await readProjectState(context.accountId);
 
     // The project decides the pipeline, and the payload may not carry one —
     // it is not confirmed that Linear sends it, and no fixture shows it. So
     // look it up, but only when a map exists to consult: with no map the label
     // decides and the extra call would be pure cost on every webhook.
-    let projectId = payload.data.project?.id ?? null;
-    if (!projectId && Object.keys(projectMap).length > 0) {
+    let project = payload.data.project ?? null;
+    if (!project && Object.keys(projectMap).length > 0) {
       const apiKey = process.env.LINEAR_API_KEY;
-      if (apiKey) projectId = await getIssueProjectId(apiKey, payload.data.id);
+      if (apiKey) project = await getIssueProject(apiKey, payload.data.id);
+    }
+    const projectId = project?.id ?? null;
+
+    // Notice a project nobody has decided about yet. Unmapped defaults to
+    // content, so without this the first anyone knows is records appearing in
+    // the wrong place — which is how a silent default becomes a silent bug.
+    if (project && !projectMap[project.id] && !unmapped.some(u => u.id === project.id) && configRecordId) {
+      await recordUnmappedProject(context.accountId, configRecordId, unmapped, {
+        id: project.id,
+        name: project.name,
+      });
     }
 
     const kind = classifyIssue(payload.data.labels ?? [], projectId, projectMap);
