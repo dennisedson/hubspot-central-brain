@@ -1,5 +1,11 @@
 # Working in this repo
 
+**Start every session here.** Read `docs/PROJECT-CONTEXT.md` — what this
+project is, what actually works today, and the decisions that are already
+settled — and the most recent dated entries of `CHANGELOG.md`. Then confirm the
+direction you are about to take against them, and say so if it contradicts a
+decision recorded there rather than re-litigating it in code.
+
 Read `docs/ARCHITECTURE.md` before changing sync behaviour. Most of this
 repo's worst bugs came from not knowing which component owned a decision.
 
