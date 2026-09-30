@@ -556,9 +556,13 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
 
       <Heading>Historical Import</Heading>
 
-      {!canSave ? (
-        <Alert title="Configure settings first" variant="info">
-          <Text>Set your team, assignee, and project mappings above, then save before importing.</Text>
+      {!canSave || Object.keys(projectMap).length === 0 ? (
+        <Alert title={!canSave ? 'Configure settings first' : 'Map your projects first'} variant="info">
+          <Text>
+            {!canSave
+              ? 'Set your team, assignee, and project mappings above, then save before importing.'
+              : 'Assign each project above to Content, Changelog, or Ignore, then save before importing.'}
+          </Text>
         </Alert>
       ) : (
         <Flex direction="column" gap="small">

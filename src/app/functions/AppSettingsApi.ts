@@ -614,10 +614,14 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
       const { eligible, projectMap } = await eligibleIssues(token);
       const chosen = eligible.filter(i => wanted.has(i.id));
 
+      console.log(`backfill: projectMap has ${Object.keys(projectMap).length} entries`);
+
       let created = 0, updated = 0;
       const errors: string[] = [];
       for (const issue of chosen) {
-        const pipelineKey = classifyIssue(issue.labels.nodes, issue.project?.id, projectMap) === 'changelog' ? 'changelog' : 'content';
+        const kind = classifyIssue(issue.labels.nodes, issue.project?.id, projectMap);
+        const pipelineKey = kind === 'changelog' ? 'changelog' : 'content';
+        console.log(`backfill: ${issue.identifier} project=${issue.project?.id ?? 'none'} kind=${kind} pipeline=${pipelineKey}`);
         try {
           // The same upsert the webhook calls, matching on linear_id — so a
           // repeated or overlapping import updates rather than duplicating.
