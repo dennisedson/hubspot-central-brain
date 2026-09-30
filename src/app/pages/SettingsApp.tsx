@@ -46,9 +46,20 @@ interface LinearOption {
   name: string;
 }
 
+type ProjectKind = 'content' | 'changelog' | 'ignore';
+type ProjectMap = Record<string, ProjectKind>;
+
+interface UnmappedProject {
+  id: string;
+  name: string;
+}
+
 interface SettingsResponse extends AppSettings {
   teams: LinearOption[];
   teamMembers: LinearOption[];
+  projects: LinearOption[];
+  projectMap: ProjectMap;
+  unmappedProjects: UnmappedProject[];
 }
 
 // --- Pipeline types ---
@@ -251,6 +262,9 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
   });
   const [teams, setTeams] = useState<LinearOption[]>([]);
   const [teamMembers, setTeamMembers] = useState<LinearOption[]>([]);
+  const [projects, setProjects] = useState<LinearOption[]>([]);
+  const [projectMap, setProjectMap] = useState<ProjectMap>({});
+  const [unmappedProjects, setUnmappedProjects] = useState<UnmappedProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -269,6 +283,9 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
           });
           setTeams(data.teams ?? []);
           setTeamMembers(data.teamMembers ?? []);
+          setProjects(data.projects ?? []);
+          setProjectMap(data.projectMap ?? {});
+          setUnmappedProjects(data.unmappedProjects ?? []);
         } else {
           const data = JSON.parse(res.body) as { error?: string; detail?: string };
           setErrorDetail(`${res.statusCode}: ${data.detail ?? data.error ?? res.body}`);
@@ -304,6 +321,7 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
       linearTeamId: settings.linearTeamId,
       assigneeFilter: settings.assigneeFilter,
       linearAssigneeId: settings.linearAssigneeId,
+      projectMap: JSON.stringify(projectMap),
     })
       .then(res => {
         if (res.statusCode === 200) {
@@ -316,7 +334,7 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
       })
       .catch(() => setStatus('error'))
       .finally(() => setSaving(false));
-  }, [portalId, settings]);
+  }, [portalId, settings, projectMap]);
 
   if (loading) {
     return (
@@ -396,6 +414,49 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
           />
         )
       )}
+
+      <Divider />
+
+      {unmappedProjects.length > 0 && (
+        <Alert title="New Linear projects detected" variant="warning">
+          <Text>
+            {unmappedProjects.length === 1
+              ? `"${unmappedProjects[0].name}" is sending issues but has no mapping.`
+              : `${unmappedProjects.length} projects are sending issues but have no mapping.`}
+            {' '}Unmapped projects default to Content. Assign each one below, then save.
+          </Text>
+        </Alert>
+      )}
+
+      <Heading>Project Routing</Heading>
+      <Text>Route issues from each Linear project to a HubSpot pipeline, or ignore them.</Text>
+
+      {projects.length === 0 ? (
+        <Text variant="microcopy">No Linear projects found — check LINEAR_API_KEY</Text>
+      ) : (
+        projects.map(project => (
+          <Select
+            key={project.id}
+            label={project.name}
+            name={`project_${project.id}`}
+            value={projectMap[project.id] ?? ''}
+            placeholder="Unmapped (defaults to Content)"
+            onChange={value => setProjectMap(prev => {
+              const next = { ...prev };
+              if (value === '') { delete next[project.id]; } else { next[project.id] = value as ProjectKind; }
+              return next;
+            })}
+            options={[
+              { label: 'Unmapped (defaults to Content)', value: '' },
+              { label: 'Content', value: 'content' },
+              { label: 'Changelog', value: 'changelog' },
+              { label: 'Ignore', value: 'ignore' },
+            ]}
+          />
+        ))
+      )}
+
+      <Divider />
 
       {status === 'success' && <Alert title="Settings saved" variant="success" />}
       {status === 'error' && (
