@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getLinearTeams } from '../functions/AppSettingsApi';
+import { getLinearTeams, main } from '../functions/AppSettingsApi';
 
 /**
  * Listing Linear teams for the settings page.
@@ -111,5 +111,113 @@ describe('getLinearTeams', () => {
   it('returns an empty list rather than throwing when the very first call fails', async () => {
     mockFetch().mockRejectedValueOnce(new Error('unauthorised'));
     expect(await getLinearTeams('key')).toEqual([]);
+  });
+});
+
+/**
+ * Who can be picked as "you" when the team is "Any team".
+ *
+ * `ANY_TEAM` is the sentinel `'any'`, not an empty string — `linear_team_id` is
+ * the App Config object's primary display property, so HubSpot will not let it
+ * be cleared. Every consumer was taught to read it through `isAnyTeam()`
+ * except the two assignee lookups below, which still asked "is this string
+ * truthy?". `'any'` is truthy, so they queried Linear for a team whose id is
+ * literally "any", got nothing back, and returned an empty list.
+ *
+ * On screen that empty list is not an empty dropdown. The saved assignee id is
+ * still the Select's value, and with no option matching it the page renders the
+ * raw UUID and flags the field invalid — so the one person who configured the
+ * portal correctly is told their own name is a bad value.
+ */
+
+const DEV_PORTAL = 51869810;
+
+interface LinearReply { data: Record<string, unknown> }
+
+function linearReply(body: LinearReply) {
+  return { ok: true, status: 200, json: async () => body, text: async () => '' } as unknown as Response;
+}
+
+/** Routes each call by what it actually asks for, as the live APIs would. */
+function routeFetch(hsRecord: Record<string, string>) {
+  return (url: string, init?: { body?: string }) => {
+    if (!String(url).includes('api.linear.app')) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ results: [{ id: 'cfg-1', properties: hsRecord }] }),
+        text: async () => '',
+      } as unknown as Response);
+    }
+
+    const query = String(JSON.parse(init?.body ?? '{}').query ?? '');
+    if (query.includes('team(id:')) {
+      // Linear answers a bogus team id with a null node, not an HTTP error.
+      return Promise.resolve(linearReply({ data: { team: null } }));
+    }
+    if (query.includes('users(')) {
+      return Promise.resolve(
+        linearReply({ data: { users: { nodes: [{ id: 'u-dennis', name: 'Dennis Edson' }] } } }),
+      );
+    }
+    if (query.includes('projects(')) {
+      return Promise.resolve(linearReply({ data: { projects: { nodes: [] } } }));
+    }
+    return Promise.resolve(
+      linearReply({ data: { teams: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } } }),
+    );
+  };
+}
+
+describe('assignee options with the "any team" sentinel', () => {
+  beforeEach(() => {
+    process.env.PRIVATE_APP_ACCESS_TOKEN = 'hs-token';
+    process.env.LINEAR_API_KEY = 'linear-key';
+  });
+
+  it('offers the whole workspace on load when the saved team is "any"', async () => {
+    mockFetch().mockImplementation(
+      routeFetch({ linear_team_id: 'any', assignee_filter: 'mine', linear_assignee_id: 'u-dennis' }),
+    );
+
+    const res = await main({ accountId: DEV_PORTAL, parameters: { action: 'getSettings' } });
+    const body = JSON.parse(res.body) as { teamMembers: Array<{ id: string }> };
+
+    expect(res.statusCode).toBe(200);
+    expect(body.teamMembers.map(m => m.id)).toContain('u-dennis');
+  });
+
+  it('offers the whole workspace when "Any team" is chosen in the dropdown', async () => {
+    mockFetch().mockImplementation(
+      routeFetch({ linear_team_id: 'any', assignee_filter: 'mine', linear_assignee_id: '' }),
+    );
+
+    const res = await main({
+      accountId: DEV_PORTAL,
+      parameters: { action: 'loadTeamMembers', teamId: 'any' },
+    });
+    const body = JSON.parse(res.body) as { teamMembers: Array<{ id: string }> };
+
+    expect(body.teamMembers.map(m => m.id)).toContain('u-dennis');
+  });
+
+  it('still scopes to the team when a real team is selected', async () => {
+    mockFetch().mockImplementation((url: string, init?: { body?: string }) => {
+      const query = String(JSON.parse(init?.body ?? '{}').query ?? '');
+      if (String(url).includes('api.linear.app') && query.includes('team(id:')) {
+        return Promise.resolve(
+          linearReply({ data: { team: { members: { nodes: [{ id: 'u-team', name: 'Team Member' }] } } } }),
+        );
+      }
+      return routeFetch({})(url, init);
+    });
+
+    const res = await main({
+      accountId: DEV_PORTAL,
+      parameters: { action: 'loadTeamMembers', teamId: 'real-team-id' },
+    });
+    const body = JSON.parse(res.body) as { teamMembers: Array<{ id: string }> };
+
+    expect(body.teamMembers.map(m => m.id)).toEqual(['u-team']);
   });
 });
