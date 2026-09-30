@@ -1,3 +1,5 @@
+import { ANY_TEAM } from './mapping';
+
 export interface AppSettings {
   linearTeamId: string;
   assigneeFilter: 'all' | 'assigned' | 'mine';
@@ -42,7 +44,8 @@ export function isConfigured(settings: AppSettings): boolean {
   // No named person means the only thing bounding this is the team. Without
   // one, 'all' would accept every issue in the workspace — which is exactly
   // how 34 unwanted records reached production.
-  return Boolean(settings.linearTeamId);
+  // A real team, not the "any team" sentinel — which bounds nothing on its own.
+  return Boolean(settings.linearTeamId) && settings.linearTeamId !== ANY_TEAM;
 }
 
 interface PipelineConfig {

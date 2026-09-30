@@ -33,6 +33,7 @@
  */
 
 import { loadEnv } from './script-env';
+import { isAnyTeam, classifyIssue, parseProjectMap } from '../app/lib/mapping';
 
 const LINEAR_API = 'https://api.linear.app/graphql';
 
@@ -50,6 +51,7 @@ interface Issue {
   state: { id: string; name: string; type: string };
   labels: { nodes: Array<{ id: string; name: string }> };
   team: { id: string; name: string };
+  project?: { id: string; name: string } | null;
   assignee?: { id: string; name: string } | null;
 }
 
@@ -86,6 +88,7 @@ async function fetchTeamIssues(apiKey: string, teamId: string): Promise<Issue[]>
                state { id name type }
                labels { nodes { id name } }
                team { id name }
+               project { id name }
                assignee { id name }
              }
              pageInfo { hasNextPage endCursor }
@@ -122,6 +125,7 @@ async function fetchAssignedIssues(apiKey: string, assigneeId: string): Promise<
                state { id name type }
                labels { nodes { id name } }
                team { id name }
+               project { id name }
                assignee { id name }
              }
              pageInfo { hasNextPage endCursor }
@@ -144,6 +148,14 @@ async function fetchAssignedIssues(apiKey: string, assigneeId: string): Promise<
 
 async function main() {
   const apply = process.argv.includes('--apply');
+
+  // --only BLDREL-1,BLDREL-2 imports just those, by identifier. The settings
+  // page will send a selection the same way; keeping the CLI able to do it
+  // means the selection path is exercised somewhere I can actually run.
+  const onlyArg = process.argv.find(a => a.startsWith('--only='));
+  const only = onlyArg
+    ? new Set(onlyArg.slice('--only='.length).split(',').map(x => x.trim()).filter(Boolean))
+    : null;
   const { token, portalId, portal, linearApiKey } = loadEnv();
 
   if (!linearApiKey) {
@@ -158,9 +170,22 @@ async function main() {
 
   const { readAppSettings, upsertContent } = await import('../app/lib/hubspot-client');
   const { isConfigured } = await import('../app/lib/portal-config');
-  const { LINEAR_CHANGELOG_LABEL, HS_SYNC_TAG } = await import('../app/lib/mapping');
+  const { HS_SYNC_TAG } = await import('../app/lib/mapping');
 
   const settings = await readAppSettings(portalId);
+
+  // The project map lives on the same record but is not part of AppSettings,
+  // which is deliberately the three values a person chooses in the form.
+  const { HS_BASE, objectSearchPath } = await import('../app/lib/hs-api');
+  const { getPortalConfig } = await import('../app/lib/portal-config');
+  const appConfigType = getPortalConfig(portalId).appConfig.objectTypeId;
+  const mapRes = await fetch(`${HS_BASE}${objectSearchPath(appConfigType)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ filterGroups: [], properties: ['linear_project_map'], limit: 1, sorts: [], query: '', after: '0' }),
+  });
+  const mapBody = (await mapRes.json()) as { results?: Array<{ properties: Record<string, string | null> }> };
+  const projectMap = parseProjectMap(mapBody.results?.[0]?.properties.linear_project_map);
 
   // The same gate the webhook applies. Backfilling a portal nobody has
   // configured is how 34 unwanted records arrived on prod in the first place.
@@ -171,18 +196,18 @@ async function main() {
     process.exit(1);
   }
 
-  const scope = settings.linearTeamId
-    ? `team ${settings.linearTeamId}`
-    : `assigned to ${settings.linearAssigneeId}, all teams`;
+  const scope = isAnyTeam(settings.linearTeamId)
+    ? `assigned to ${settings.linearAssigneeId}, all teams`
+    : `team ${settings.linearTeamId}`;
   console.log(`\n[${portal}] Backfill — portal ${portalId}, ${scope}`);
   console.log(`Mode: ${apply ? 'APPLY — records will be written' : 'dry run — nothing will be written'}\n`);
 
-  const all = settings.linearTeamId
-    ? await fetchTeamIssues(linearApiKey, settings.linearTeamId)
-    : await fetchAssignedIssues(linearApiKey, settings.linearAssigneeId);
+  const all = isAnyTeam(settings.linearTeamId)
+    ? await fetchAssignedIssues(linearApiKey, settings.linearAssigneeId)
+    : await fetchTeamIssues(linearApiKey, settings.linearTeamId);
   console.log(`Issues on the team: ${all.length}`);
 
-  const skipped = { echo: 0, assignee: 0 };
+  const skipped = { echo: 0, assignee: 0, ignored: 0 };
   const eligible = all.filter((issue) => {
     // Issues our own sync created. Re-importing them would be circular.
     if (issue.description?.includes(HS_SYNC_TAG)) { skipped.echo++; return false; }
@@ -192,28 +217,45 @@ async function main() {
     if (settings.assigneeFilter === 'mine' && assigneeId !== settings.linearAssigneeId) {
       skipped.assignee++; return false;
     }
+    // A project mapped to "ignore" is not content and not a changelog — it is
+    // work that has no business in the pipeline at all.
+    if (classifyIssue(issue.labels.nodes, issue.project?.id, projectMap) === 'ignore') {
+      skipped.ignored++; return false;
+    }
     return true;
   });
 
   console.log(`  skipped, our own sync tag: ${skipped.echo}`);
   console.log(`  skipped, assignee filter "${settings.assigneeFilter}": ${skipped.assignee}`);
-  console.log(`Eligible: ${eligible.length}\n`);
+  console.log(`  skipped, project mapped to ignore: ${skipped.ignored}`);
+
+  const chosen = only ? eligible.filter(i => only.has(i.identifier)) : eligible;
+  if (only) {
+    const missing = [...only].filter(id => !eligible.some(i => i.identifier === id));
+    console.log(`Selected: ${chosen.length} of ${eligible.length} eligible`);
+    if (missing.length) console.log(`  not eligible or not found: ${missing.join(', ')}`);
+  } else {
+    console.log(`Eligible: ${eligible.length}`);
+  }
+  console.log();
 
   if (!apply) {
-    for (const issue of eligible.slice(0, 20)) {
-      const kind = issue.labels.nodes.some((l) => l.name === LINEAR_CHANGELOG_LABEL) ? 'changelog' : 'content';
-      console.log(`  ${issue.identifier.padEnd(12)} ${kind.padEnd(9)} ${issue.state.name.padEnd(12)} ${issue.title.slice(0, 60)}`);
+    for (const issue of chosen.slice(0, 20)) {
+      const kind = classifyIssue(issue.labels.nodes, issue.project?.id, projectMap);
+      const project = (issue.project?.name ?? '(no project)').slice(0, 28);
+      console.log(`  ${issue.identifier.padEnd(12)} ${kind.padEnd(9)} ${issue.state.name.padEnd(12)} ${project.padEnd(30)} ${issue.title.slice(0, 44)}`);
     }
-    if (eligible.length > 20) console.log(`  … and ${eligible.length - 20} more`);
-    console.log('\nNothing written. Re-run with --apply to create these records.\n');
+    if (chosen.length > 20) console.log(`  … and ${chosen.length - 20} more`);
+    console.log('\nNothing written. Re-run with --apply to create these records,');
+    console.log('or --only=ID,ID to import a subset.\n');
     return;
   }
 
   let created = 0, updated = 0;
   const errors: string[] = [];
 
-  for (const issue of eligible) {
-    const pipelineKey = issue.labels.nodes.some((l) => l.name === LINEAR_CHANGELOG_LABEL) ? 'changelog' : 'content';
+  for (const issue of chosen) {
+    const pipelineKey = classifyIssue(issue.labels.nodes, issue.project?.id, projectMap) === 'changelog' ? 'changelog' : 'content';
     try {
       // Shaped as the webhook would deliver it, and handed to the same upsert —
       // which matches on linear_id, so re-running this updates rather than
