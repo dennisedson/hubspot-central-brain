@@ -325,10 +325,15 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
 
       const [teams, teamMembers] = await Promise.all([
         linearApiKey ? getLinearTeams(linearApiKey) : Promise.resolve<LinearTeam[]>([]),
+        // isAnyTeam, not a truthiness check. The "any team" sentinel is the
+        // string 'any' — linear_team_id is the App Config object's primary
+        // display property and HubSpot refuses to let it be cleared — so a
+        // truthy test sent 'any' to a team-scoped query, which matches no team
+        // and yields nobody to pick from.
         linearApiKey
-          ? settings.linearTeamId
-            ? getLinearTeamMembers(settings.linearTeamId, linearApiKey)
-            : getWorkspaceMembers(linearApiKey)
+          ? isAnyTeam(settings.linearTeamId)
+            ? getWorkspaceMembers(linearApiKey)
+            : getLinearTeamMembers(settings.linearTeamId, linearApiKey)
           : Promise.resolve<LinearMember[]>([]),
       ]);
 
@@ -356,11 +361,12 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
     if (!linearApiKey) {
       return { statusCode: 200, body: JSON.stringify({ teamMembers: [] }) };
     }
-    // No team selected means "Any team", so the assignee can be anyone in the
-    // workspace rather than anyone on a team.
-    const teamMembers = teamId
-      ? await getLinearTeamMembers(teamId, linearApiKey)
-      : await getWorkspaceMembers(linearApiKey);
+    // "Any team" — whether that arrives as the 'any' sentinel or as nothing at
+    // all — means the assignee can be anyone in the workspace rather than
+    // anyone on a team.
+    const teamMembers = isAnyTeam(teamId ?? '')
+      ? await getWorkspaceMembers(linearApiKey)
+      : await getLinearTeamMembers(teamId as string, linearApiKey);
     return { statusCode: 200, body: JSON.stringify({ teamMembers }) };
   }
 
