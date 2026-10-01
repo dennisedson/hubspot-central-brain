@@ -54,3 +54,31 @@ describe('UI extensions use HubSpot components, never raw HTML', () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * The Linear settings form must exist exactly once.
+ *
+ * It is reached from two places — the Content Command Center page and the
+ * app's Settings tab — and the last time that was true there were two copies.
+ * Three changes landed in the one nobody could see while the one people used
+ * stayed unchanged (#60). A second copy is the specific regression worth
+ * failing a build over.
+ */
+describe('one settings form, two entrances', () => {
+  it('only LinearSettingsForm.tsx declares the form', () => {
+    const declarations = UI_DIRS
+      .flatMap(tsxFiles)
+      .filter(f => /function LinearSettingsForm|function SettingsForm\b/.test(fs.readFileSync(f, 'utf8')));
+
+    expect(declarations.map(f => path.basename(f))).toEqual(['LinearSettingsForm.tsx']);
+  });
+
+  it('the settings surface imports the form rather than defining one', () => {
+    const settings = fs.readFileSync(
+      path.join(__dirname, '..', 'settings', 'SettingsPage.tsx'), 'utf8');
+
+    expect(settings).toMatch(/import \{ LinearSettingsForm \}/);
+    // The giveaways of a copy: its own state, its own API calls.
+    expect(settings).not.toMatch(/useState|callApi|hubspot\.serverless/);
+  });
+});
