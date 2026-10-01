@@ -3,12 +3,13 @@ import { getPortalConfig } from '../lib/portal-config';
 import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 import {
   createClaudeClient,
-  CLAUDE_MODEL,
   CLAUDE_MAX_TOKENS,
-  CLAUDE_THINKING,
   CLAUDE_EFFORT,
 } from '../lib/claude-client';
 import { resolvePrompt, type ChangelogDraftMode } from '../lib/changelog-prompts';
+import {
+  resolveModel, resolveThinking, modelIdFor, thinkingConfigFor,
+} from '../lib/changelog-model';
 import {
   parseRolloutNotes,
   missingForStandalone,
@@ -59,10 +60,13 @@ interface Turn {
 interface DraftRequestBody {
   model: string;
   max_tokens: number;
-  thinking: typeof CLAUDE_THINKING;
+  thinking: { type: 'adaptive' } | { type: 'disabled' };
   output_config: { effort: string };
-  system: Array<{ type: 'text'; text: string; cache_control: { type: 'ephemeral' } }>;
-  messages: Turn[];
+  system: Array<{ type: 'text'; text: string }>;
+  messages: Array<
+    | { role: 'user' | 'assistant'; content: string }
+    | { role: 'user'; content: Array<{ type: 'text'; text: string; cache_control: { type: 'ephemeral' } }> }
+  >;
 }
 
 /** Guard on replayed history. A long thread is a cost and a timeout, not a feature. */
@@ -95,20 +99,47 @@ async function readRecord(objectTypeId: string, objectId: string, token: string)
   return body.properties;
 }
 
-async function readPromptOverride(
+interface DraftConfig {
+  promptOverride: string | null;
+  model: string;
+  thinking: { type: 'adaptive' } | { type: 'disabled' };
+}
+
+/** One search for everything the drafter is configured with. */
+async function readDraftConfig(
   appConfigTypeId: string,
   mode: ChangelogDraftMode,
   token: string,
-): Promise<string | null> {
-  const property = mode === 'rollup' ? 'changelog_prompt_rollup' : 'changelog_prompt_standalone';
-  const res = await fetch(`${HS_BASE}${objectSearchPath(appConfigTypeId)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ filterGroups: [], properties: [property], limit: 1 }),
-  });
-  if (!res.ok) return null;
-  const body = await res.json() as { results: Array<{ properties: Record<string, string | null> }> };
-  return body.results[0]?.properties[property] ?? null;
+): Promise<DraftConfig> {
+  const promptProperty = mode === 'rollup' ? 'changelog_prompt_rollup' : 'changelog_prompt_standalone';
+  const fallback: DraftConfig = {
+    promptOverride: null,
+    model: modelIdFor(resolveModel(null)),
+    thinking: thinkingConfigFor(resolveThinking(null)),
+  };
+
+  try {
+    const res = await fetch(`${HS_BASE}${objectSearchPath(appConfigTypeId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        filterGroups: [],
+        properties: [promptProperty, 'changelog_model', 'changelog_thinking'],
+        limit: 1,
+      }),
+    });
+    if (!res.ok) return fallback;
+    const body = await res.json() as { results: Array<{ properties: Record<string, string | null> }> };
+    const props = body.results[0]?.properties ?? {};
+    return {
+      promptOverride: props[promptProperty] ?? null,
+      model: modelIdFor(resolveModel(props.changelog_model)),
+      thinking: thinkingConfigFor(resolveThinking(props.changelog_thinking)),
+    };
+  } catch {
+    // A settings read failing must not stop a draft; defaults are valid.
+    return fallback;
+  }
 }
 
 export async function main(context: DraftContext): Promise<{ statusCode: number; body: string }> {
@@ -172,9 +203,9 @@ export async function main(context: DraftContext): Promise<{ statusCode: number;
     if (!message) return { statusCode: 400, body: JSON.stringify({ error: 'Missing message' }) };
 
     try {
-      const [props, override] = await Promise.all([
+      const [props, settings] = await Promise.all([
         readRecord(objectTypeId, objectId, token),
-        readPromptOverride(config.appConfig.objectTypeId, mode, token),
+        readDraftConfig(config.appConfig.objectTypeId, mode, token),
       ]);
 
       const source = parseRolloutNotes(props.notes);
@@ -191,25 +222,25 @@ export async function main(context: DraftContext): Promise<{ statusCode: number;
           : 'There is no draft yet.',
       ].join('\n');
 
-      const messages: Turn[] = [
-        { role: 'user', content: opening },
+      // The breakpoint sits at the END of the opening turn, not on the system
+      // block. The system prompt alone is 1,010 tokens (standalone) and 901
+      // (rollup), either side of Anthropic's 1,024-token minimum cacheable
+      // prefix — and a prefix under the minimum silently does not cache at
+      // all, so the breakpoint there was doing nothing. System plus the
+      // record's facts averages ~1,830 tokens, which clears it, and the facts
+      // are replayed on every turn of a session anyway.
+      const messages = [
+        { role: 'user' as const, content: [{ type: 'text' as const, text: opening, cache_control: { type: 'ephemeral' as const } }] },
         ...history,
-        { role: 'user', content: message },
+        { role: 'user' as const, content: message },
       ];
 
       const body: DraftRequestBody = {
-        model: CLAUDE_MODEL,
+        model: settings.model,
         max_tokens: CLAUDE_MAX_TOKENS,
-        thinking: CLAUDE_THINKING,
+        thinking: settings.thinking,
         output_config: { effort: CLAUDE_EFFORT },
-        // Stable first with the breakpoint at its end, volatile last — the
-        // system prompt is identical across every turn and every record, so it
-        // caches; the record's facts ride in the first user turn instead.
-        system: [{
-          type: 'text',
-          text: resolvePrompt(mode, override),
-          cache_control: { type: 'ephemeral' },
-        }],
+        system: [{ type: 'text', text: resolvePrompt(mode, settings.promptOverride) }],
         messages,
       };
 

@@ -65,6 +65,8 @@ interface SettingsResponse extends AppSettings {
   teamMembers: LinearOption[];
   prompts: PromptSet;
   promptDefaults: PromptSet;
+  model: string;
+  thinking: string;
   projects: LinearOption[];
   projectMap: ProjectMap;
   unmappedProjects: UnmappedProject[];
@@ -332,6 +334,9 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
   // saving that would freeze this portal at today's wording.
   const [prompts, setPrompts] = useState<PromptSet>({ standalone: '', rollup: '' });
   const [promptDefaults, setPromptDefaults] = useState<PromptSet>({ standalone: '', rollup: '' });
+  // '' means "use the shipped default", the same convention as the prompts.
+  const [model, setModel] = useState('');
+  const [thinking, setThinking] = useState('');
 
   useEffect(() => {
     callApi('getSettings', { portalId: String(portalId) })
@@ -346,6 +351,8 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
           setTeams(data.teams ?? []);
           setPrompts(data.prompts ?? { standalone: '', rollup: '' });
           setPromptDefaults(data.promptDefaults ?? { standalone: '', rollup: '' });
+          setModel(data.model ?? '');
+          setThinking(data.thinking ?? '');
           setTeamMembers(data.teamMembers ?? []);
           setProjects(data.projects ?? []);
           setProjectMap(data.projectMap ?? {});
@@ -388,6 +395,8 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
       projectMap: JSON.stringify(projectMap),
       promptStandalone: prompts.standalone,
       promptRollup: prompts.rollup,
+      model,
+      thinking,
     })
       .then(res => {
         if (res.statusCode === 200) {
@@ -400,7 +409,7 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
       })
       .catch(() => setStatus('error'))
       .finally(() => setSaving(false));
-  }, [portalId, settings, projectMap, prompts]);
+  }, [portalId, settings, projectMap, prompts, model, thinking]);
 
   const handlePreview = useCallback(() => {
     setPreviewLoading(true);
@@ -615,6 +624,38 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
       )}
 
       <Divider />
+
+      <Heading>Changelog Drafting</Heading>
+      <Text variant="microcopy">
+        Which model writes the draft. Leave both on Default to use what ships with
+        the app. Thinking tokens are billed as output, so turning thinking off is
+        the single biggest lever on cost and speed.
+      </Text>
+
+      <Select
+        label="Model"
+        name="changelogModel"
+        value={model}
+        onChange={value => { setModel(String(value ?? '')); setStatus('idle'); }}
+        options={[
+          { label: 'Default (Opus — most capable)', value: '' },
+          { label: 'Opus — most capable', value: 'opus' },
+          { label: 'Sonnet — half the cost, faster', value: 'sonnet' },
+          { label: 'Haiku — cheapest, fastest', value: 'haiku' },
+        ]}
+      />
+
+      <Select
+        label="Thinking"
+        name="changelogThinking"
+        value={thinking}
+        onChange={value => { setThinking(String(value ?? '')); setStatus('idle'); }}
+        options={[
+          { label: 'Default (Adaptive)', value: '' },
+          { label: 'Adaptive', value: 'adaptive' },
+          { label: 'Off — cheaper and faster', value: 'off' },
+        ]}
+      />
 
       <Heading>Changelog Drafting Prompts</Heading>
       <Text variant="microcopy">

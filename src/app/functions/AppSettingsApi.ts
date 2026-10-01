@@ -393,6 +393,7 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
           'linear_team_id', 'assignee_filter', 'linear_assignee_id',
           'linear_project_map', 'linear_unmapped_projects',
           'changelog_prompt_standalone', 'changelog_prompt_rollup',
+          'changelog_model', 'changelog_thinking',
         ],
         token,
       );
@@ -477,6 +478,9 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
             standalone: STANDALONE_PROMPT,
             rollup: ROLLUP_PROMPT,
           },
+          // Empty means the shipped default, exactly as with the prompts.
+          model: record?.properties.changelog_model ?? '',
+          thinking: record?.properties.changelog_thinking ?? '',
         }),
       };
     } catch (err) {
@@ -551,6 +555,8 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
     for (const [key, property] of [
       ['promptStandalone', 'changelog_prompt_standalone'],
       ['promptRollup', 'changelog_prompt_rollup'],
+      ['model', 'changelog_model'],
+      ['thinking', 'changelog_thinking'],
     ] as const) {
       const value = param(context, key);
       if (value !== undefined) properties[property] = value;

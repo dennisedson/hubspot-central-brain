@@ -35,7 +35,8 @@
     "backfill:linear": "tsx src/scripts/backfill-linear.ts",
     "provision:backfill-state": "tsx src/scripts/provision-backfill-state.ts",
     "provision:project-map": "tsx src/scripts/provision-project-map.ts",
-    "provision:changelog-drafting": "tsx src/scripts/provision-changelog-drafting.ts"
+    "provision:changelog-drafting": "tsx src/scripts/provision-changelog-drafting.ts",
+    "compare:changelog-models": "tsx src/scripts/compare-changelog-models.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

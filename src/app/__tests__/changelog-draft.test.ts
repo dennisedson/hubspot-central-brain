@@ -169,7 +169,11 @@ describe('the save action', () => {
 });
 
 describe('the turn action', () => {
-  it('sends the record facts as the first user turn, keeping the system prefix cacheable', async () => {
+  it('caches system plus the record facts, not the system block alone', async () => {
+    // The system prompt is 901-1,010 tokens, either side of Anthropic's
+    // 1,024-token minimum cacheable prefix — and a prefix under the minimum
+    // silently does not cache at all. The breakpoint therefore sits at the end
+    // of the opening user turn, where the prefix averages ~1,830 tokens.
     mockFetch().mockImplementation(recordFetch({
       title: 'hs app logs', notes: NOTES, hs_pipeline: '929918080',
       changelog_draft: null, changelog_draft_mode: null,
@@ -183,14 +187,66 @@ describe('the turn action', () => {
     const call = mockFetch().mock.calls.find(([u]) => String(u).includes('api.anthropic.com'));
     const body = JSON.parse(call![1].body as string) as {
       system: Array<{ text: string; cache_control?: unknown }>;
-      messages: Array<{ role: string; content: string }>;
+      messages: Array<{ role: string; content: string | Array<{ text: string; cache_control?: unknown }> }>;
     };
 
-    expect(body.system[0].cache_control).toBeDefined();
+    expect(body.system[0].cache_control).toBeUndefined();
     expect(body.system[0].text).toContain('Digest Entry');
+
+    const opening = body.messages[0].content as Array<{ text: string; cache_control?: unknown }>;
     expect(body.messages[0].role).toBe('user');
-    expect(body.messages[0].content).toContain('hs app logs CLI command');
+    expect(opening[0].cache_control).toBeDefined();
+    expect(opening[0].text).toContain('hs app logs CLI command');
     expect(body.messages[body.messages.length - 1].content).toBe('Draft it');
+  });
+
+  it('uses the portal\'s configured model and thinking setting', async () => {
+    mockFetch().mockImplementation((url: string, init?: { method?: string; body?: string }) => {
+      if (String(url).includes('/search')) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          json: async () => ({ results: [{ properties: {
+            changelog_model: 'sonnet', changelog_thinking: 'off',
+          } }] }),
+          text: async () => '',
+        } as unknown as Response);
+      }
+      return recordFetch({
+        title: 'x', notes: NOTES, hs_pipeline: '929918080',
+        changelog_draft: null, changelog_draft_mode: null,
+      })(url, init);
+    });
+
+    await main({
+      accountId: DEV_PORTAL,
+      parameters: { action: 'turn', objectId: '1', message: 'go' },
+    });
+
+    const call = mockFetch().mock.calls.find(([u]) => String(u).includes('api.anthropic.com'));
+    const body = JSON.parse(call![1].body as string) as { model: string; thinking: { type: string } };
+    expect(body.model).toBe('claude-sonnet-5');
+    expect(body.thinking).toEqual({ type: 'disabled' });
+  });
+
+  it('falls back to the default model when the setting is empty or unknown', async () => {
+    mockFetch().mockImplementation((url: string, init?: { method?: string; body?: string }) => {
+      if (String(url).includes('/search')) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          json: async () => ({ results: [{ properties: { changelog_model: 'gpt-4' } }] }),
+          text: async () => '',
+        } as unknown as Response);
+      }
+      return recordFetch({
+        title: 'x', notes: NOTES, hs_pipeline: '929918080',
+        changelog_draft: null, changelog_draft_mode: null,
+      })(url, init);
+    });
+
+    await main({ accountId: DEV_PORTAL, parameters: { action: 'turn', objectId: '1', message: 'go' } });
+
+    const call = mockFetch().mock.calls.find(([u]) => String(u).includes('api.anthropic.com'));
+    expect((JSON.parse(call![1].body as string) as { model: string }).model).toBe('claude-opus-5-5');
   });
 
   it('tells the model to revise an existing draft rather than start over', async () => {
@@ -205,9 +261,11 @@ describe('the turn action', () => {
     });
 
     const call = mockFetch().mock.calls.find(([u]) => String(u).includes('api.anthropic.com'));
-    const body = JSON.parse(call![1].body as string) as { messages: Array<{ content: string }> };
-    expect(body.messages[0].content).toContain('An earlier draft.');
-    expect(body.messages[0].content).toMatch(/revise it rather than starting over/);
+    const body = JSON.parse(call![1].body as string) as {
+      messages: Array<{ content: Array<{ text: string }> }>;
+    };
+    expect(body.messages[0].content[0].text).toContain('An earlier draft.');
+    expect(body.messages[0].content[0].text).toMatch(/revise it rather than starting over/);
   });
 
   it('drops malformed history instead of failing the turn', async () => {
