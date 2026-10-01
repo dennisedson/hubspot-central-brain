@@ -227,9 +227,16 @@ decision for next time, not a task.** Not an MVP change.
   entry point.
 - **Asana is polled, not pushed.** HubSpot strips the `X-Hook-Secret` header, so
   the push webhook could never complete handshake. `AsanaPoll` replaced it.
-- **The "(Daily)" HubSpot workflows are not daily.** They enrol with
-  `type: 'MANUAL'`; HubSpot has no cron for custom objects. The only genuinely
-  scheduled thing is `youtube-sync.yml` on a GitHub Actions cron.
+- **The "(Daily)" HubSpot workflows really are daily — but the schedule is not
+  provisioned.** Verified on dev: both carry
+  `enrollmentSchedule: {"type":"DAILY","timeOfDay":{"hour":17,"minute":0}}`.
+  That is a **top-level field, separate from `enrollmentCriteria`**, whose
+  `type: 'MANUAL'` describes the enrolment criteria and not the cadence —
+  reading one for the other is how this was previously documented backwards.
+  `provision-workflows.ts` creates these workflows **without** a schedule and
+  `isEnabled: false`; the dev schedule was set by hand in the UI, and a newly
+  provisioned portal needs the same (Edit → Enrollment triggers → "On a
+  schedule"). The script preserves an existing schedule on re-run.
 
 ---
 
