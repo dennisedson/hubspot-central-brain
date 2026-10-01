@@ -1,55 +1,36 @@
-import { hubspot, Alert, Box, Divider, Heading, Text } from '@hubspot/ui-extensions';
+import { hubspot, Box, Heading, Text } from '@hubspot/ui-extensions';
+import { LinearSettingsForm } from '../pages/LinearSettingsForm.tsx';
 
 /**
- * A probe, not the settings form.
+ * The app's Settings tab, under Connected apps.
  *
- * WHY THIS IS DELIBERATELY EMPTY OF FEATURES
- * ------------------------------------------
- * A `type: "settings"` component was built here once and rendered nowhere. It
- * deployed cleanly every time — "Deploying settings-hubspot-central-brain …
- * DONE" in every upload — to a surface nobody could find, and was removed in
- * #60 for being invisible.
+ * This surface was written off on 2026-09-29 as something a private app does
+ * not get: the app's entry had Overview and Insights and no Settings tab, and
+ * a component deployed here rendered nowhere. That has since changed — the
+ * tabs are now Overview, Settings and App cards, and the probe in #100 showed
+ * the component rendering. The original diagnosis was reasonable when it was
+ * made and is no longer true.
  *
- * It was removed for a second reason that matters more: it had become a SECOND
- * COPY of the Linear settings form. Three changes landed in the invisible copy
- * while the page people actually use stayed unchanged, and four rounds of "why
- * isn't this appearing" came out of it.
+ * THE FORM IS IMPORTED, NEVER COPIED
+ * ----------------------------------
+ * The component that lived here before was removed for two reasons, and the
+ * second mattered more than the first: it had become a SECOND COPY of the
+ * Linear settings form. Three changes landed in the copy nobody could see
+ * while the page people actually used stayed unchanged (#60).
  *
- * So this one carries no form, no state and no API calls. Its entire job is to
- * answer one question that has been open since 2026-09-29: does this surface
- * render at all for a private app on platformVersion 2026.03?
- *
- * The hsmeta beside this file matches the documented example exactly — same
- * `type`, same `config.entrypoint` shape — so if nothing appears, the
- * configuration is not what is wrong.
- *
- * IF IT RENDERS: the real work is moving the settings form somewhere both this
- * and `pages/SettingsApp.tsx` can use, so there is one implementation with two
- * entrances. Never two implementations.
- *
- * IF IT DOES NOT: that is reportable evidence rather than a guess — the
- * documented configuration, deployed, on a supported platform version,
- * rendering nothing. See issue #88.
+ * So there is exactly one implementation, in pages/LinearSettingsForm.tsx, and
+ * this is its second entrance. No `onBack` is passed — the Settings tab is a
+ * destination, not a detour.
  */
-hubspot.extend<'settings'>(() => (
-  <Box>
-    <Heading>HubSpot Central Brain</Heading>
-    <Alert title="This surface works" variant="success">
-      <Text>
-        If you are reading this, the app settings component renders for this app
-        and this is where its configuration belongs.
+hubspot.extend<'settings'>(({ context }) => {
+  const portalId = (context as { portal: { id: number } }).portal.id;
+  return (
+    <Box>
+      <Heading>Linear Sync</Heading>
+      <Text variant="microcopy">
+        The same settings are also reachable from the Content Command Center page.
       </Text>
-    </Alert>
-    <Divider />
-    <Text>
-      Linear sync, project routing, the historical import and the changelog
-      drafting prompts currently live on the Content Command Center page, under
-      Settings.
-    </Text>
-    <Text variant="microcopy">
-      They have not been moved here yet. Moving them means making one
-      implementation reachable from both places rather than copying the form,
-      which is what went wrong the last time this component existed.
-    </Text>
-  </Box>
-));
+      <LinearSettingsForm portalId={portalId} />
+    </Box>
+  );
+});
