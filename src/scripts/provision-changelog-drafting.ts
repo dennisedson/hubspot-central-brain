@@ -101,6 +101,28 @@ async function main() {
   await addProperties(config.appConfig.objectTypeId, [
     { name: 'changelog_prompt_standalone', label: 'Changelog Prompt — Standalone', type: 'string', fieldType: 'textarea' },
     { name: 'changelog_prompt_rollup', label: 'Changelog Prompt — Rollup', type: 'string', fieldType: 'textarea' },
+    // Empty means the shipped default, same rule as the prompts.
+    {
+      name: 'changelog_model',
+      label: 'Changelog Model',
+      type: 'enumeration',
+      fieldType: 'select',
+      options: [
+        { label: 'Opus — most capable', value: 'opus', displayOrder: 0, hidden: false },
+        { label: 'Sonnet — half the cost, faster', value: 'sonnet', displayOrder: 1, hidden: false },
+        { label: 'Haiku — cheapest, fastest', value: 'haiku', displayOrder: 2, hidden: false },
+      ],
+    },
+    {
+      name: 'changelog_thinking',
+      label: 'Changelog Thinking',
+      type: 'enumeration',
+      fieldType: 'select',
+      options: [
+        { label: 'Adaptive', value: 'adaptive', displayOrder: 0, hidden: false },
+        { label: 'Off — thinking tokens bill as output', value: 'off', displayOrder: 1, hidden: false },
+      ],
+    },
   ], token);
 
   console.log('\n✓ Done. Prompt overrides start empty on purpose — empty means "use the shipped default".\n');
