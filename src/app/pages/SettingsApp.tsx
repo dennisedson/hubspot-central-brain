@@ -627,9 +627,9 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
 
       <Heading>Changelog Drafting</Heading>
       <Text variant="microcopy">
-        Which model writes the draft. Leave both on Default to use what ships with
-        the app. Thinking tokens are billed as output, so turning thinking off is
-        the single biggest lever on cost and speed.
+        Which model writes the draft. A draft has to finish inside HubSpot&apos;s
+        20-second function limit, so these are speed settings before they are cost
+        settings — Opus with thinking on will time out on a long standalone post.
       </Text>
 
       <Select
@@ -638,7 +638,7 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
         value={model}
         onChange={value => { setModel(String(value ?? '')); setStatus('idle'); }}
         options={[
-          { label: 'Default (Opus — most capable)', value: '' },
+          { label: 'Default (Sonnet — fits the 20s function limit)', value: '' },
           { label: 'Opus — most capable', value: 'opus' },
           { label: 'Sonnet — half the cost, faster', value: 'sonnet' },
           { label: 'Haiku — cheapest, fastest', value: 'haiku' },
@@ -651,7 +651,7 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
         value={thinking}
         onChange={value => { setThinking(String(value ?? '')); setStatus('idle'); }}
         options={[
-          { label: 'Default (Adaptive)', value: '' },
+          { label: 'Default (Off — fastest)', value: '' },
           { label: 'Adaptive', value: 'adaptive' },
           { label: 'Off — cheaper and faster', value: 'off' },
         ]}
