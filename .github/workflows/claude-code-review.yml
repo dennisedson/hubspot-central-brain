@@ -22,8 +22,21 @@ jobs:
       - name: Get OIDC token for Anthropic WIF
         id: oidc
         run: |
-          TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://api.anthropic.com" | jq -r '.value')
+          # -f so an HTTP error is an error. Without it curl exits 0 on a 4xx,
+          # jq yields the string "null", and the job carries on with a token
+          # that cannot work — which surfaces much later as the action claiming
+          # the federation secrets are missing when they are plainly set.
+          RESPONSE=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://api.anthropic.com") || {
+            echo "::error::Could not reach the GitHub OIDC token endpoint."
+            exit 1
+          }
+          TOKEN=$(echo "$RESPONSE" | jq -r '.value // empty')
+          if [ -z "$TOKEN" ]; then
+            echo "::error::OIDC endpoint returned no .value — cannot authenticate to Anthropic."
+            echo "Response keys: $(echo "$RESPONSE" | jq -r 'keys | join(",")')"
+            exit 1
+          fi
           echo "::add-mask::$TOKEN"
           echo "ANTHROPIC_IDENTITY_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
