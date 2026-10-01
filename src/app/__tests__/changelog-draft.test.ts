@@ -246,7 +246,8 @@ describe('the turn action', () => {
     await main({ accountId: DEV_PORTAL, parameters: { action: 'turn', objectId: '1', message: 'go' } });
 
     const call = mockFetch().mock.calls.find(([u]) => String(u).includes('api.anthropic.com'));
-    expect((JSON.parse(call![1].body as string) as { model: string }).model).toBe('claude-opus-5-5');
+    // Sonnet is the default because the function has 20 seconds to finish.
+    expect((JSON.parse(call![1].body as string) as { model: string }).model).toBe('claude-sonnet-5');
   });
 
   it('tells the model to revise an existing draft rather than start over', async () => {
@@ -288,5 +289,60 @@ describe('the turn action', () => {
     mockFetch().mockImplementation(recordFetch({}));
     const res = await main({ accountId: DEV_PORTAL, parameters: { action: 'turn', objectId: '1' } });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+/**
+ * HubSpot kills an app function at 20 seconds:
+ *
+ *   [runServerlessFunction] The serverless function 'changelog_draft_api'
+ *   timed out. Task timed out after 20.00 seconds.
+ *
+ * There is no timeout field in the hsmeta, so the only options are to finish
+ * sooner or to fail in a way that says what to do about it. The first turn of a
+ * real session succeeded and the follow-up was killed mid-generation, which is
+ * how this was found.
+ */
+describe('the 20-second budget', () => {
+  it('gives up before the platform does, with advice rather than a RequestId', async () => {
+    vi.useFakeTimers();
+    mockFetch().mockImplementation((url: string, init?: { method?: string; body?: string }) => {
+      if (String(url).includes('api.anthropic.com')) {
+        // A model that never answers.
+        return new Promise(() => {});
+      }
+      return recordFetch({
+        title: 'x', notes: NOTES, hs_pipeline: '929918080',
+        changelog_draft: null, changelog_draft_mode: null,
+      })(url, init);
+    });
+
+    const pending = main({
+      accountId: DEV_PORTAL,
+      parameters: { action: 'turn', objectId: '1', message: 'go' },
+    });
+    await vi.advanceTimersByTimeAsync(17_000);
+    const res = await pending;
+    vi.useRealTimers();
+
+    expect(res.statusCode).toBe(504);
+    const body = JSON.parse(res.body) as { error: string; detail: string };
+    expect(body.error).toMatch(/did not answer in time/);
+    expect(body.detail).toMatch(/Sonnet or Haiku/);
+  });
+
+  it('caps max_tokens so one runaway answer cannot eat the budget', async () => {
+    mockFetch().mockImplementation(recordFetch({
+      title: 'x', notes: NOTES, hs_pipeline: '929918080',
+      changelog_draft: null, changelog_draft_mode: null,
+    }));
+
+    await main({ accountId: DEV_PORTAL, parameters: { action: 'turn', objectId: '1', message: 'go' } });
+
+    const call = mockFetch().mock.calls.find(([u]) => String(u).includes('api.anthropic.com'));
+    const body = JSON.parse(call![1].body as string) as { max_tokens: number; thinking: { type: string } };
+    expect(body.max_tokens).toBeLessThanOrEqual(2048);
+    // Thinking happens before any output, so it is the worst use of the budget.
+    expect(body.thinking).toEqual({ type: 'disabled' });
   });
 });

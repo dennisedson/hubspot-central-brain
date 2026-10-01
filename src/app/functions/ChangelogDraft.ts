@@ -1,14 +1,11 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { getPortalConfig } from '../lib/portal-config';
 import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
-import {
-  createClaudeClient,
-  CLAUDE_MAX_TOKENS,
-  CLAUDE_EFFORT,
-} from '../lib/claude-client';
+import { createClaudeClient, CLAUDE_EFFORT } from '../lib/claude-client';
 import { resolvePrompt, type ChangelogDraftMode } from '../lib/changelog-prompts';
 import {
   resolveModel, resolveThinking, modelIdFor, thinkingConfigFor,
+  DRAFT_TIMEOUT_MS, DRAFT_MAX_TOKENS,
 } from '../lib/changelog-model';
 import {
   parseRolloutNotes,
@@ -71,6 +68,9 @@ interface DraftRequestBody {
 
 /** Guard on replayed history. A long thread is a cost and a timeout, not a feature. */
 const MAX_TURNS = 24;
+
+/** Distinguishes our own deadline from anything the API threw. */
+const TIMEOUT_MARKER = 'draft-budget-exceeded';
 
 function parseConversation(raw: string | undefined): Turn[] {
   if (!raw) return [];
@@ -237,7 +237,7 @@ export async function main(context: DraftContext): Promise<{ statusCode: number;
 
       const body: DraftRequestBody = {
         model: settings.model,
-        max_tokens: CLAUDE_MAX_TOKENS,
+        max_tokens: DRAFT_MAX_TOKENS,
         thinking: settings.thinking,
         output_config: { effort: CLAUDE_EFFORT },
         system: [{ type: 'text', text: resolvePrompt(mode, settings.promptOverride) }],
@@ -245,10 +245,26 @@ export async function main(context: DraftContext): Promise<{ statusCode: number;
       };
 
       const claude = createClaudeClient();
-      // The single documented cast — see DraftRequestBody.
-      const reply = await claude.messages.create(
-        body as unknown as Anthropic.MessageCreateParamsNonStreaming,
-      );
+
+      // Our own clock, set below HubSpot's 20-second kill so the failure is
+      // ours to describe. The client's CLAUDE_TIMEOUT_MS is 45s — longer than
+      // the function is allowed to live — so left to itself it never fires and
+      // the platform ends the request with a bare RequestId instead.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const budget = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(TIMEOUT_MARKER)), DRAFT_TIMEOUT_MS);
+      });
+
+      let reply: Anthropic.Message;
+      try {
+        // The single documented cast — see DraftRequestBody.
+        reply = await Promise.race([
+          claude.messages.create(body as unknown as Anthropic.MessageCreateParamsNonStreaming),
+          budget,
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
 
       // Every text block, not just the first: a conversational reply can be
       // split across blocks where a single-shot suggestion is not.
@@ -264,6 +280,17 @@ export async function main(context: DraftContext): Promise<{ statusCode: number;
       return { statusCode: 200, body: JSON.stringify({ reply: text }) };
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
+      if (detail === TIMEOUT_MARKER) {
+        return {
+          statusCode: 504,
+          body: JSON.stringify({
+            error: 'The model did not answer in time',
+            detail:
+              'A draft has to finish inside HubSpot\'s 20-second function limit. ' +
+              'Ask for something shorter, or switch the model to Sonnet or Haiku in Settings.',
+          }),
+        };
+      }
       return { statusCode: 502, body: JSON.stringify({ error: 'Drafting failed', detail }) };
     }
   }
