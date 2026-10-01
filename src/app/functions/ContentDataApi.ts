@@ -1,3 +1,4 @@
+import { parseRolloutNotes, rolloutPriority } from '../lib/changelog-source';
 import { getPortalConfig } from '../lib/portal-config';
 import { HS_BASE, objectSearchPath, pipelinesPath } from '../lib/hs-api';
 
@@ -12,6 +13,10 @@ interface ContentRecord {
   id: string;
   title: string;
   contentType: string;
+  /** Next beta/live milestone, for ordering a pipeline column. */
+  priorityDate?: string | null;
+  priorityStage?: string | null;
+  priorityUpcoming?: boolean;
   pipelineStage: string;
   targetDate: string | null;
   linearIssueUrl: string | null;
@@ -69,7 +74,10 @@ export async function main(context: ContentDataContext): Promise<{ statusCode: n
         filterGroups: [
           { filters: [{ propertyName: 'hs_pipeline', operator: 'EQ', value: pipelineId }] },
         ],
-        properties: ['title', 'content_type', 'hs_pipeline_stage', 'target_date', 'linear_issue_url'],
+        // `notes` is read so the rollout timeline can be parsed server-side.
+        // It is NOT returned — the median is ~2KB and the board only needs the
+        // one date that falls out of it.
+        properties: ['title', 'content_type', 'hs_pipeline_stage', 'target_date', 'linear_issue_url', 'notes'],
         sorts: [{ propertyName: 'hs_lastmodifieddate', direction: 'DESCENDING' }],
         limit: 100,
         after: '0',
@@ -97,14 +105,24 @@ export async function main(context: ContentDataContext): Promise<{ statusCode: n
       isClosed: s.metadata?.isClosed === 'true',
     }));
 
-  const records: ContentRecord[] = search.results.map(r => ({
-    id: r.id,
-    title: r.properties.title ?? 'Untitled',
-    contentType: r.properties.content_type ?? '',
-    pipelineStage: r.properties.hs_pipeline_stage ?? '',
-    targetDate: r.properties.target_date ?? null,
-    linearIssueUrl: r.properties.linear_issue_url ?? null,
-  }));
+  const records: ContentRecord[] = search.results.map(r => {
+    // Computed here rather than stored, so it cannot go stale against the
+    // notes it is derived from and needs no backfill. The cost is that
+    // HubSpot's own list views cannot sort on it — if that is wanted, this
+    // becomes a real date property written on every upsert.
+    const priority = rolloutPriority(parseRolloutNotes(r.properties.notes));
+    return {
+      id: r.id,
+      title: r.properties.title ?? 'Untitled',
+      contentType: r.properties.content_type ?? '',
+      pipelineStage: r.properties.hs_pipeline_stage ?? '',
+      targetDate: r.properties.target_date ?? null,
+      linearIssueUrl: r.properties.linear_issue_url ?? null,
+      priorityDate: priority?.date ?? null,
+      priorityStage: priority?.stage ?? null,
+      priorityUpcoming: priority?.upcoming ?? false,
+    };
+  });
 
   return {
     statusCode: 200,

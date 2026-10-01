@@ -130,3 +130,71 @@ describe('ContentDataApi — pipeline selection', () => {
     expect(res.statusCode).toBe(200);
   });
 });
+
+/**
+ * The pipeline board orders each column by the next milestone that forces
+ * action, so the priority date has to come back with every record.
+ *
+ * Computed server-side from `notes` rather than stored: it cannot go stale
+ * against the text it derives from, and it needed no backfill across the 70
+ * records already on production.
+ */
+/**
+ * Runs the handler against a single record with the given properties, and
+ * returns that record as the board would receive it.
+ */
+async function oneRecord(props: Record<string, string>) {
+  mockFetch.mockImplementation((url: string) => {
+    if (String(url).endsWith('/search')) {
+      return Promise.resolve({
+        ok: true, status: 200,
+        json: async () => ({ results: [{ id: '1', properties: { title: 'A thing', ...props } }] }),
+        text: async () => '',
+      });
+    }
+    return Promise.resolve(pipelineResponse('stage-1', 'Idea'));
+  });
+
+  const res = await main({ accountId: PORTAL_ID, parameters: {} } as never);
+  const body = JSON.parse(res.body) as {
+    records: Array<{
+      priorityDate: string | null; priorityStage: string | null; priorityUpcoming: boolean;
+    }>;
+  };
+  return body.records[0];
+}
+
+describe('rollout priority on each record', () => {
+  it('returns the next upcoming beta or live milestone', async () => {
+    const notes = [
+      '**Rollout ID:** 1',
+      '**Name:** A thing',
+      '',
+      '### Timeline',
+      '',
+      '**Public Beta Date:** 2099-06-01',
+      '**Live Date:** 2099-12-01',
+    ].join('\n');
+
+    const record = await oneRecord({ notes });
+
+    expect(record.priorityDate).toBe('2099-06-01');
+    expect(record.priorityStage).toBe('Public Beta');
+    expect(record.priorityUpcoming).toBe(true);
+  });
+
+  it('drops epoch zero rather than ranking it as the oldest, most urgent thing', async () => {
+    // 10 of the 23 dates on production are 1970-01-01 — unset, not ancient.
+    const record = await oneRecord({
+      notes: '### Timeline\n\n**Marketing Release Date:** 1970-01-01',
+    });
+
+    expect(record.priorityDate).toBeNull();
+  });
+
+  it('never returns the notes themselves — only what falls out of them', async () => {
+    // The median is ~2KB and the board needs one date.
+    const record = await oneRecord({ notes: 'x'.repeat(5000) });
+    expect(JSON.stringify(record)).not.toContain('xxxxx');
+  });
+});

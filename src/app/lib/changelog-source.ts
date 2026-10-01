@@ -118,3 +118,121 @@ export function formatSourceForModel(source: RolloutSource, title: string): stri
 
   return lines.join('\n');
 }
+
+// ---------------------------------------------------------------------------
+// Rollout timeline
+// ---------------------------------------------------------------------------
+
+/**
+ * When a rollout needs attention, taken from the `### Timeline` block.
+ *
+ * The point is prioritisation, not drafting: which changelog should be written
+ * next. That is decided by the beta and live milestones — in-development dates
+ * are too far out to action and tentative ones are not commitments.
+ *
+ * Measured on production before any of this was written:
+ *
+ *   `### Timeline` present ................. 23 of 70 records
+ *   the only date field so far .............. **Marketing Release Date:**
+ *   of those 23, value `1970-01-01` ......... 10
+ *
+ * That last number is why `EPOCH_ZERO` exists. An unset date serialised as a
+ * timestamp of 0 renders as 1970-01-01, and sorting ascending would put the
+ * ten records we know least about at the very top, presented as the most
+ * urgent. It is not an old date; it is no date.
+ *
+ * Every real value observed is the first of a month — 2026-10-01, 2026-03-01,
+ * 2026-09-01 — so these are month-granular. Sort on them freely; do not print
+ * them as a specific day without checking.
+ */
+
+/** An unset date, serialised as a timestamp of zero. Never a real milestone. */
+export const EPOCH_ZERO = '1970-01-01';
+
+/** Milestones that mean "this needs writing". In precedence order. */
+const MILESTONE_PATTERNS: Array<{ stage: string; pattern: RegExp }> = [
+  { stage: 'Public Beta', pattern: /public\s*beta/i },
+  { stage: 'Private Beta', pattern: /private\s*beta/i },
+  { stage: 'Live', pattern: /\blive\b|general\s*availability|\bga\b/i },
+  { stage: 'Marketing Release', pattern: /marketing\s*release/i },
+];
+
+export interface Milestone {
+  /** Normalised stage name, e.g. "Public Beta". */
+  stage: string;
+  /** The label exactly as it appeared, for display and for debugging. */
+  label: string;
+  /** ISO yyyy-mm-dd. */
+  date: string;
+}
+
+/**
+ * Whether a value is marked as not-a-commitment.
+ *
+ * PROVISIONAL. The rollout UI shows a Tentative/Confirmed control beside each
+ * date, but no record has yet carried that marker in its notes, so the exact
+ * text is unknown. This matches the obvious spellings and must be rechecked
+ * against a real note once the richer timeline lands — see issue in the PR.
+ *
+ * Erring toward treating something as tentative is the safe direction: it
+ * drops a record down the list rather than promising a date that may move.
+ */
+export function isTentative(value: string): boolean {
+  return /\btentative\b|\btbd\b|\bestimated\b|\(\s*est\.?\s*\)/i.test(value);
+}
+
+/** The first yyyy-mm-dd in a value, if there is one. */
+function isoDate(value: string): string | null {
+  const match = value.match(/\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : null;
+}
+
+/** Every usable beta/live milestone, earliest first. */
+export function milestones(source: RolloutSource): Milestone[] {
+  const found: Milestone[] = [];
+
+  for (const [label, value] of Object.entries(source.fields)) {
+    const match = MILESTONE_PATTERNS.find(m => m.pattern.test(label));
+    if (!match) continue;
+    if (isTentative(value)) continue;
+
+    const date = isoDate(value);
+    if (!date || date === EPOCH_ZERO) continue;
+
+    found.push({ stage: match.stage, label, date });
+  }
+
+  return found.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export interface RolloutPriority {
+  /** ISO yyyy-mm-dd — what to sort a pipeline column on. */
+  date: string;
+  /** Which milestone it came from, so the card can say why. */
+  stage: string;
+  /** False once the date has passed: shipped work is not pending work. */
+  upcoming: boolean;
+}
+
+/**
+ * The one date a pipeline column should sort on.
+ *
+ * The earliest milestone still ahead, because that is the next thing that
+ * forces action. With nothing ahead, the most recent past milestone — which
+ * still orders sensibly among shipped records and is marked `upcoming: false`
+ * so the board can show it differently.
+ */
+export function rolloutPriority(
+  source: RolloutSource,
+  today: Date = new Date(),
+): RolloutPriority | null {
+  const all = milestones(source);
+  if (all.length === 0) return null;
+
+  const todayIso = today.toISOString().slice(0, 10);
+  const ahead = all.find(m => m.date >= todayIso);
+  if (ahead) return { date: ahead.date, stage: ahead.stage, upcoming: true };
+
+  const last = all[all.length - 1];
+  return { date: last.date, stage: last.stage, upcoming: false };
+}

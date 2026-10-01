@@ -27,6 +27,10 @@ interface PipelineStage {
 }
 
 interface ContentRecord {
+  /** Next beta/live milestone — what a column is ordered by. */
+  priorityDate?: string | null;
+  priorityStage?: string | null;
+  priorityUpcoming?: boolean;
   id: string;
   title: string;
   contentType: string;
@@ -56,6 +60,24 @@ const CONTENT_TYPE_VARIANT: Record<string, TagVariant> = {
   'social': 'error',
 };
 
+/**
+ * Month and year only.
+ *
+ * Every rollout date observed on production is the first of a month —
+ * 2026-10-01, 2026-03-01, 2026-09-01 — so the day carries no information.
+ * Printing "1 Oct 2026" would assert a precision the source does not have.
+ */
+function formatMonth(iso: string | null): string {
+  if (!iso) return '';
+  try {
+    return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', {
+      month: 'short', year: 'numeric', timeZone: 'UTC',
+    });
+  } catch {
+    return iso;
+  }
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return '';
   try {
@@ -75,7 +97,19 @@ function RecordCard({ record }: { record: ContentRecord }) {
       <Flex direction="column" gap="extra-small">
         {record.contentType && <Tag variant={tagVariant}>{record.contentType}</Tag>}
         <Text format={{ fontWeight: 'bold' }}>{record.title}</Text>
-        {record.targetDate && (
+        {record.priorityDate && (
+          // Month, not day: every observed value is the first of a month, so
+          // these are month-granular and printing "1 Oct" would be inventing
+          // precision the source does not have.
+          <Text
+            variant="microcopy"
+            format={record.priorityUpcoming ? { fontWeight: 'bold' } : undefined}
+          >
+            {record.priorityStage}: {formatMonth(record.priorityDate)}
+            {record.priorityUpcoming ? '' : ' (passed)'}
+          </Text>
+        )}
+        {!record.priorityDate && record.targetDate && (
           <Text variant="microcopy">Target: {formatDate(record.targetDate)}</Text>
         )}
       </Flex>
@@ -165,9 +199,26 @@ function PipelineBoard({ portalId, onShowSettings, onShowChangelog }: { portalId
     showArchived ? true : s.label !== 'Archived',
   );
 
+  /**
+   * Soonest action first.
+   *
+   * Upcoming milestones ascending, then everything already passed, then
+   * records with no usable date at all. A record with no date is not urgent —
+   * it is unknown — so it sorts last rather than first.
+   */
+  function byPriority(a: ContentRecord, b: ContentRecord): number {
+    const rank = (r: ContentRecord) => (r.priorityDate ? (r.priorityUpcoming ? 0 : 1) : 2);
+    const diff = rank(a) - rank(b);
+    if (diff !== 0) return diff;
+    if (!a.priorityDate || !b.priorityDate) return a.title.localeCompare(b.title);
+    return a.priorityDate.localeCompare(b.priorityDate);
+  }
+
   const recordsByStage: Record<string, ContentRecord[]> = {};
   for (const stage of visibleStages) {
-    recordsByStage[stage.id] = filteredRecords.filter(r => r.pipelineStage === stage.id);
+    recordsByStage[stage.id] = filteredRecords
+      .filter(r => r.pipelineStage === stage.id)
+      .sort(byPriority);
   }
 
   const visibleCount = Object.values(recordsByStage).reduce((sum, arr) => sum + arr.length, 0);
