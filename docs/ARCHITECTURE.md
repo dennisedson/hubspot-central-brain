@@ -155,7 +155,7 @@ It is a leftover from before that consolidation.
 | Thing | Trigger | Reality |
 |---|---|---|
 | `YouTubeSync` | GitHub Actions cron, daily | genuinely daily |
-| "(Daily)" HubSpot workflows | `type: 'MANUAL'` | **not daily.** HubSpot has no cron for custom objects; the name is aspirational |
+| "(Daily)" HubSpot workflows | `enrollmentSchedule` | genuinely daily at 17:00 — verified on dev. But the schedule is **set by hand in the UI**, not provisioned: a new portal gets the workflow without one |
 | `AsanaPoll` | workflow action | pull-based, because Asana webhooks proved unreliable |
 | `LinearWebhook` | Linear push | real-time |
 | Deploys | merge to `develop` → Dev, `master` → Prod | see the deploy traps in `CLAUDE.md` |
