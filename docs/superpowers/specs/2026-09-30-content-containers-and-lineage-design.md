@@ -2,7 +2,7 @@
 
 **Status:** proposed, not scheduled. Future enhancement.
 **Date:** 2026-09-30
-**Tracking issue:** see `enhancement` / `phase-5`
+**Tracking issue:** [#78](https://github.com/dennisedson/hubspot-central-brain/issues/78)
 
 ---
 
