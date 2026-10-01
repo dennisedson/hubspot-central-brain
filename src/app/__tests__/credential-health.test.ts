@@ -135,3 +135,27 @@ describe('the health endpoint', () => {
     expect(names.sort()).toEqual(['anthropic', 'asana', 'fellow', 'hubspot', 'linear', 'youtube']);
   });
 });
+
+describe('an HTML response', () => {
+  it('is reported as a wrong endpoint, not a bad credential', async () => {
+    // Fellow's host answers every path with an HTML 404, including the root.
+    // Truncating `<!doctype html>` to 140 characters reads as "the key is
+    // broken" and sends someone to rotate a key that is fine.
+    const r = await probe('fellow', 'a-good-key', async () => ({
+      status: 404,
+      body: '<!doctype html>\n<html prefix="" data-theme="">…',
+    }));
+
+    expect(r.status).toBe('error');
+    expect(r.detail).toMatch(/base URL may have moved/);
+    expect(r.detail).not.toContain('doctype');
+  });
+
+  it('leaves a genuine API error message alone', async () => {
+    const r = await probe('youtube', 'tok', async () => ({
+      status: 400,
+      body: '{ "error": "invalid_grant", "error_description": "Bad Request" }',
+    }));
+    expect(r.detail).toContain('invalid_grant');
+  });
+});
