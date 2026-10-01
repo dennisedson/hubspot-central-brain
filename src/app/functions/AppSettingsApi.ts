@@ -3,6 +3,7 @@ import type { AppSettings } from '../lib/portal-config';
 import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 import { upsertContent } from '../lib/hubspot-client';
 import { HS_SYNC_TAG, isAnyTeam, classifyIssue, parseProjectMap, parseUnmappedProjects } from '../lib/mapping';
+import { IMPORT_BATCH_SIZE } from '../lib/import-batching';
 
 interface SettingsContext {
   accountId?: number;
@@ -600,15 +601,31 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
     }
   }
 
-  // Imports exactly the ids it is given. The caller decides what and how many,
-  // so each request is bounded by construction — no stored cursor, and closing
-  // the page cannot leave a half-walked position behind.
+  // Imports exactly the ids it is given — no stored cursor, and closing the
+  // page cannot leave a half-walked position behind.
+  //
+  // This used to say the request was "bounded by construction" because the
+  // caller chose the ids. The caller was a page with a Select All button:
+  // selecting all 83 assigned issues produced 33 records on production and a
+  // success message. A bound that lives only in the caller is not a bound, so
+  // the limit is enforced here as well as applied there.
   if (action === 'backfill') {
     const idsParam = param(context, 'ids');
     if (!idsParam) {
       return { statusCode: 400, body: JSON.stringify({ error: 'No issues selected.' }) };
     }
     const wanted = new Set(idsParam.split(',').map(x => x.trim()).filter(Boolean));
+
+    // Refused before any work, so an oversized request cannot leave records
+    // half-written and report whatever it managed before it ran out of time.
+    if (wanted.size > IMPORT_BATCH_SIZE) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: `Too many issues in one request: ${wanted.size}. The maximum is ${IMPORT_BATCH_SIZE} — send them in batches.`,
+        }),
+      };
+    }
 
     try {
       const { eligible, projectMap } = await eligibleIssues(token);

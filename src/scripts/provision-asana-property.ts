@@ -52,17 +52,19 @@ async function main() {
     console.error('Could not find content_piece object — has this portal been provisioned?');
     process.exit(1);
   }
-  if (!changelog) {
-    console.error('Could not find changelog_entry object — has this portal been provisioned?');
-    process.exit(1);
-  }
 
   console.log(`Found content_piece: ${content.objectTypeId}`);
-  console.log(`Found changelog_entry: ${changelog.objectTypeId}`);
-  console.log('');
-
   await addPropertyIfMissing(client, content.objectTypeId, content.name, 'Content Piece');
-  await addPropertyIfMissing(client, changelog.objectTypeId, changelog.name, 'Changelog Entry');
+
+  // changelog_entry is not required, and its absence is the expected state.
+  // Changelogs are a second pipeline on content_piece, not their own object —
+  // this script predates that consolidation and used to exit(1) when the
+  // leftover object was missing, which would have broken provisioning the
+  // moment the empty object was deleted from a portal.
+  if (changelog) {
+    console.log(`Found changelog_entry (vestigial): ${changelog.objectTypeId}`);
+    await addPropertyIfMissing(client, changelog.objectTypeId, changelog.name, 'Changelog Entry');
+  }
 
   console.log('\nDone.');
 }
