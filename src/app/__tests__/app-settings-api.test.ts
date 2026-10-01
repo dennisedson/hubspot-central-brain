@@ -717,3 +717,97 @@ describe('backfillPreview', () => {
     expect(JSON.parse(res.body).error).toMatch(/Choose a Linear team/);
   });
 });
+
+/**
+ * Prompt overrides on the App Config record.
+ *
+ * The invariant worth protecting: the shipped default is never written to the
+ * property. A portal that has not deliberately changed its wording keeps an
+ * empty value and therefore keeps receiving improvements to the prompt. Store
+ * the default once and that portal is frozen at today's text, with nothing on
+ * screen to say so.
+ */
+describe('changelog prompt overrides', () => {
+  beforeEach(() => {
+    process.env.PRIVATE_APP_ACCESS_TOKEN = 'hs-token';
+    process.env.LINEAR_API_KEY = 'linear-key';
+  });
+
+  function capture(record: Record<string, string> = {}) {
+    const writes: Array<Record<string, string>> = [];
+    mockFetch().mockImplementation((url: string, init?: { method?: string; body?: string }) => {
+      if (String(url).includes('api.linear.app')) return Promise.resolve(linearReply({ data: {} }));
+      if (init?.method === 'PATCH' || init?.method === 'POST') {
+        const parsed = JSON.parse(init.body ?? '{}') as { properties?: Record<string, string> };
+        if (parsed.properties) writes.push(parsed.properties);
+      }
+      return Promise.resolve({
+        ok: true, status: 200,
+        json: async () => ({ results: [{ id: 'cfg-1', properties: record }] }),
+        text: async () => '',
+      } as unknown as Response);
+    });
+    return writes;
+  }
+
+  const base = {
+    action: 'saveSettings',
+    linearTeamId: 'any', assigneeFilter: 'mine', linearAssigneeId: 'u-dennis',
+  };
+
+  it('hands the page both the override and the default', async () => {
+    const body = await getSettings(settingsFetch({
+      record: { ...MINE, changelog_prompt_rollup: 'my own rollup wording' },
+      assigneeProjects: [{ id: 'p-roll', name: 'Rollouts' }],
+    }) as never) as unknown as {
+      prompts: { standalone: string; rollup: string };
+      promptDefaults: { standalone: string; rollup: string };
+    };
+
+    expect(body.prompts.rollup).toBe('my own rollup wording');
+    expect(body.prompts.standalone).toBe('');
+    // The page cannot import the defaults, so the API has to send them.
+    expect(body.promptDefaults.standalone).toContain('HubSpot Developer Changelog Assistant');
+    expect(body.promptDefaults.rollup).toContain('Digest Entry');
+  });
+
+  it('stores an override that was typed', async () => {
+    const writes = capture();
+
+    await main({ accountId: DEV_PORTAL, parameters: { ...base, promptRollup: 'shorter please' } });
+
+    const saved = writes.find(w => 'changelog_prompt_rollup' in w);
+    expect(saved!.changelog_prompt_rollup).toBe('shorter please');
+  });
+
+  it('clears the override when the field is submitted empty', async () => {
+    const writes = capture({ changelog_prompt_rollup: 'previously customised' });
+
+    await main({ accountId: DEV_PORTAL, parameters: { ...base, promptRollup: '' } });
+
+    const saved = writes.find(w => 'changelog_prompt_rollup' in w);
+    expect(saved!.changelog_prompt_rollup).toBe('');
+  });
+
+  it('leaves an override untouched when the field was not submitted', async () => {
+    const writes = capture({ changelog_prompt_rollup: 'previously customised' });
+
+    await main({ accountId: DEV_PORTAL, parameters: base });
+
+    expect(writes.some(w => 'changelog_prompt_rollup' in w)).toBe(false);
+    expect(writes.some(w => 'changelog_prompt_standalone' in w)).toBe(false);
+  });
+
+  it('never writes the shipped default into the property', async () => {
+    // The whole point. If saving stored the default, this portal would stop
+    // receiving every later improvement to the prompt and nothing would say so.
+    const writes = capture();
+
+    await main({ accountId: DEV_PORTAL, parameters: base });
+
+    for (const w of writes) {
+      expect(w.changelog_prompt_standalone ?? '').not.toContain('HubSpot Developer Changelog Assistant');
+      expect(w.changelog_prompt_rollup ?? '').not.toContain('Digest Entry');
+    }
+  });
+});

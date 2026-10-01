@@ -4,6 +4,7 @@ import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 import { upsertContent } from '../lib/hubspot-client';
 import { HS_SYNC_TAG, isAnyTeam, classifyIssue, parseProjectMap, parseUnmappedProjects } from '../lib/mapping';
 import { IMPORT_BATCH_SIZE } from '../lib/import-batching';
+import { STANDALONE_PROMPT, ROLLUP_PROMPT } from '../lib/changelog-prompts';
 
 interface SettingsContext {
   accountId?: number;
@@ -388,7 +389,11 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
     try {
       const result = await hsSearch(
         objectTypeId,
-        ['linear_team_id', 'assignee_filter', 'linear_assignee_id', 'linear_project_map', 'linear_unmapped_projects'],
+        [
+          'linear_team_id', 'assignee_filter', 'linear_assignee_id',
+          'linear_project_map', 'linear_unmapped_projects',
+          'changelog_prompt_standalone', 'changelog_prompt_rollup',
+        ],
         token,
       );
       const record = result.results[0];
@@ -459,6 +464,19 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
           projects,
           projectMap,
           unmappedProjects: unmapped,
+          // What this portal has overridden, and what it would otherwise use.
+          // Both are sent because the page cannot import the defaults — no UI
+          // extension here imports from ../lib — and because showing someone
+          // the text in effect is the only way "empty means default" reads as
+          // a state rather than as a missing value.
+          prompts: {
+            standalone: record?.properties.changelog_prompt_standalone ?? '',
+            rollup: record?.properties.changelog_prompt_rollup ?? '',
+          },
+          promptDefaults: {
+            standalone: STANDALONE_PROMPT,
+            rollup: ROLLUP_PROMPT,
+          },
         }),
       };
     } catch (err) {
@@ -521,6 +539,21 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
       // filtering existed) is stale noise. The webhook will re-record any
       // genuinely new project it encounters after this save.
       properties.linear_unmapped_projects = JSON.stringify([]);
+    }
+
+    // Submitted-but-empty clears the override; absent leaves it alone. The
+    // distinction matters: the page saves everything at once, so "not
+    // submitted" has to mean something different from "cleared".
+    //
+    // The default is never written here. A portal that has not deliberately
+    // changed its wording keeps an empty property and therefore keeps
+    // receiving improvements to the shipped prompt.
+    for (const [key, property] of [
+      ['promptStandalone', 'changelog_prompt_standalone'],
+      ['promptRollup', 'changelog_prompt_rollup'],
+    ] as const) {
+      const value = param(context, key);
+      if (value !== undefined) properties[property] = value;
     }
 
     try {
