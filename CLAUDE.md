@@ -70,6 +70,8 @@ Each of these cost a day at least once.
 
 - Branch off `develop`, PR back into it. There is no staging environment.
 - Never push to a branch whose PR is already merged — the commits strand.
+  Check first, do not remember: `gh pr view <n> --json state`. This has gone
+  wrong four times, and every time the rule was already written down.
 - Confirm a UI change renders before building the next thing on top of it.
 - `hs project dev` runs the extension locally and shows the real exception.
   Deploying to read a generic error message is the slow path.
