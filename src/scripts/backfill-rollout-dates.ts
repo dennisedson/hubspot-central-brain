@@ -63,7 +63,9 @@ async function main() {
     const props = rolloutProperties(record.properties.notes);
     const title = (record.properties.title ?? '').slice(0, 44);
 
-    if (!props.rollout_priority_date) { noDates++; continue; }
+    // null means the notes carry no dates. Skipping rather than writing blanks
+    // is what keeps this from erasing a date typed into HubSpot by hand.
+    if (!props || !props.rollout_priority_date) { noDates++; continue; }
     // Already correct — do not spend a write on it.
     if (record.properties.rollout_priority_date?.slice(0, 10) === props.rollout_priority_date) {
       unchanged++; continue;

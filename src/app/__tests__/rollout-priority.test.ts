@@ -134,33 +134,40 @@ describe('rolloutPriority', () => {
  * because it is wrong with the same confidence as a right one.
  */
 describe('rolloutProperties', () => {
-  it('returns every key even when there is nothing to store', () => {
-    // An omitted property leaves whatever was there before. A date removed
-    // upstream has to be CLEARED, which means sending '' for it.
-    const props = rolloutProperties('no timeline here');
-
-    expect(Object.keys(props).sort()).toEqual([
-      'rollout_live_date',
-      'rollout_priority_date',
-      'rollout_priority_stage',
-      'rollout_private_beta_date',
-      'rollout_public_beta_date',
-    ]);
-    expect(Object.values(props).every(v => v === '')).toBe(true);
+  it('declines to write anything when the notes carry no dates', () => {
+    // This is what protects a date typed into HubSpot by hand. Most issues
+    // have no timeline — the rollout tooling adds it going forward and does
+    // not backfill — so writing '' for every key on every sync would blank a
+    // manual entry the next time anything touched the issue.
+    expect(rolloutProperties('no timeline here')).toBeNull();
+    expect(rolloutProperties('**State:** Live\n**Name:** An older issue')).toBeNull();
   });
 
-  it('clears a date that has been removed upstream', () => {
-    const before = rolloutProperties('### Timeline\n\n**Live Date:** 2099-01-01');
-    expect(before.rollout_live_date).toBe('2099-01-01');
+  it('clears a milestone removed from a timeline that still has others', () => {
+    // Once the notes carry dates, Linear is authoritative over all of them.
+    const before = rolloutProperties([
+      '### Timeline', '',
+      '**Public Beta Date:** 2099-01-01',
+      '**Live Date:** 2099-06-01',
+    ].join('\n'), new Date('2098-01-01T00:00:00Z'));
+    expect(before!.rollout_public_beta_date).toBe('2099-01-01');
 
-    const after = rolloutProperties('### Timeline\n\n(date removed)');
-    expect(after.rollout_live_date).toBe('');
-    expect(after.rollout_priority_date).toBe('');
+    const after = rolloutProperties('### Timeline\n\n**Live Date:** 2099-06-01');
+    expect(after!.rollout_public_beta_date).toBe('');
+    expect(after!.rollout_live_date).toBe('2099-06-01');
+  });
+
+  it('cannot clear a timeline emptied completely — a known, deliberate gap', () => {
+    // An emptied timeline is indistinguishable from one that never existed,
+    // so the stored dates stay until someone clears them by hand. Preferring
+    // that to wiping manual entries is the trade: one is a stale date, the
+    // other is destroyed work.
+    expect(rolloutProperties('### Timeline\n\n(all dates removed)')).toBeNull();
   });
 
   it('follows a date that moved', () => {
     const moved = rolloutProperties('### Timeline\n\n**Live Date:** 2099-09-01');
-    expect(moved.rollout_live_date).toBe('2099-09-01');
+    expect(moved!.rollout_live_date).toBe('2099-09-01');
   });
 
   it('splits milestones into their own properties', () => {
@@ -172,22 +179,23 @@ describe('rolloutProperties', () => {
       '**Live Date:** 2099-06-01',
     ].join('\n'), new Date('2098-01-01T00:00:00Z'));
 
-    expect(props.rollout_private_beta_date).toBe('2099-01-01');
-    expect(props.rollout_public_beta_date).toBe('2099-03-01');
-    expect(props.rollout_live_date).toBe('2099-06-01');
+    expect(props!.rollout_private_beta_date).toBe('2099-01-01');
+    expect(props!.rollout_public_beta_date).toBe('2099-03-01');
+    expect(props!.rollout_live_date).toBe('2099-06-01');
     // The sort key is the soonest one still ahead.
-    expect(props.rollout_priority_date).toBe('2099-01-01');
-    expect(props.rollout_priority_stage).toBe('Private Beta');
+    expect(props!.rollout_priority_date).toBe('2099-01-01');
+    expect(props!.rollout_priority_stage).toBe('Private Beta');
   });
 
   it('never stores whether a date is upcoming', () => {
     // It is relative to today: correct for one day, wrong after.
     const props = rolloutProperties('### Timeline\n\n**Live Date:** 2099-01-01');
-    expect(Object.keys(props)).not.toContain('rollout_priority_upcoming');
+    expect(Object.keys(props!)).not.toContain('rollout_priority_upcoming');
   });
 
-  it('stores nothing for epoch zero', () => {
-    const props = rolloutProperties(`### Timeline\n\n**Live Date:** ${EPOCH_ZERO}`);
-    expect(props.rollout_live_date).toBe('');
+  it('treats an epoch-zero-only timeline as no opinion at all', () => {
+    // Ten production records are exactly this. 1970-01-01 is unset, so the
+    // source has nothing to say and a manual entry survives.
+    expect(rolloutProperties(`### Timeline\n\n**Live Date:** ${EPOCH_ZERO}`)).toBeNull();
   });
 });

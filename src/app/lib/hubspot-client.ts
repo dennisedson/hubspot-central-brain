@@ -156,7 +156,9 @@ export async function upsertContent(
   // Derived from the issue description every time, because milestones move.
   // Every key is present — '' clears a date that has been removed, where an
   // omitted key would leave a stale one in place forever.
-  const rollout = rolloutProperties(data.description);
+  // null when the notes carry no dates: the stored properties are then left
+  // untouched rather than blanked, which is what protects a manual entry.
+  const rollout = rolloutProperties(data.description) ?? {};
 
   const currentStageId = await getCurrentStage(objectTypeId, data.id);
   if (currentStageId === stageId) {
@@ -213,8 +215,10 @@ export async function refreshDerivedProperties(
   linearId: string,
   description: string | undefined,
 ): Promise<void> {
+  // null means the notes carry no dates, so the stored ones are left alone —
+  // that is what keeps a manually entered date from being blanked.
   const properties: Record<string, string> = {
-    ...rolloutProperties(description),
+    ...(rolloutProperties(description) ?? {}),
     ...(description ? { notes: description } : {}),
   };
   await hsUpsertByUniqueProperty(objectTypeId, 'linear_id', linearId, properties);
