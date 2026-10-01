@@ -169,10 +169,7 @@ export async function upsertContent(
     // HubSpot → Linear → HubSpot, and writing a HubSpot property does not
     // notify Linear. The stage itself is still left alone.
     console.log(`Stage unchanged for Linear ${data.id}; refreshing rollout dates only`);
-    await hsUpsertByUniqueProperty(objectTypeId, 'linear_id', data.id, {
-      ...rollout,
-      ...(data.description ? { notes: data.description } : {}),
-    });
+    await refreshDerivedProperties(objectTypeId, data.id, data.description);
     return { id: data.id, action: 'skipped' as const };
   }
 
@@ -192,6 +189,35 @@ export async function upsertContent(
   if (!properties.content_type) delete properties.content_type;
 
   return hsUpsertByUniqueProperty(objectTypeId, 'linear_id', data.id, properties);
+}
+
+
+/**
+ * Refreshes only what is derived from the issue description.
+ *
+ * Writes the notes and the rollout dates, and deliberately touches neither the
+ * pipeline stage nor anything a person may have set in HubSpot.
+ *
+ * Exists because both echo guards — the one in LinearWebhook and the one in
+ * upsertContent — skip on the stage, and an issue can have its TIMELINE edited
+ * while sitting in the same state throughout. Adding a date to an existing
+ * issue is exactly that shape, and before this it produced no write at all.
+ *
+ * Safe with respect to the loop those guards protect: that loop is
+ * HubSpot → Linear → HubSpot, and writing a HubSpot property does not notify
+ * Linear. The guards exist to stop a stage being overwritten, not to stop the
+ * record reflecting the issue.
+ */
+export async function refreshDerivedProperties(
+  objectTypeId: string,
+  linearId: string,
+  description: string | undefined,
+): Promise<void> {
+  const properties: Record<string, string> = {
+    ...rolloutProperties(description),
+    ...(description ? { notes: description } : {}),
+  };
+  await hsUpsertByUniqueProperty(objectTypeId, 'linear_id', linearId, properties);
 }
 
 export async function findContentByAsanaTaskUrl(
