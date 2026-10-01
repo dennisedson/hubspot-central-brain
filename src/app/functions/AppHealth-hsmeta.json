@@ -1,0 +1,22 @@
+{
+  "uid": "app_health",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/AppHealth.js",
+    "endpoint": {
+      "path": "app-health",
+      "methods": ["GET", "POST"]
+    },
+    "secretKeys": [
+      "HS_ACCESS_TOKEN",
+      "SYNC_SHARED_SECRET",
+      "ANTHROPIC_API_KEY",
+      "LINEAR_API_KEY",
+      "ASANA_API_KEY",
+      "FELLOW_API_KEY",
+      "YOUTUBE_CLIENT_ID",
+      "YOUTUBE_CLIENT_SECRET",
+      "YOUTUBE_REFRESH_TOKEN"
+    ]
+  }
+}
