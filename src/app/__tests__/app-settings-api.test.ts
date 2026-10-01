@@ -324,3 +324,58 @@ describe('getLinearProjects', () => {
     expect(mockFetch().mock.calls.length).toBeLessThanOrEqual(25);
   });
 });
+
+/**
+ * The backfill action's own bound.
+ *
+ * Its comment used to say "the caller decides what and how many, so each
+ * request is bounded by construction". The caller was a page with a Select All
+ * button. Selecting all 83 assigned issues produced 33 records on production
+ * and a success message.
+ *
+ * A bound that lives only in the caller is not a bound, so the action now
+ * refuses an oversized request outright rather than starting work it cannot
+ * finish and reporting whatever it managed.
+ */
+describe('backfill request size', () => {
+  beforeEach(() => {
+    process.env.PRIVATE_APP_ACCESS_TOKEN = 'hs-token';
+    process.env.LINEAR_API_KEY = 'linear-key';
+  });
+
+  it('refuses more ids than one invocation can finish', async () => {
+    const ids = Array.from({ length: 83 }, (_, i) => `id-${i}`).join(',');
+
+    const res = await main({ accountId: DEV_PORTAL, parameters: { action: 'backfill', ids } });
+
+    expect(res.statusCode).toBe(400);
+    const body = JSON.parse(res.body) as { error: string };
+    expect(body.error).toMatch(/83/);
+    expect(body.error).toMatch(/15/);
+  });
+
+  it('rejects before doing any work, so nothing is half-written', async () => {
+    mockFetch().mockImplementation(() => {
+      throw new Error('no request should have been made');
+    });
+    const ids = Array.from({ length: 40 }, (_, i) => `id-${i}`).join(',');
+
+    const res = await main({ accountId: DEV_PORTAL, parameters: { action: 'backfill', ids } });
+
+    expect(res.statusCode).toBe(400);
+    expect(mockFetch()).not.toHaveBeenCalled();
+  });
+
+  it('still accepts a batch of exactly the maximum', async () => {
+    mockFetch().mockImplementation(
+      routeFetch({ linear_team_id: 'any', assignee_filter: 'mine', linear_assignee_id: 'u-dennis' }),
+    );
+    const ids = Array.from({ length: 15 }, (_, i) => `id-${i}`).join(',');
+
+    const res = await main({ accountId: DEV_PORTAL, parameters: { action: 'backfill', ids } });
+
+    // Nothing matches these ids, so nothing is written — but it was allowed to try.
+    expect(res.statusCode).toBe(200);
+    expect((JSON.parse(res.body) as { requested: number }).requested).toBe(15);
+  });
+});

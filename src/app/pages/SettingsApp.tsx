@@ -74,6 +74,25 @@ interface PreviewIssue {
   kind: ProjectKind;
 }
 
+/**
+ * Issues per import request.
+ *
+ * MUST match IMPORT_BATCH_SIZE in src/app/lib/import-batching.ts, which is what
+ * the backfill action enforces. `import-batch-size.test.ts` fails if they drift.
+ *
+ * Defined here rather than imported because no UI extension in this repo has
+ * ever imported from ../lib and the bundler's handling of it is unproven — the
+ * settings page is not the place to find out.
+ */
+const IMPORT_BATCH_SIZE = 15;
+
+/** Splits into runs of at most `size`, preserving order. */
+function chunk<T>(items: T[], size: number = IMPORT_BATCH_SIZE): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 interface ImportResult {
   requested: number;
   imported: number;
@@ -296,6 +315,10 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
+  // Captured when the import starts: the selection can change underneath, and
+  // the result must be judged against what was actually requested.
+  const [importAsked, setImportAsked] = useState(0);
 
   useEffect(() => {
     callApi('getSettings', { portalId: String(portalId) })
@@ -399,24 +422,59 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
     );
   }, [previewIssues]);
 
-  const handleImport = useCallback(() => {
-    if (selectedIds.size === 0) return;
+  /**
+   * Imports the selection in batches, one request at a time.
+   *
+   * This used to send every selected id in a single call. Selecting all 83
+   * assigned issues produced 33 records on production and a green "Import
+   * complete" — each issue costs a HubSpot search plus a write, and 83 of them
+   * is far more work than one invocation gets.
+   *
+   * Sequential rather than parallel: the writes are not the bottleneck worth
+   * optimising, and six concurrent invocations against the same object is a
+   * good way to turn one problem into a different one.
+   */
+  const handleImport = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
     setImportLoading(true);
     setImportResult(null);
     setImportError(null);
-    callApi('backfill', { portalId: String(portalId), ids: Array.from(selectedIds).join(',') })
-      .then(res => {
-        if (res.statusCode === 200) {
-          setImportResult(JSON.parse(res.body) as ImportResult);
-        } else {
+    setImportAsked(ids.length);
+    setImportProgress({ done: 0, total: ids.length });
+
+    const batches = chunk(ids);
+    const totals: ImportResult = { requested: 0, imported: 0, created: 0, updated: 0, errors: [] };
+    let done = 0;
+
+    try {
+      for (const batch of batches) {
+        const res = await callApi('backfill', { portalId: String(portalId), ids: batch.join(',') });
+        if (res.statusCode !== 200) {
           const data = JSON.parse(res.body) as { error?: string; detail?: string };
-          setImportError(data.detail ?? data.error ?? 'Import failed');
+          throw new Error(data.detail ?? data.error ?? 'Import failed');
         }
-      })
-      .catch((err: unknown) => {
-        setImportError(err instanceof Error ? err.message : 'Import failed');
-      })
-      .finally(() => setImportLoading(false));
+        const batchResult = JSON.parse(res.body) as ImportResult;
+        totals.requested += batchResult.requested;
+        totals.imported += batchResult.imported;
+        totals.created += batchResult.created;
+        totals.updated += batchResult.updated;
+        totals.errors.push(...batchResult.errors);
+
+        done += batch.length;
+        setImportProgress({ done, total: ids.length });
+      }
+      setImportResult(totals);
+    } catch (err) {
+      // Whatever already landed is shown alongside the error. A batch failing
+      // halfway through must not erase the record of the ones that worked.
+      if (done > 0) setImportResult(totals);
+      setImportError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setImportProgress(null);
+      setImportLoading(false);
+    }
   }, [portalId, selectedIds]);
 
   if (loading) {
@@ -611,23 +669,43 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
                   disabled={importLoading || selectedIds.size === 0}
                   variant="primary"
                 >
-                  {importLoading ? 'Importing…' : `Import ${selectedIds.size} Issue${selectedIds.size === 1 ? '' : 's'}`}
+                  {importLoading
+                    ? importProgress
+                      ? `Importing ${importProgress.done} of ${importProgress.total}…`
+                      : 'Importing…'
+                    : `Import ${selectedIds.size} Issue${selectedIds.size === 1 ? '' : 's'}`}
                 </Button>
               </Box>
             </Flex>
           )}
 
-          {importResult && (
-            <Alert
-              title="Import complete"
-              variant={importResult.errors.length > 0 ? 'warning' : 'success'}
-            >
-              <Text>
-                Created {importResult.created}, updated {importResult.updated}
-                {importResult.errors.length > 0 ? `. ${importResult.errors.length} error(s).` : ''}
-              </Text>
-            </Alert>
-          )}
+          {importResult && (() => {
+            // Judged against what was ASKED FOR, not just against errors. The
+            // old version showed "Import complete" in green whenever the errors
+            // list was empty, which is how 33 of 83 read as a success.
+            const complete =
+              importResult.errors.length === 0 && importResult.imported >= importAsked;
+            return (
+              <Alert
+                title={complete ? 'Import complete' : 'Import did not finish'}
+                variant={complete ? 'success' : 'warning'}
+              >
+                <Text>
+                  Imported {importResult.imported} of {importAsked} selected — created{' '}
+                  {importResult.created}, updated {importResult.updated}
+                  {importResult.errors.length > 0
+                    ? `. ${importResult.errors.length} error(s).`
+                    : ''}
+                </Text>
+                {!complete && (
+                  <Text variant="microcopy">
+                    Run the import again to pick up the rest — issues already brought
+                    over are matched on their Linear id and updated, not duplicated.
+                  </Text>
+                )}
+              </Alert>
+            );
+          })()}
         </Flex>
       )}
     </Form>
