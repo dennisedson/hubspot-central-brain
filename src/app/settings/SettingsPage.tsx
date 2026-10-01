@@ -1,5 +1,5 @@
 import { hubspot, Box, Heading, Text } from '@hubspot/ui-extensions';
-import { LinearSettingsForm } from '../pages/LinearSettingsForm.tsx';
+import { LinearSettingsForm } from './LinearSettingsForm.tsx';
 
 /**
  * The app's Settings tab, under Connected apps.
@@ -18,9 +18,19 @@ import { LinearSettingsForm } from '../pages/LinearSettingsForm.tsx';
  * Linear settings form. Three changes landed in the copy nobody could see
  * while the page people actually used stayed unchanged (#60).
  *
- * So there is exactly one implementation, in pages/LinearSettingsForm.tsx, and
- * this is its second entrance. No `onBack` is passed — the Settings tab is a
- * destination, not a detour.
+ * HubSpot bundles each extension directory in isolation — the upload copies
+ * one directory to a temp root, so an import that leaves it cannot resolve:
+ *
+ *   Could not resolve "../pages/LinearSettingsForm.tsx"
+ *     from "../../tmp/app/settings/SettingsPage.tsx"
+ *
+ * Sharing by import is therefore not available. The file beside this one is
+ * GENERATED from pages/LinearSettingsForm.tsx by `npm run sync:settings-form`,
+ * which `npm run build` runs first, and `settings-form-in-sync.test.ts` fails
+ * while the two differ. A copy that cannot silently drift is a different thing
+ * from two implementations.
+ *
+ * No `onBack` is passed — the Settings tab is a destination, not a detour.
  */
 hubspot.extend<'settings'>(({ context }) => {
   const portalId = (context as { portal: { id: number } }).portal.id;

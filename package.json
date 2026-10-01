@@ -26,7 +26,7 @@
     "provision:enterpret-quotes": "tsx src/scripts/provision-enterpret-quotes.ts",
     "provision:property-descriptions": "tsx src/scripts/provision-property-descriptions.ts",
     "provision:asana-webhook": "tsx src/scripts/provision-asana-webhook.ts",
-    "build": "esbuild src/app/functions/*.ts --bundle --platform=node --target=node18 --outdir=src/app/functions",
+    "build": "npm run sync:settings-form && esbuild src/app/functions/*.ts --bundle --platform=node --target=node18 --outdir=src/app/functions",
     "dev": "hs project dev",
     "upload": "npm run build && hs project upload",
     "upload:dev": "npm run build && hs project upload --account=Dev-HubSpot-Brain",
@@ -37,7 +37,8 @@
     "provision:project-map": "tsx src/scripts/provision-project-map.ts",
     "provision:changelog-drafting": "tsx src/scripts/provision-changelog-drafting.ts",
     "compare:changelog-models": "tsx src/scripts/compare-changelog-models.ts",
-    "typecheck:settings": "npm --prefix src/app/settings install --silent && (cd src/app/settings && npx tsc --noEmit)"
+    "typecheck:settings": "npm --prefix src/app/settings install --silent && (cd src/app/settings && npx tsc --noEmit)",
+    "sync:settings-form": "tsx src/scripts/sync-settings-form.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
