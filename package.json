@@ -38,7 +38,8 @@
     "provision:changelog-drafting": "tsx src/scripts/provision-changelog-drafting.ts",
     "compare:changelog-models": "tsx src/scripts/compare-changelog-models.ts",
     "typecheck:settings": "npm --prefix src/app/settings install --silent && (cd src/app/settings && npx tsc --noEmit)",
-    "sync:settings-form": "tsx src/scripts/sync-settings-form.ts"
+    "sync:settings-form": "tsx src/scripts/sync-settings-form.ts",
+    "backfill:rollout-dates": "tsx src/scripts/backfill-rollout-dates.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

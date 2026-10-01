@@ -12,6 +12,10 @@ interface ContentRecord {
   id: string;
   title: string;
   contentType: string;
+  /** Next beta/live milestone, for ordering a pipeline column. */
+  priorityDate?: string | null;
+  priorityStage?: string | null;
+  priorityUpcoming?: boolean;
   pipelineStage: string;
   targetDate: string | null;
   linearIssueUrl: string | null;
@@ -69,7 +73,10 @@ export async function main(context: ContentDataContext): Promise<{ statusCode: n
         filterGroups: [
           { filters: [{ propertyName: 'hs_pipeline', operator: 'EQ', value: pipelineId }] },
         ],
-        properties: ['title', 'content_type', 'hs_pipeline_stage', 'target_date', 'linear_issue_url'],
+        properties: [
+          'title', 'content_type', 'hs_pipeline_stage', 'target_date', 'linear_issue_url',
+          'rollout_priority_date', 'rollout_priority_stage',
+        ],
         sorts: [{ propertyName: 'hs_lastmodifieddate', direction: 'DESCENDING' }],
         limit: 100,
         after: '0',
@@ -97,14 +104,26 @@ export async function main(context: ContentDataContext): Promise<{ statusCode: n
       isClosed: s.metadata?.isClosed === 'true',
     }));
 
-  const records: ContentRecord[] = search.results.map(r => ({
-    id: r.id,
-    title: r.properties.title ?? 'Untitled',
-    contentType: r.properties.content_type ?? '',
-    pipelineStage: r.properties.hs_pipeline_stage ?? '',
-    targetDate: r.properties.target_date ?? null,
-    linearIssueUrl: r.properties.linear_issue_url ?? null,
-  }));
+  const today = new Date().toISOString().slice(0, 10);
+  const records: ContentRecord[] = search.results.map(r => {
+    // Read from the stored property, written on every sync, so HubSpot's own
+    // list views can sort on the same value this board does.
+    //
+    // `upcoming` is NOT stored and is computed here: it is relative to today,
+    // so a stored copy would be correct for one day and quietly wrong after.
+    const priorityDate = r.properties.rollout_priority_date?.slice(0, 10) ?? null;
+    return {
+      id: r.id,
+      title: r.properties.title ?? 'Untitled',
+      contentType: r.properties.content_type ?? '',
+      pipelineStage: r.properties.hs_pipeline_stage ?? '',
+      targetDate: r.properties.target_date ?? null,
+      linearIssueUrl: r.properties.linear_issue_url ?? null,
+      priorityDate,
+      priorityStage: r.properties.rollout_priority_stage ?? null,
+      priorityUpcoming: priorityDate ? priorityDate >= today : false,
+    };
+  });
 
   return {
     statusCode: 200,

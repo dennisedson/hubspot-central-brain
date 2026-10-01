@@ -46,8 +46,8 @@ async function resolveGroupName(objectTypeId: string, token: string): Promise<st
 interface PropertySpec {
   name: string;
   label: string;
-  fieldType: 'textarea' | 'select';
-  type: 'string' | 'enumeration';
+  fieldType: 'textarea' | 'select' | 'date' | 'text';
+  type: 'string' | 'enumeration' | 'date';
   options?: Array<{ label: string; value: string; displayOrder: number; hidden: boolean }>;
 }
 
@@ -78,6 +78,17 @@ async function main() {
   console.log(`\n[${portal}] Provisioning changelog drafting on portal ${portalId}...`);
 
   await addProperties(config.content.objectTypeId, [
+    // Rollout milestones, stored so HubSpot's own list views can sort and
+    // filter on them — not just our pipeline board. Written on every sync,
+    // with '' clearing a date that has been removed upstream.
+    { name: 'rollout_private_beta_date', label: 'Rollout — Private Beta', type: 'date', fieldType: 'date' },
+    { name: 'rollout_public_beta_date', label: 'Rollout — Public Beta', type: 'date', fieldType: 'date' },
+    { name: 'rollout_live_date', label: 'Rollout — Live', type: 'date', fieldType: 'date' },
+    // The sort key: the next milestone that forces action. Derived, but stored
+    // so it can be sorted on. Note that "is it upcoming" is NOT stored — that
+    // is relative to today and would be correct for exactly one day.
+    { name: 'rollout_priority_date', label: 'Rollout — Next Milestone', type: 'date', fieldType: 'date' },
+    { name: 'rollout_priority_stage', label: 'Rollout — Next Milestone Stage', type: 'string', fieldType: 'text' },
     {
       name: 'changelog_draft',
       label: 'Changelog Draft',
