@@ -76,7 +76,17 @@ Each of these cost a day at least once.
 - `hs project dev` runs the extension locally and shows the real exception.
   Deploying to read a generic error message is the slow path.
 
-## The review bot skips silently
+## The review bot is switched off
+
+`claude-code-review.yml` was removed on 2026-10-01. It never produced a review:
+the green checks were skips, and the red ones were auth failures. Issue #98
+records the one-field fix and how to put it back.
+
+The `@claude` workflow (`claude.yml`) is still present and uses the same
+federation, so it will fail the same way until that fix is applied. It is
+mention-triggered, so it costs nothing to leave in place.
+
+## The review bot skipped silently — why a green check meant nothing
 
 `claude-code-action` refuses to run unless the workflow file on the PR branch is
 **byte-identical to the copy on the default branch**, which here is `master`. It
