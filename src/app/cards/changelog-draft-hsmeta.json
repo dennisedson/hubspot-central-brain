@@ -1,0 +1,12 @@
+{
+  "uid": "changelog_draft_card",
+  "type": "card",
+  "config": {
+    "name": "Changelog Draft",
+    "location": "crm.record.tab",
+    "entrypoint": "/app/cards/ChangelogDraftCard.tsx",
+    "objectTypes": [
+      "p_content_piece"
+    ]
+  }
+}

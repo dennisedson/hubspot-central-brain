@@ -1,0 +1,12 @@
+{
+  "uid": "changelog_draft_api",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/ChangelogDraft.js",
+    "endpoint": {
+      "path": "changelog-draft",
+      "methods": ["GET", "POST"]
+    },
+    "secretKeys": ["HS_ACCESS_TOKEN", "ANTHROPIC_API_KEY"]
+  }
+}
