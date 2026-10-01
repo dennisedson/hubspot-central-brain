@@ -3,6 +3,8 @@ import {
   STANDALONE_PROMPT,
   ROLLUP_PROMPT,
   promptFor,
+  resolvePrompt,
+  isOverridden,
 } from '../lib/changelog-prompts';
 
 /**
@@ -75,5 +77,49 @@ describe('both prompts', () => {
       expect(p).toMatch(/No Marketing Fluff/);
       expect(p).toMatch(/thrilled to announce/);
     }
+  });
+});
+
+/**
+ * Resolution between a portal's override and the shipped default.
+ *
+ * The rule that matters: an empty override means "use the default", and the
+ * settings page never writes the default into the property. A portal that has
+ * not deliberately customised its wording keeps receiving improvements to the
+ * shipped prompt; one that has, keeps its own text.
+ */
+describe('resolvePrompt', () => {
+  it('uses the shipped default when nothing is stored', () => {
+    expect(resolvePrompt('standalone', null)).toBe(STANDALONE_PROMPT);
+    expect(resolvePrompt('rollup', undefined)).toBe(ROLLUP_PROMPT);
+    expect(resolvePrompt('rollup', '')).toBe(ROLLUP_PROMPT);
+  });
+
+  it('treats a whitespace-only override as cleared, not as a blank prompt', () => {
+    // Clearing a textarea usually leaves a newline. "I deleted it" must mean
+    // back to default, never "send the model an empty system prompt".
+    expect(resolvePrompt('standalone', '   ')).toBe(STANDALONE_PROMPT);
+    expect(resolvePrompt('standalone', '\n\n')).toBe(STANDALONE_PROMPT);
+  });
+
+  it('uses a real override when one is stored', () => {
+    const mine = '# My own prompt\n\nWrite it differently.';
+    expect(resolvePrompt('standalone', mine)).toBe(mine);
+    expect(resolvePrompt('rollup', mine)).toBe(mine);
+  });
+
+  it('does not trim a real override — the wording is the operator\'s', () => {
+    const padded = '\n# Leading newline matters to someone\n';
+    expect(resolvePrompt('rollup', padded)).toBe(padded);
+  });
+});
+
+describe('isOverridden', () => {
+  it('distinguishes a deliberate override from an empty field', () => {
+    expect(isOverridden('custom')).toBe(true);
+    expect(isOverridden('')).toBe(false);
+    expect(isOverridden('  \n ')).toBe(false);
+    expect(isOverridden(null)).toBe(false);
+    expect(isOverridden(undefined)).toBe(false);
   });
 });

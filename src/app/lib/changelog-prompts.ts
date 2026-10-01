@@ -184,3 +184,28 @@ Append a horizontal rule (\`---\`) and this single line, so the digest editor ca
 export function promptFor(mode: ChangelogDraftMode): string {
   return mode === 'rollup' ? ROLLUP_PROMPT : STANDALONE_PROMPT;
 }
+
+/**
+ * The prompt to actually send, given whatever the portal has stored.
+ *
+ * An empty override means "use the shipped default", and that is the normal
+ * state — the settings page writes a value only when someone deliberately
+ * changes the wording. Copying the default into the property on save would
+ * freeze that portal at today's text and silently cut it off from every later
+ * improvement, which is the opposite of what an override is for.
+ *
+ * Whitespace-only counts as empty: clearing the field in a textarea tends to
+ * leave a newline behind, and "I deleted it" should mean "back to default"
+ * rather than "send the model a blank system prompt".
+ */
+export function resolvePrompt(
+  mode: ChangelogDraftMode,
+  stored?: string | null,
+): string {
+  return stored && stored.trim() ? stored : promptFor(mode);
+}
+
+/** Whether a stored value is a deliberate override rather than an empty field. */
+export function isOverridden(stored?: string | null): boolean {
+  return Boolean(stored && stored.trim());
+}
