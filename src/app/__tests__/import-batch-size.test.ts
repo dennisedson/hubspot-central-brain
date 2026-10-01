@@ -37,6 +37,23 @@ describe('import batch size', () => {
     expect(IMPORT_BATCH_SIZE).toBeLessThanOrEqual(20);
   });
 
+  it('gates the import on the routing map being filled in', () => {
+    // Importing with no project mapped sends everything to the content
+    // pipeline by default — which on this workspace would have filed 69
+    // changelogs as content. The page hides Preview and Import until at least
+    // one project is routed. Asserted statically because a UI extension cannot
+    // be rendered in this suite.
+    const source = readFileSync(PAGE, 'utf8');
+    expect(source).toMatch(/Object\.keys\(projectMap\)\.length === 0/);
+  });
+
+  it('judges the result against what was requested, not just against errors', () => {
+    // "Import complete" in green whenever errors was empty is how 33 of 83
+    // read as success.
+    const source = readFileSync(PAGE, 'utf8');
+    expect(source).toMatch(/importResult\.imported >= importAsked/);
+  });
+
   it('still sends the whole selection — the page batches rather than truncating', () => {
     const source = readFileSync(PAGE, 'utf8');
     // The bug: one call carrying every selected id.

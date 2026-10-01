@@ -162,7 +162,16 @@ export async function getLinearProjects(apiKey: string): Promise<LinearTeam[]> {
  * projects from the user's assigned issues so the settings page shows exactly
  * the projects whose issues will route through the sync.
  */
-async function getAssigneeProjects(apiKey: string, assigneeId: string): Promise<LinearTeam[]> {
+/**
+ * Returns `null` when the lookup FAILED, as opposed to `[]` when the person
+ * genuinely has no project work. The caller falls back to the whole workspace
+ * on the first and not on the second — conflating them meant someone with no
+ * project issues was shown all 1,592 projects as if that were an answer.
+ *
+ * A partial result from a later page is returned rather than discarded: some
+ * of the list beats none, and it is still the person's own projects.
+ */
+async function getAssigneeProjects(apiKey: string, assigneeId: string): Promise<LinearTeam[] | null> {
   const seen = new Map<string, string>();
   let after: string | null = null;
 
@@ -199,7 +208,8 @@ async function getAssigneeProjects(apiKey: string, assigneeId: string): Promise<
       after = conn.pageInfo.endCursor;
     }
   } catch {
-    return [...seen.entries()].map(([id, name]) => ({ id, name }));
+    const partial = [...seen.entries()].map(([id, name]) => ({ id, name }));
+    return partial.length > 0 ? partial.sort(byName) : null;
   }
 
   return [...seen.entries()].map(([id, name]) => ({ id, name })).sort(byName);
@@ -411,21 +421,34 @@ export async function main(context: SettingsContext): Promise<{ statusCode: numb
       let memberProjects: LinearTeam[] = [];
       if (linearApiKey) {
         if (useFilter) {
-          memberProjects = await getAssigneeProjects(linearApiKey, settings.linearAssigneeId);
-          if (memberProjects.length === 0) {
-            memberProjects = await getLinearProjects(linearApiKey);
-          }
+          // null means the lookup failed, so the whole workspace is better than
+          // nothing. An empty array means there is genuinely nothing to route,
+          // and 1,592 rows is not a useful way to say that.
+          const assigneeProjects = await getAssigneeProjects(linearApiKey, settings.linearAssigneeId);
+          memberProjects = assigneeProjects ?? await getLinearProjects(linearApiKey);
         } else {
           memberProjects = await getLinearProjects(linearApiKey);
         }
       }
 
+      // A project stays in the list once it has been mapped, even after it
+      // drops out of the assignee's issues — otherwise the mapping is stranded
+      // where nobody can see or change it.
+      //
+      // Its NAME has to be looked up. These used to be listed as `{ id, name: id }`,
+      // which put a raw UUID on screen where a project name belongs: the same
+      // defect as the assignee field, in the same view. The extra request is
+      // only paid when a mapped project has actually fallen out.
       const seen = new Set(memberProjects.map(p => p.id));
-      const extras: LinearTeam[] = [];
-      for (const id of Object.keys(projectMap)) {
-        if (!seen.has(id)) extras.push({ id, name: id });
+      const extraIds = Object.keys(projectMap).filter(id => !seen.has(id));
+      let extras: LinearTeam[] = [];
+      if (extraIds.length > 0 && linearApiKey) {
+        const byId = new Map((await getLinearProjects(linearApiKey)).map(p => [p.id, p.name]));
+        extras = extraIds
+          .map(id => ({ id, name: byId.get(id) ?? `Unavailable project (${id.slice(0, 8)}…)` }))
+          .sort(byName);
       }
-      const projects = [...memberProjects, ...extras.sort(byName)];
+      const projects = [...memberProjects, ...extras];
 
       return {
         statusCode: 200,
