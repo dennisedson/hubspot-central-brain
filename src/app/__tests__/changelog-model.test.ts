@@ -50,9 +50,11 @@ describe('resolveThinking', () => {
 });
 
 describe('model ids', () => {
-  it('pins a concrete id per choice rather than an alias', () => {
+  it('pins the newest of each family, by exact id', () => {
+    // Confirmed against GET /v1/models on 2026-10-01. Exact ids, never
+    // aliases: an alias moving under this feature is a change nobody made.
     expect(MODEL_IDS.opus).toBe('claude-opus-5-5');
-    expect(MODEL_IDS.sonnet).toBe('claude-sonnet-5');
+    expect(MODEL_IDS.sonnet).toBe('claude-sonnet-5-5');
     expect(MODEL_IDS.haiku).toBe('claude-haiku-4-5-20251001');
   });
 

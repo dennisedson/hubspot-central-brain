@@ -224,7 +224,7 @@ describe('the turn action', () => {
 
     const call = mockFetch().mock.calls.find(([u]) => String(u).includes('api.anthropic.com'));
     const body = JSON.parse(call![1].body as string) as { model: string; thinking: { type: string } };
-    expect(body.model).toBe('claude-sonnet-5');
+    expect(body.model).toBe('claude-sonnet-5-5');
     expect(body.thinking).toEqual({ type: 'disabled' });
   });
 
@@ -247,7 +247,7 @@ describe('the turn action', () => {
 
     const call = mockFetch().mock.calls.find(([u]) => String(u).includes('api.anthropic.com'));
     // Sonnet is the default because the function has 20 seconds to finish.
-    expect((JSON.parse(call![1].body as string) as { model: string }).model).toBe('claude-sonnet-5');
+    expect((JSON.parse(call![1].body as string) as { model: string }).model).toBe('claude-sonnet-5-5');
   });
 
   it('tells the model to revise an existing draft rather than start over', async () => {
