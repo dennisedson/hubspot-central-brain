@@ -8,6 +8,7 @@ import {
   Text,
   Tag,
   Select,
+  TextArea,
   Button,
   Alert,
   Divider,
@@ -54,9 +55,16 @@ interface UnmappedProject {
   name: string;
 }
 
+interface PromptSet {
+  standalone: string;
+  rollup: string;
+}
+
 interface SettingsResponse extends AppSettings {
   teams: LinearOption[];
   teamMembers: LinearOption[];
+  prompts: PromptSet;
+  promptDefaults: PromptSet;
   projects: LinearOption[];
   projectMap: ProjectMap;
   unmappedProjects: UnmappedProject[];
@@ -319,6 +327,11 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
   // Captured when the import starts: the selection can change underneath, and
   // the result must be judged against what was actually requested.
   const [importAsked, setImportAsked] = useState(0);
+  // What this portal has overridden. Empty is the normal state and means
+  // "use the shipped default" — never prefilled with the default, because
+  // saving that would freeze this portal at today's wording.
+  const [prompts, setPrompts] = useState<PromptSet>({ standalone: '', rollup: '' });
+  const [promptDefaults, setPromptDefaults] = useState<PromptSet>({ standalone: '', rollup: '' });
 
   useEffect(() => {
     callApi('getSettings', { portalId: String(portalId) })
@@ -331,6 +344,8 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
             linearAssigneeId: data.linearAssigneeId,
           });
           setTeams(data.teams ?? []);
+          setPrompts(data.prompts ?? { standalone: '', rollup: '' });
+          setPromptDefaults(data.promptDefaults ?? { standalone: '', rollup: '' });
           setTeamMembers(data.teamMembers ?? []);
           setProjects(data.projects ?? []);
           setProjectMap(data.projectMap ?? {});
@@ -371,6 +386,8 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
       assigneeFilter: settings.assigneeFilter,
       linearAssigneeId: settings.linearAssigneeId,
       projectMap: JSON.stringify(projectMap),
+      promptStandalone: prompts.standalone,
+      promptRollup: prompts.rollup,
     })
       .then(res => {
         if (res.statusCode === 200) {
@@ -383,7 +400,7 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
       })
       .catch(() => setStatus('error'))
       .finally(() => setSaving(false));
-  }, [portalId, settings, projectMap]);
+  }, [portalId, settings, projectMap, prompts]);
 
   const handlePreview = useCallback(() => {
     setPreviewLoading(true);
@@ -599,6 +616,33 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
 
       <Divider />
 
+      <Heading>Changelog Drafting Prompts</Heading>
+      <Text variant="microcopy">
+        The instructions sent to the model when drafting a changelog. Leave these
+        empty to use the prompts shipped with the app — an empty field keeps this
+        portal receiving improvements to them. Fill one in only to override it here.
+      </Text>
+
+      <PromptOverride
+        label="Standalone post"
+        name="promptStandalone"
+        hint="For a change significant enough to earn its own announcement and its own email to subscribers."
+        value={prompts.standalone}
+        defaultValue={promptDefaults.standalone}
+        onChange={next => setPrompts(prev => ({ ...prev, standalone: next }))}
+      />
+
+      <PromptOverride
+        label="Rollup entry"
+        name="promptRollup"
+        hint="For one entry inside a monthly digest. Two to four sentences, and it refuses breaking changes."
+        value={prompts.rollup}
+        defaultValue={promptDefaults.rollup}
+        onChange={next => setPrompts(prev => ({ ...prev, rollup: next }))}
+      />
+
+      <Divider />
+
       {status === 'success' && <Alert title="Settings saved" variant="success" />}
       {status === 'error' && (
         <Alert title="Failed to save settings" variant="error">
@@ -709,6 +753,66 @@ function SettingsPage({ portalId, onBack }: { portalId: number; onBack: () => vo
         </Flex>
       )}
     </Form>
+  );
+}
+
+
+/**
+ * One editable system prompt.
+ *
+ * The field is EMPTY when this portal has not overridden anything, and that is
+ * the normal state — it is never prefilled with the shipped default, because
+ * saving that would store today's wording and silently cut this portal off
+ * from every later improvement to it. "Load default to edit" is the deliberate
+ * way to start from the baseline; clearing the field is how you go back.
+ */
+function PromptOverride({
+  label, name, hint, value, defaultValue, onChange,
+}: {
+  label: string;
+  name: string;
+  hint: string;
+  value: string;
+  defaultValue: string;
+  onChange: (next: string) => void;
+}) {
+  const overridden = value.trim().length > 0;
+  return (
+    <Box>
+      <Flex justify="between" align="center">
+        <Text format={{ fontWeight: 'bold' }}>{label}</Text>
+        <Tag variant={overridden ? 'warning' : 'success'}>
+          {overridden ? 'Custom' : 'Using default'}
+        </Tag>
+      </Flex>
+      <Text variant="microcopy">{hint}</Text>
+      <TextArea
+        label=""
+        name={name}
+        value={value}
+        rows={10}
+        placeholder="Empty — the shipped default is in use."
+        onChange={next => onChange(String(next ?? ''))}
+      />
+      <Flex gap="small">
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={overridden}
+          onClick={() => onChange(defaultValue)}
+        >
+          Load default to edit
+        </Button>
+        <Button
+          size="sm"
+          variant="transparent"
+          disabled={!overridden}
+          onClick={() => onChange('')}
+        >
+          Reset to default
+        </Button>
+      </Flex>
+    </Box>
   );
 }
 
