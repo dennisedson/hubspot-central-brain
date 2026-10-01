@@ -130,3 +130,79 @@ describe('ContentDataApi — pipeline selection', () => {
     expect(res.statusCode).toBe(200);
   });
 });
+
+/**
+ * The pipeline board orders each column by the next milestone that forces
+ * action, so the priority date has to come back with every record.
+ *
+ * Computed server-side from `notes` rather than stored: it cannot go stale
+ * against the text it derives from, and it needed no backfill across the 70
+ * records already on production.
+ */
+/**
+ * Runs the handler against a single record with the given properties, and
+ * returns that record as the board would receive it.
+ */
+async function oneRecord(props: Record<string, string>) {
+  mockFetch.mockImplementation((url: string) => {
+    if (String(url).endsWith('/search')) {
+      return Promise.resolve({
+        ok: true, status: 200,
+        json: async () => ({ results: [{ id: '1', properties: { title: 'A thing', ...props } }] }),
+        text: async () => '',
+      });
+    }
+    return Promise.resolve(pipelineResponse('stage-1', 'Idea'));
+  });
+
+  const res = await main({ accountId: PORTAL_ID, parameters: {} } as never);
+  const body = JSON.parse(res.body) as {
+    records: Array<{
+      priorityDate: string | null; priorityStage: string | null; priorityUpcoming: boolean;
+    }>;
+  };
+  return body.records[0];
+}
+
+describe('rollout priority on each record', () => {
+  it('returns the stored milestone, and marks a future one upcoming', async () => {
+    const record = await oneRecord({
+      rollout_priority_date: '2099-06-01',
+      rollout_priority_stage: 'Public Beta',
+    });
+
+    expect(record.priorityDate).toBe('2099-06-01');
+    expect(record.priorityStage).toBe('Public Beta');
+    expect(record.priorityUpcoming).toBe(true);
+  });
+
+  it('marks a past milestone as not upcoming', async () => {
+    // Computed per request rather than stored: "is it upcoming" is relative to
+    // today, so a stored copy is correct for one day and wrong afterwards.
+    const record = await oneRecord({
+      rollout_priority_date: '2020-01-01',
+      rollout_priority_stage: 'Live',
+    });
+
+    expect(record.priorityUpcoming).toBe(false);
+  });
+
+  it('handles a record with no milestone at all', async () => {
+    const record = await oneRecord({});
+    expect(record.priorityDate).toBeNull();
+    expect(record.priorityUpcoming).toBe(false);
+  });
+
+  it('trims a datetime down to the date', async () => {
+    // HubSpot returns date properties with a time component.
+    const record = await oneRecord({ rollout_priority_date: '2099-06-01T00:00:00Z' });
+    expect(record.priorityDate).toBe('2099-06-01');
+  });
+
+  it('does not ask HubSpot for notes — the board needs one date, not 2KB', async () => {
+    await oneRecord({});
+    const requested = (searchBody().properties as string[]) ?? [];
+    expect(requested).toContain('rollout_priority_date');
+    expect(requested).not.toContain('notes');
+  });
+});

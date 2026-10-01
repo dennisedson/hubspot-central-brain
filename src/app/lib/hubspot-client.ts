@@ -1,4 +1,5 @@
 import type { LinearWebhookPayload, UpsertResult } from './types';
+import { rolloutProperties } from './changelog-source';
 import { LINEAR_STATE_TO_CONTENT_STAGE, LINEAR_STATE_TO_CHANGELOG_STAGE } from './mapping';
 import { parseProjectMap, parseUnmappedProjects, type ProjectMap, type UnmappedProject } from './mapping';
 import { getPortalConfig, DEFAULT_APP_SETTINGS } from './portal-config';
@@ -152,9 +153,26 @@ export async function upsertContent(
   // Skip if the record already has this exact stage — prevents duplicate workflow
   // triggers when Linear fires two rapid webhook events for the same action
   // (e.g. issue creation + label assignment arriving near-simultaneously).
+  // Derived from the issue description every time, because milestones move.
+  // Every key is present — '' clears a date that has been removed, where an
+  // omitted key would leave a stale one in place forever.
+  const rollout = rolloutProperties(data.description);
+
   const currentStageId = await getCurrentStage(objectTypeId, data.id);
   if (currentStageId === stageId) {
-    console.log(`Skipping upsert for Linear ${data.id}: stage already ${stageId}`);
+    // The stage has not moved, but the TIMELINE may have: a date brought
+    // forward, pushed back or deleted, with the issue sitting in the same
+    // state throughout. Returning here — as this did — meant a date change
+    // produced no write at all, and the pipeline kept sorting on the old one.
+    //
+    // Safe from the echo loop this skip belongs to: that loop is
+    // HubSpot → Linear → HubSpot, and writing a HubSpot property does not
+    // notify Linear. The stage itself is still left alone.
+    console.log(`Stage unchanged for Linear ${data.id}; refreshing rollout dates only`);
+    await hsUpsertByUniqueProperty(objectTypeId, 'linear_id', data.id, {
+      ...rollout,
+      ...(data.description ? { notes: data.description } : {}),
+    });
     return { id: data.id, action: 'skipped' as const };
   }
 
@@ -166,6 +184,7 @@ export async function upsertContent(
     hs_pipeline: pipelineConfig.pipelineId,
     hs_pipeline_stage: stageId,
     content_type: pipelineKey === 'changelog' ? 'changelog' : '',
+    ...rollout,
     ...(data.description ? { notes: data.description } : {}),
   };
 
