@@ -18,7 +18,7 @@ import path from 'path';
  * Use the components instead: `<Text format={{ fontWeight: 'bold' }}>`.
  */
 
-const UI_DIRS = ['pages', 'cards'].map(d => path.join(__dirname, '..', d));
+const UI_DIRS = ['pages', 'cards', 'settings'].map(d => path.join(__dirname, '..', d));
 
 /** Elements a React author reaches for by habit, none of which exist here. */
 const RAW_ELEMENTS = /<\/?(strong|b|em|i|u|span|div|p|br|hr|ul|ol|li|code|pre|h[1-6]|small|a)(\s|>|\/)/;
