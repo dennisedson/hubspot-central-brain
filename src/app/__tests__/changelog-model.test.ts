@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   resolveModel, resolveThinking, modelIdFor, thinkingConfigFor,
-  MODEL_IDS, DEFAULT_MODEL, DEFAULT_THINKING,
+  MODEL_IDS, DEFAULT_MODEL, DEFAULT_THINKING, DRAFT_TIMEOUT_MS, DRAFT_MAX_TOKENS,
 } from '../lib/changelog-model';
 
 /**
@@ -31,10 +31,14 @@ describe('resolveModel', () => {
 });
 
 describe('resolveThinking', () => {
-  it('only "off" turns it off', () => {
+  it('honours an explicit choice either way', () => {
     expect(resolveThinking('off')).toBe('off');
     expect(resolveThinking(' off ')).toBe('off');
-    for (const input of [null, undefined, '', 'adaptive', 'yes', 'disabled']) {
+    expect(resolveThinking('adaptive')).toBe('adaptive');
+  });
+
+  it('falls back to the default for anything else', () => {
+    for (const input of [null, undefined, '', 'yes', 'disabled']) {
       expect(resolveThinking(input)).toBe(DEFAULT_THINKING);
     }
   });
@@ -46,14 +50,25 @@ describe('resolveThinking', () => {
 });
 
 describe('model ids', () => {
-  it('pins a concrete id per choice rather than an alias', () => {
+  it('pins the newest of each family, by exact id', () => {
+    // Confirmed against GET /v1/models on 2026-10-01. Exact ids, never
+    // aliases: an alias moving under this feature is a change nobody made.
     expect(MODEL_IDS.opus).toBe('claude-opus-5-5');
-    expect(MODEL_IDS.sonnet).toBe('claude-sonnet-5');
+    expect(MODEL_IDS.sonnet).toBe('claude-sonnet-5-5');
     expect(MODEL_IDS.haiku).toBe('claude-haiku-4-5-20251001');
   });
 
-  it('defaults to unchanged behaviour', () => {
-    expect(DEFAULT_MODEL).toBe('opus');
-    expect(DEFAULT_THINKING).toBe('adaptive');
+  it('defaults to what fits a 20-second function budget', () => {
+    // HubSpot kills an app function at 20s and the limit is not configurable.
+    // Opus with adaptive thinking did not reliably finish a standalone post:
+    // the first turn succeeded, the follow-up was killed mid-generation.
+    expect(DEFAULT_MODEL).toBe('sonnet');
+    expect(DEFAULT_THINKING).toBe('off');
+  });
+
+  it('leaves headroom between our timeout and the platform kill', () => {
+    // Ours must fire first, so the failure is ours to explain.
+    expect(DRAFT_TIMEOUT_MS).toBeLessThan(20_000);
+    expect(DRAFT_MAX_TOKENS).toBeLessThanOrEqual(2048);
   });
 });
