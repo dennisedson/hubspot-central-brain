@@ -75,6 +75,13 @@ Each of these cost a day at least once.
 - Confirm a UI change renders before building the next thing on top of it.
 - `hs project dev` runs the extension locally and shows the real exception.
   Deploying to read a generic error message is the slow path.
+- **`npm run validate` does not prove the project will build.** Two failures in
+  one day passed lint, typecheck, the whole suite, `hs project validate` AND
+  CI's Dry-Run Validate, then failed at upload: a function entrypoint that was
+  never compiled, and a UI extension importing across directories. There is no
+  `--dry-run` on `hs project upload`. Where a build constraint can be checked
+  statically, encode it as a test — `extension-imports-stay-local.test.ts` and
+  `function-entrypoints.test.ts` exist because nothing else catches those.
 
 ## The review bot is switched off
 
