@@ -236,3 +236,71 @@ export function rolloutPriority(
   const last = all[all.length - 1];
   return { date: last.date, stage: last.stage, upcoming: false };
 }
+
+/**
+ * The rollout dates, as HubSpot properties.
+ *
+ * Stored rather than derived at read time so HubSpot's own list views can sort
+ * and filter on them, not just our board.
+ *
+ * WHY EVERY KEY IS ALWAYS PRESENT
+ * -------------------------------
+ * Dates move. A milestone can be brought forward, pushed back, or removed
+ * entirely, and a stored date that never updates is worse than no date — it is
+ * a wrong date presented with the same confidence as a right one.
+ *
+ * So this returns every key on every call, using `''` for "no value" rather
+ * than omitting it. An omitted property leaves whatever was there before;
+ * an empty string clears it. Returning a partial object would mean a date
+ * deleted in Linear lived on in HubSpot forever.
+ *
+ * `upcoming` is deliberately NOT stored. It is relative to today, so a stored
+ * copy is correct for one day and silently wrong afterwards. The board
+ * computes it at read time from the date.
+ */
+export interface RolloutProperties extends Record<string, string> {
+  rollout_private_beta_date: string;
+  rollout_public_beta_date: string;
+  rollout_live_date: string;
+  /** The sort key: the next milestone that forces action. */
+  rollout_priority_date: string;
+  rollout_priority_stage: string;
+}
+
+const STAGE_TO_PROPERTY: Record<string, keyof RolloutProperties> = {
+  'Private Beta': 'rollout_private_beta_date',
+  'Public Beta': 'rollout_public_beta_date',
+  'Live': 'rollout_live_date',
+};
+
+export function rolloutProperties(
+  notes: string | null | undefined,
+  today: Date = new Date(),
+): RolloutProperties {
+  const empty: RolloutProperties = {
+    rollout_private_beta_date: '',
+    rollout_public_beta_date: '',
+    rollout_live_date: '',
+    rollout_priority_date: '',
+    rollout_priority_stage: '',
+  };
+
+  const source = parseRolloutNotes(notes);
+  const found = milestones(source);
+  if (found.length === 0) return empty;
+
+  const out: RolloutProperties = { ...empty };
+  for (const milestone of found) {
+    const property = STAGE_TO_PROPERTY[milestone.stage];
+    // First wins: milestones are sorted earliest-first, and an earlier date
+    // for the same stage is the one that matters.
+    if (property && !out[property]) out[property] = milestone.date;
+  }
+
+  const priority = rolloutPriority(source, today);
+  if (priority) {
+    out.rollout_priority_date = priority.date;
+    out.rollout_priority_stage = priority.stage;
+  }
+  return out;
+}

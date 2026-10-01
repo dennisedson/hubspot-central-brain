@@ -1,4 +1,3 @@
-import { parseRolloutNotes, rolloutPriority } from '../lib/changelog-source';
 import { getPortalConfig } from '../lib/portal-config';
 import { HS_BASE, objectSearchPath, pipelinesPath } from '../lib/hs-api';
 
@@ -74,10 +73,10 @@ export async function main(context: ContentDataContext): Promise<{ statusCode: n
         filterGroups: [
           { filters: [{ propertyName: 'hs_pipeline', operator: 'EQ', value: pipelineId }] },
         ],
-        // `notes` is read so the rollout timeline can be parsed server-side.
-        // It is NOT returned — the median is ~2KB and the board only needs the
-        // one date that falls out of it.
-        properties: ['title', 'content_type', 'hs_pipeline_stage', 'target_date', 'linear_issue_url', 'notes'],
+        properties: [
+          'title', 'content_type', 'hs_pipeline_stage', 'target_date', 'linear_issue_url',
+          'rollout_priority_date', 'rollout_priority_stage',
+        ],
         sorts: [{ propertyName: 'hs_lastmodifieddate', direction: 'DESCENDING' }],
         limit: 100,
         after: '0',
@@ -105,12 +104,14 @@ export async function main(context: ContentDataContext): Promise<{ statusCode: n
       isClosed: s.metadata?.isClosed === 'true',
     }));
 
+  const today = new Date().toISOString().slice(0, 10);
   const records: ContentRecord[] = search.results.map(r => {
-    // Computed here rather than stored, so it cannot go stale against the
-    // notes it is derived from and needs no backfill. The cost is that
-    // HubSpot's own list views cannot sort on it — if that is wanted, this
-    // becomes a real date property written on every upsert.
-    const priority = rolloutPriority(parseRolloutNotes(r.properties.notes));
+    // Read from the stored property, written on every sync, so HubSpot's own
+    // list views can sort on the same value this board does.
+    //
+    // `upcoming` is NOT stored and is computed here: it is relative to today,
+    // so a stored copy would be correct for one day and quietly wrong after.
+    const priorityDate = r.properties.rollout_priority_date?.slice(0, 10) ?? null;
     return {
       id: r.id,
       title: r.properties.title ?? 'Untitled',
@@ -118,9 +119,9 @@ export async function main(context: ContentDataContext): Promise<{ statusCode: n
       pipelineStage: r.properties.hs_pipeline_stage ?? '',
       targetDate: r.properties.target_date ?? null,
       linearIssueUrl: r.properties.linear_issue_url ?? null,
-      priorityDate: priority?.date ?? null,
-      priorityStage: priority?.stage ?? null,
-      priorityUpcoming: priority?.upcoming ?? false,
+      priorityDate,
+      priorityStage: r.properties.rollout_priority_stage ?? null,
+      priorityUpcoming: priorityDate ? priorityDate >= today : false,
     };
   });
 

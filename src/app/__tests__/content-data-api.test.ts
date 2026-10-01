@@ -165,36 +165,44 @@ async function oneRecord(props: Record<string, string>) {
 }
 
 describe('rollout priority on each record', () => {
-  it('returns the next upcoming beta or live milestone', async () => {
-    const notes = [
-      '**Rollout ID:** 1',
-      '**Name:** A thing',
-      '',
-      '### Timeline',
-      '',
-      '**Public Beta Date:** 2099-06-01',
-      '**Live Date:** 2099-12-01',
-    ].join('\n');
-
-    const record = await oneRecord({ notes });
+  it('returns the stored milestone, and marks a future one upcoming', async () => {
+    const record = await oneRecord({
+      rollout_priority_date: '2099-06-01',
+      rollout_priority_stage: 'Public Beta',
+    });
 
     expect(record.priorityDate).toBe('2099-06-01');
     expect(record.priorityStage).toBe('Public Beta');
     expect(record.priorityUpcoming).toBe(true);
   });
 
-  it('drops epoch zero rather than ranking it as the oldest, most urgent thing', async () => {
-    // 10 of the 23 dates on production are 1970-01-01 — unset, not ancient.
+  it('marks a past milestone as not upcoming', async () => {
+    // Computed per request rather than stored: "is it upcoming" is relative to
+    // today, so a stored copy is correct for one day and wrong afterwards.
     const record = await oneRecord({
-      notes: '### Timeline\n\n**Marketing Release Date:** 1970-01-01',
+      rollout_priority_date: '2020-01-01',
+      rollout_priority_stage: 'Live',
     });
 
-    expect(record.priorityDate).toBeNull();
+    expect(record.priorityUpcoming).toBe(false);
   });
 
-  it('never returns the notes themselves — only what falls out of them', async () => {
-    // The median is ~2KB and the board needs one date.
-    const record = await oneRecord({ notes: 'x'.repeat(5000) });
-    expect(JSON.stringify(record)).not.toContain('xxxxx');
+  it('handles a record with no milestone at all', async () => {
+    const record = await oneRecord({});
+    expect(record.priorityDate).toBeNull();
+    expect(record.priorityUpcoming).toBe(false);
+  });
+
+  it('trims a datetime down to the date', async () => {
+    // HubSpot returns date properties with a time component.
+    const record = await oneRecord({ rollout_priority_date: '2099-06-01T00:00:00Z' });
+    expect(record.priorityDate).toBe('2099-06-01');
+  });
+
+  it('does not ask HubSpot for notes — the board needs one date, not 2KB', async () => {
+    await oneRecord({});
+    const requested = (searchBody().properties as string[]) ?? [];
+    expect(requested).toContain('rollout_priority_date');
+    expect(requested).not.toContain('notes');
   });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  parseRolloutNotes, milestones, rolloutPriority, isTentative, EPOCH_ZERO,
+  parseRolloutNotes, milestones, rolloutPriority, isTentative, EPOCH_ZERO, rolloutProperties,
 } from '../lib/changelog-source';
 
 /**
@@ -125,5 +125,69 @@ describe('rolloutPriority', () => {
 
   it('is null when there is nothing to go on', () => {
     expect(rolloutPriority(parseRolloutNotes('no timeline at all'))).toBeNull();
+  });
+});
+
+/**
+ * Dates move. A milestone can be brought forward, pushed back, or deleted
+ * entirely — and a stored date that never updates is worse than no date,
+ * because it is wrong with the same confidence as a right one.
+ */
+describe('rolloutProperties', () => {
+  it('returns every key even when there is nothing to store', () => {
+    // An omitted property leaves whatever was there before. A date removed
+    // upstream has to be CLEARED, which means sending '' for it.
+    const props = rolloutProperties('no timeline here');
+
+    expect(Object.keys(props).sort()).toEqual([
+      'rollout_live_date',
+      'rollout_priority_date',
+      'rollout_priority_stage',
+      'rollout_private_beta_date',
+      'rollout_public_beta_date',
+    ]);
+    expect(Object.values(props).every(v => v === '')).toBe(true);
+  });
+
+  it('clears a date that has been removed upstream', () => {
+    const before = rolloutProperties('### Timeline\n\n**Live Date:** 2099-01-01');
+    expect(before.rollout_live_date).toBe('2099-01-01');
+
+    const after = rolloutProperties('### Timeline\n\n(date removed)');
+    expect(after.rollout_live_date).toBe('');
+    expect(after.rollout_priority_date).toBe('');
+  });
+
+  it('follows a date that moved', () => {
+    const moved = rolloutProperties('### Timeline\n\n**Live Date:** 2099-09-01');
+    expect(moved.rollout_live_date).toBe('2099-09-01');
+  });
+
+  it('splits milestones into their own properties', () => {
+    const props = rolloutProperties([
+      '### Timeline',
+      '',
+      '**Private Beta Date:** 2099-01-01',
+      '**Public Beta Date:** 2099-03-01',
+      '**Live Date:** 2099-06-01',
+    ].join('\n'), new Date('2098-01-01T00:00:00Z'));
+
+    expect(props.rollout_private_beta_date).toBe('2099-01-01');
+    expect(props.rollout_public_beta_date).toBe('2099-03-01');
+    expect(props.rollout_live_date).toBe('2099-06-01');
+    // The sort key is the soonest one still ahead.
+    expect(props.rollout_priority_date).toBe('2099-01-01');
+    expect(props.rollout_priority_stage).toBe('Private Beta');
+  });
+
+  it('never stores whether a date is upcoming', () => {
+    // It is relative to today: correct for one day, wrong after.
+    const props = rolloutProperties('### Timeline\n\n**Live Date:** 2099-01-01');
+    expect(Object.keys(props)).not.toContain('rollout_priority_upcoming');
+  });
+
+  it('stores nothing for epoch zero', () => {
+    const props = rolloutProperties(`### Timeline\n\n**Live Date:** ${EPOCH_ZERO}`);
+    expect(props.rollout_live_date).toBe('');
   });
 });
