@@ -12,7 +12,7 @@
     "test:coverage": "vitest run --coverage",
     "typecheck:cards": "npm --prefix src/app/cards install --silent && (cd src/app/cards && npx tsc --noEmit)",
     "typecheck:pages": "npm --prefix src/app/pages install --silent && (cd src/app/pages && npx tsc --noEmit)",
-    "validate": "npm run lint && npm run typecheck && npm run test && npm run typecheck:cards && npm run typecheck:pages",
+    "validate": "npm run lint && npm run typecheck && npm run test && npm run typecheck:cards && npm run typecheck:pages && npm run typecheck:settings",
     "provision": "tsx src/scripts/provision-objects.ts",
     "provision:app-settings": "tsx src/scripts/provision-app-settings.ts",
     "provision:asana-property": "tsx src/scripts/provision-asana-property.ts",
@@ -26,7 +26,7 @@
     "provision:enterpret-quotes": "tsx src/scripts/provision-enterpret-quotes.ts",
     "provision:property-descriptions": "tsx src/scripts/provision-property-descriptions.ts",
     "provision:asana-webhook": "tsx src/scripts/provision-asana-webhook.ts",
-    "build": "esbuild src/app/functions/*.ts --bundle --platform=node --target=node18 --outdir=src/app/functions",
+    "build": "npm run sync:settings-form && esbuild src/app/functions/*.ts --bundle --platform=node --target=node18 --outdir=src/app/functions",
     "dev": "hs project dev",
     "upload": "npm run build && hs project upload",
     "upload:dev": "npm run build && hs project upload --account=Dev-HubSpot-Brain",
@@ -36,7 +36,9 @@
     "provision:backfill-state": "tsx src/scripts/provision-backfill-state.ts",
     "provision:project-map": "tsx src/scripts/provision-project-map.ts",
     "provision:changelog-drafting": "tsx src/scripts/provision-changelog-drafting.ts",
-    "compare:changelog-models": "tsx src/scripts/compare-changelog-models.ts"
+    "compare:changelog-models": "tsx src/scripts/compare-changelog-models.ts",
+    "typecheck:settings": "npm --prefix src/app/settings install --silent && (cd src/app/settings && npx tsc --noEmit)",
+    "sync:settings-form": "tsx src/scripts/sync-settings-form.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

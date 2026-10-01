@@ -75,8 +75,25 @@ Each of these cost a day at least once.
 - Confirm a UI change renders before building the next thing on top of it.
 - `hs project dev` runs the extension locally and shows the real exception.
   Deploying to read a generic error message is the slow path.
+- **`npm run validate` does not prove the project will build.** Two failures in
+  one day passed lint, typecheck, the whole suite, `hs project validate` AND
+  CI's Dry-Run Validate, then failed at upload: a function entrypoint that was
+  never compiled, and a UI extension importing across directories. There is no
+  `--dry-run` on `hs project upload`. Where a build constraint can be checked
+  statically, encode it as a test — `extension-imports-stay-local.test.ts` and
+  `function-entrypoints.test.ts` exist because nothing else catches those.
 
-## The review bot skips silently
+## The review bot is switched off
+
+`claude-code-review.yml` was removed on 2026-10-01. It never produced a review:
+the green checks were skips, and the red ones were auth failures. Issue #98
+records the one-field fix and how to put it back.
+
+The `@claude` workflow (`claude.yml`) is still present and uses the same
+federation, so it will fail the same way until that fix is applied. It is
+mention-triggered, so it costs nothing to leave in place.
+
+## The review bot skipped silently — why a green check meant nothing
 
 `claude-code-action` refuses to run unless the workflow file on the PR branch is
 **byte-identical to the copy on the default branch**, which here is `master`. It

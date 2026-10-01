@@ -18,7 +18,7 @@ import path from 'path';
  * Use the components instead: `<Text format={{ fontWeight: 'bold' }}>`.
  */
 
-const UI_DIRS = ['pages', 'cards'].map(d => path.join(__dirname, '..', d));
+const UI_DIRS = ['pages', 'cards', 'settings'].map(d => path.join(__dirname, '..', d));
 
 /** Elements a React author reaches for by habit, none of which exist here. */
 const RAW_ELEMENTS = /<\/?(strong|b|em|i|u|span|div|p|br|hr|ul|ol|li|code|pre|h[1-6]|small|a)(\s|>|\/)/;
@@ -52,5 +52,44 @@ describe('UI extensions use HubSpot components, never raw HTML', () => {
       offenders.map(o => `line ${o.number}: ${o.line}`),
       'use a HubSpot component — e.g. <Text format={{ fontWeight: "bold" }}> instead of <strong>',
     ).toEqual([]);
+  });
+});
+
+/**
+ * The Linear settings form must exist exactly once.
+ *
+ * It is reached from two places — the Content Command Center page and the
+ * app's Settings tab — and the last time that was true there were two copies.
+ * Three changes landed in the one nobody could see while the one people used
+ * stayed unchanged (#60). A second copy is the specific regression worth
+ * failing a build over.
+ */
+describe('one settings form, two entrances', () => {
+  it('declares the form in exactly one file anyone may edit', () => {
+    // Copying is unavoidable: HubSpot bundles each extension directory in
+    // isolation, so the settings extension cannot import across into pages/.
+    // What must never happen again is a copy someone can EDIT — that is how
+    // three changes landed in the invisible one (#60). Any second declaration
+    // has to be generated and say so.
+    const declaring = UI_DIRS
+      .flatMap(tsxFiles)
+      .filter(f => /function LinearSettingsForm/.test(fs.readFileSync(f, 'utf8')));
+
+    const editable = declaring.filter(
+      f => !fs.readFileSync(f, 'utf8').startsWith('// GENERATED FILE'));
+
+    expect(editable.map(f => path.basename(f))).toEqual(['LinearSettingsForm.tsx']);
+    expect(editable.map(f => path.basename(path.dirname(f)))).toEqual(['pages']);
+    // And the generated one does exist, so the settings surface has a form.
+    expect(declaring.length).toBe(2);
+  });
+
+  it('the settings surface imports the form rather than defining one', () => {
+    const settings = fs.readFileSync(
+      path.join(__dirname, '..', 'settings', 'SettingsPage.tsx'), 'utf8');
+
+    expect(settings).toMatch(/import \{ LinearSettingsForm \}/);
+    // The giveaways of a hand-written copy: its own state, its own API calls.
+    expect(settings).not.toMatch(/useState|callApi|hubspot\.serverless/);
   });
 });

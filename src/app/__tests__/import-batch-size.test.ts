@@ -19,14 +19,16 @@ import { IMPORT_BATCH_SIZE } from '../lib/import-batching';
  * was made to remove.
  */
 
-const PAGE = join(__dirname, '..', 'pages', 'SettingsApp.tsx');
+// The form moved out of SettingsApp.tsx so the app's Settings tab could
+// import it rather than copy it. These assertions follow the code.
+const PAGE = join(__dirname, '..', 'pages', 'LinearSettingsForm.tsx');
 
 describe('import batch size', () => {
   it('is the same in the settings page as in the function that enforces it', () => {
     const source = readFileSync(PAGE, 'utf8');
     const match = source.match(/const IMPORT_BATCH_SIZE\s*=\s*(\d+)/);
 
-    expect(match, 'SettingsApp.tsx no longer declares IMPORT_BATCH_SIZE').not.toBeNull();
+    expect(match, 'LinearSettingsForm.tsx no longer declares IMPORT_BATCH_SIZE').not.toBeNull();
     expect(Number(match![1])).toBe(IMPORT_BATCH_SIZE);
   });
 
