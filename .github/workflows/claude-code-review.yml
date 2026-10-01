@@ -19,35 +19,17 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Get OIDC token for Anthropic WIF
-        id: oidc
-        run: |
-          # -f so an HTTP error is an error. Without it curl exits 0 on a 4xx,
-          # jq yields the string "null", and the job carries on with a token
-          # that cannot work — which surfaces much later as the action claiming
-          # the federation secrets are missing when they are plainly set.
-          RESPONSE=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://api.anthropic.com") || {
-            echo "::error::Could not reach the GitHub OIDC token endpoint."
-            exit 1
-          }
-          TOKEN=$(echo "$RESPONSE" | jq -r '.value // empty')
-          if [ -z "$TOKEN" ]; then
-            echo "::error::OIDC endpoint returned no .value — cannot authenticate to Anthropic."
-            echo "Response keys: $(echo "$RESPONSE" | jq -r 'keys | join(",")')"
-            exit 1
-          fi
-          echo "::add-mask::$TOKEN"
-          echo "ANTHROPIC_IDENTITY_TOKEN=$TOKEN" >> "$GITHUB_ENV"
-
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@v1
-        env:
-          ANTHROPIC_FEDERATION_RULE_ID: ${{ secrets.ANTHROPIC_FEDERATION_RULE_ID }}
-          ANTHROPIC_ORGANIZATION_ID: ${{ secrets.ANTHROPIC_ORGANIZATION_ID }}
-          ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ secrets.ANTHROPIC_SERVICE_ACCOUNT_ID }}
         with:
+          # Inputs, not env vars. action.yml declares anthropic_federation_rule_id,
+          # anthropic_organization_id and anthropic_service_account_id as `with:`
+          # inputs; passed as `env:` the action never saw them and reported the
+          # federation config missing while the secrets were plainly set.
+          anthropic_federation_rule_id: ${{ secrets.ANTHROPIC_FEDERATION_RULE_ID }}
+          anthropic_organization_id: ${{ secrets.ANTHROPIC_ORGANIZATION_ID }}
+          anthropic_service_account_id: ${{ secrets.ANTHROPIC_SERVICE_ACCOUNT_ID }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
