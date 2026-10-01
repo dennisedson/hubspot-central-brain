@@ -379,3 +379,341 @@ describe('backfill request size', () => {
     expect((JSON.parse(res.body) as { requested: number }).requested).toBe(15);
   });
 });
+
+/**
+ * The project list the settings page offers, and what saving does to it.
+ *
+ * None of this had coverage. It shipped on 2026-09-30 across six commits that
+ * touched no test file, in the same area that had already produced four
+ * truncation bugs and a fail-open webhook.
+ *
+ * The workspace has 1,592 projects and 452 active users; the person configuring
+ * the portal has issues in 7 projects. Those numbers are why the filtering
+ * exists, and why "fall back to everything" is a bigger deal than it looks.
+ */
+
+interface ProjectRef { id: string; name: string }
+
+/**
+ * Serves the settings page's whole fan-out, routed by what each call asks for.
+ *
+ * `assigneeProjects: null` makes the assigned-issues query FAIL, as opposed to
+ * returning nobody — the code has to tell those apart and until now it could not.
+ */
+function settingsFetch(opts: {
+  record?: Record<string, string>;
+  assigneeProjects?: ProjectRef[] | null;
+  allProjects?: ProjectRef[];
+}) {
+  const { record = {}, assigneeProjects = [], allProjects = [] } = opts;
+  return (url: string, init?: { body?: string }) => {
+    if (!String(url).includes('api.linear.app')) {
+      return Promise.resolve({
+        ok: true, status: 200,
+        json: async () => ({ results: [{ id: 'cfg-1', properties: record }] }),
+        text: async () => '',
+      } as unknown as Response);
+    }
+    const query = String(JSON.parse(init?.body ?? '{}').query ?? '');
+
+    if (query.includes('assignedIssues')) {
+      if (assigneeProjects === null) {
+        return Promise.resolve({ ok: false, status: 500, text: async () => 'boom' } as unknown as Response);
+      }
+      return Promise.resolve(linearReply({
+        data: { user: { assignedIssues: {
+          nodes: assigneeProjects.map(p => ({ project: p })),
+          pageInfo: { hasNextPage: false, endCursor: null },
+        } } },
+      }));
+    }
+    if (query.includes('projects(')) {
+      return Promise.resolve(linearReply({
+        data: { projects: { nodes: allProjects, pageInfo: { hasNextPage: false, endCursor: null } } },
+      }));
+    }
+    if (query.includes('users(')) {
+      return Promise.resolve(linearReply({
+        data: { users: { nodes: [{ id: 'u-dennis', name: 'Dennis Edson' }], pageInfo: { hasNextPage: false, endCursor: null } } },
+      }));
+    }
+    return Promise.resolve(linearReply({
+      data: { teams: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } },
+    }));
+  };
+}
+
+const MINE = { linear_team_id: 'any', assignee_filter: 'mine', linear_assignee_id: 'u-dennis' };
+
+async function getSettings(fetchImpl: ReturnType<typeof settingsFetch>) {
+  mockFetch().mockImplementation(fetchImpl);
+  const res = await main({ accountId: DEV_PORTAL, parameters: { action: 'getSettings' } });
+  return JSON.parse(res.body) as { projects: ProjectRef[]; projectMap: Record<string, string> };
+}
+
+describe('the project list offered for routing', () => {
+  beforeEach(() => {
+    process.env.PRIVATE_APP_ACCESS_TOKEN = 'hs-token';
+    process.env.LINEAR_API_KEY = 'linear-key';
+  });
+
+  it('offers the projects you have issues in, not every project in the workspace', async () => {
+    const body = await getSettings(settingsFetch({
+      record: MINE,
+      assigneeProjects: [{ id: 'p-roll', name: 'Rollouts' }, { id: 'p-vid', name: 'Video Strategy' }],
+      allProjects: Array.from({ length: 200 }, (_, i) => ({ id: `p-${i}`, name: `Project ${i}` })),
+    }));
+
+    expect(body.projects.map(p => p.id)).toEqual(['p-roll', 'p-vid']);
+  });
+
+  it('deduplicates — 69 issues in one project is one row, not 69', async () => {
+    const body = await getSettings(settingsFetch({
+      record: MINE,
+      assigneeProjects: Array.from({ length: 69 }, () => ({ id: 'p-roll', name: 'Rollouts' })),
+    }));
+
+    expect(body.projects).toEqual([{ id: 'p-roll', name: 'Rollouts' }]);
+  });
+
+  it('falls back to every project when not filtering by assignee', async () => {
+    const body = await getSettings(settingsFetch({
+      record: { linear_team_id: 'team-1', assignee_filter: 'all', linear_assignee_id: '' },
+      allProjects: [{ id: 'p-a', name: 'Alpha' }, { id: 'p-b', name: 'Bravo' }],
+    }));
+
+    expect(body.projects.map(p => p.name)).toEqual(['Alpha', 'Bravo']);
+  });
+
+  it('names a mapped project that has dropped out of your issues', async () => {
+    // Map a project, then stop having issues in it — reassigned, or closed.
+    // It must stay in the list so the mapping remains editable, but it was
+    // being listed with its UUID as its name: the same raw-id-on-screen defect
+    // as the assignee field, in the same view.
+    const body = await getSettings(settingsFetch({
+      record: { ...MINE, linear_project_map: JSON.stringify({ 'p-old': 'changelog' }) },
+      assigneeProjects: [{ id: 'p-roll', name: 'Rollouts' }],
+      allProjects: [{ id: 'p-roll', name: 'Rollouts' }, { id: 'p-old', name: 'Retired Project' }],
+    }));
+
+    const old = body.projects.find(p => p.id === 'p-old');
+    expect(old).toBeDefined();
+    expect(old!.name).toBe('Retired Project');
+  });
+
+  it('does not dump the whole workspace when you genuinely have no projects', async () => {
+    // An empty result and a failed request are different facts. Showing 1,592
+    // rows because someone has no project work is not a helpful default.
+    const body = await getSettings(settingsFetch({
+      record: MINE,
+      assigneeProjects: [],
+      allProjects: Array.from({ length: 1592 }, (_, i) => ({ id: `p-${i}`, name: `Project ${i}` })),
+    }));
+
+    expect(body.projects).toEqual([]);
+  });
+
+  it('does fall back to every project when the lookup actually fails', async () => {
+    const body = await getSettings(settingsFetch({
+      record: MINE,
+      assigneeProjects: null,
+      allProjects: [{ id: 'p-a', name: 'Alpha' }],
+    }));
+
+    expect(body.projects.map(p => p.id)).toEqual(['p-a']);
+  });
+
+  it('says so plainly when a mapped project no longer exists in Linear', async () => {
+    // Deleted, or outside what this key can see. Still not a bare UUID.
+    const body = await getSettings(settingsFetch({
+      record: { ...MINE, linear_project_map: JSON.stringify({ 'p-gone-1234-abcd': 'content' }) },
+      assigneeProjects: [{ id: 'p-roll', name: 'Rollouts' }],
+      allProjects: [{ id: 'p-roll', name: 'Rollouts' }],
+    }));
+
+    const gone = body.projects.find(p => p.id === 'p-gone-1234-abcd');
+    expect(gone!.name).toMatch(/Unavailable project/);
+    expect(gone!.name).not.toBe('p-gone-1234-abcd');
+  });
+});
+
+/**
+ * Saving the routing map, and what it does to the "nobody has mapped this yet"
+ * list that drives the banner.
+ */
+describe('saveSettings and the unmapped list', () => {
+  beforeEach(() => {
+    process.env.PRIVATE_APP_ACCESS_TOKEN = 'hs-token';
+    process.env.LINEAR_API_KEY = 'linear-key';
+  });
+
+  /** Captures what was PATCHed to HubSpot. */
+  function captureWrites() {
+    const writes: Array<Record<string, string>> = [];
+    mockFetch().mockImplementation((url: string, init?: { method?: string; body?: string }) => {
+      if (String(url).includes('api.linear.app')) {
+        return Promise.resolve(linearReply({ data: {} }));
+      }
+      if (init?.method === 'PATCH' || init?.method === 'POST') {
+        const parsed = JSON.parse(init.body ?? '{}') as { properties?: Record<string, string> };
+        if (parsed.properties) writes.push(parsed.properties);
+      }
+      return Promise.resolve({
+        ok: true, status: 200,
+        json: async () => ({ results: [{ id: 'cfg-1', properties: {
+          linear_unmapped_projects: JSON.stringify([{ id: 'p-stale', name: 'Stale Project' }]),
+        } }] }),
+        text: async () => '',
+      } as unknown as Response);
+    });
+    return writes;
+  }
+
+  it('clears the unmapped list when a routing map is saved', async () => {
+    const writes = captureWrites();
+
+    const res = await main({ accountId: DEV_PORTAL, parameters: {
+      action: 'saveSettings',
+      linearTeamId: 'any', assigneeFilter: 'mine', linearAssigneeId: 'u-dennis',
+      projectMap: JSON.stringify({ 'p-roll': 'changelog' }),
+    } });
+
+    expect(res.statusCode).toBe(200);
+    const saved = writes.find(w => 'linear_unmapped_projects' in w);
+    expect(saved).toBeDefined();
+    expect(JSON.parse(saved!.linear_unmapped_projects)).toEqual([]);
+  });
+
+  it('leaves the unmapped list alone when no map was submitted', async () => {
+    // Changing only the assignee must not silently dismiss the banner.
+    const writes = captureWrites();
+
+    await main({ accountId: DEV_PORTAL, parameters: {
+      action: 'saveSettings',
+      linearTeamId: 'any', assigneeFilter: 'mine', linearAssigneeId: 'u-dennis',
+    } });
+
+    expect(writes.some(w => 'linear_unmapped_projects' in w)).toBe(false);
+  });
+
+  it('refuses a configuration that would leave the sync unbounded', async () => {
+    captureWrites();
+
+    const res = await main({ accountId: DEV_PORTAL, parameters: {
+      action: 'saveSettings',
+      linearTeamId: 'any', assigneeFilter: 'mine', linearAssigneeId: '',
+    } });
+
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+/**
+ * The preview, which is the only thing standing between a click and writing to
+ * production. It applies the same filters the webhook does, so if it is wrong
+ * the person approves an import that is not what they were shown.
+ */
+describe('backfillPreview', () => {
+  beforeEach(() => {
+    process.env.PRIVATE_APP_ACCESS_TOKEN = 'hs-token';
+    process.env.LINEAR_API_KEY = 'linear-key';
+  });
+
+  const issue = (over: Record<string, unknown>) => ({
+    id: 'i-1', identifier: 'ENG-1', title: 'An issue', description: '',
+    url: 'https://linear.app/i/1',
+    state: { id: 's', name: 'Todo', type: 'unstarted' },
+    labels: { nodes: [] },
+    team: { id: 't-1', name: 'Team' },
+    project: null,
+    assignee: { id: 'u-dennis', name: 'Dennis Edson' },
+    ...over,
+  });
+
+  function previewFetch(nodes: unknown[], record: Record<string, string>) {
+    mockFetch().mockImplementation((url: string, init?: { body?: string }) => {
+      if (!String(url).includes('api.linear.app')) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          json: async () => ({ results: [{ id: 'cfg-1', properties: record }] }),
+          text: async () => '',
+        } as unknown as Response);
+      }
+      const query = String(JSON.parse(init?.body ?? '{}').query ?? '');
+      if (query.includes('assignedIssues')) {
+        return Promise.resolve(linearReply({
+          data: { user: { assignedIssues: { nodes, pageInfo: { hasNextPage: false, endCursor: null } } } },
+        }));
+      }
+      return Promise.resolve(linearReply({ data: {} }));
+    });
+  }
+
+  it('counts each reason an issue was set aside, separately', async () => {
+    previewFetch(
+      [
+        issue({ id: 'ok-1' }),
+        issue({ id: 'ok-2', project: { id: 'p-roll', name: 'Rollouts' } }),
+        issue({ id: 'echo', description: 'written by us [hs-sync]' }),
+        issue({ id: 'theirs', assignee: { id: 'u-someone-else', name: 'Someone Else' } }),
+        issue({ id: 'ignored', project: { id: 'p-skip', name: 'Not Wanted' } }),
+      ],
+      { ...MINE, linear_project_map: JSON.stringify({ 'p-roll': 'changelog', 'p-skip': 'ignore' }) },
+    );
+
+    const res = await main({ accountId: DEV_PORTAL, parameters: { action: 'backfillPreview' } });
+    const body = JSON.parse(res.body) as {
+      scanned: number; skippedEcho: number; skippedAssignee: number; skippedIgnored: number;
+      issues: Array<{ id: string; kind: string }>;
+    };
+
+    expect(body.scanned).toBe(5);
+    expect(body.skippedEcho).toBe(1);
+    expect(body.skippedAssignee).toBe(1);
+    expect(body.skippedIgnored).toBe(1);
+    expect(body.issues.map(i => i.id)).toEqual(['ok-1', 'ok-2']);
+  });
+
+  it('shows which pipeline each issue would land in, using the project map', async () => {
+    previewFetch(
+      [
+        issue({ id: 'a', project: { id: 'p-roll', name: 'Rollouts' } }),
+        issue({ id: 'b', project: { id: 'p-vid', name: 'Video' } }),
+        issue({ id: 'c' }),
+      ],
+      { ...MINE, linear_project_map: JSON.stringify({ 'p-roll': 'changelog', 'p-vid': 'content' }) },
+    );
+
+    const res = await main({ accountId: DEV_PORTAL, parameters: { action: 'backfillPreview' } });
+    const body = JSON.parse(res.body) as { issues: Array<{ id: string; kind: string }> };
+
+    // The 69-of-83 case: routing comes from the project, not from a label
+    // nobody uses. An unmapped project still defaults to content.
+    expect(body.issues).toEqual([
+      expect.objectContaining({ id: 'a', kind: 'changelog' }),
+      expect.objectContaining({ id: 'b', kind: 'content' }),
+      expect.objectContaining({ id: 'c', kind: 'content' }),
+    ]);
+  });
+
+  it('writes nothing — it is a preview', async () => {
+    previewFetch([issue({})], MINE);
+
+    await main({ accountId: DEV_PORTAL, parameters: { action: 'backfillPreview' } });
+
+    const writes = mockFetch().mock.calls.filter(
+      ([, init]) => init?.method === 'POST' && !String(init.body ?? '').includes('query'),
+    );
+    // The only POSTs are HubSpot searches and Linear queries, never an object write.
+    expect(writes.every(([url]) => String(url).includes('/search') || String(url).includes('linear'))).toBe(true);
+  });
+
+  it('refuses to preview an unconfigured portal', async () => {
+    previewFetch([], { linear_team_id: 'any', assignee_filter: 'mine', linear_assignee_id: '' });
+
+    const res = await main({ accountId: DEV_PORTAL, parameters: { action: 'backfillPreview' } });
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Choose a Linear team/);
+  });
+});

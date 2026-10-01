@@ -30,21 +30,16 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Get OIDC token for Anthropic WIF
-        id: oidc
-        run: |
-          TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://api.anthropic.com" | jq -r '.value')
-          echo "::add-mask::$TOKEN"
-          echo "ANTHROPIC_IDENTITY_TOKEN=$TOKEN" >> "$GITHUB_ENV"
-
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
-        env:
-          ANTHROPIC_FEDERATION_RULE_ID: ${{ secrets.ANTHROPIC_FEDERATION_RULE_ID }}
-          ANTHROPIC_ORGANIZATION_ID: ${{ secrets.ANTHROPIC_ORGANIZATION_ID }}
-          ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ secrets.ANTHROPIC_SERVICE_ACCOUNT_ID }}
         with:
+          # Inputs, not env vars. action.yml declares anthropic_federation_rule_id,
+          # anthropic_organization_id and anthropic_service_account_id as `with:`
+          # inputs; passed as `env:` the action never saw them and reported the
+          # federation config missing while the secrets were plainly set.
+          anthropic_federation_rule_id: ${{ secrets.ANTHROPIC_FEDERATION_RULE_ID }}
+          anthropic_organization_id: ${{ secrets.ANTHROPIC_ORGANIZATION_ID }}
+          anthropic_service_account_id: ${{ secrets.ANTHROPIC_SERVICE_ACCOUNT_ID }}
           additional_permissions: |
             actions: read

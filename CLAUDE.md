@@ -74,6 +74,25 @@ Each of these cost a day at least once.
 - `hs project dev` runs the extension locally and shows the real exception.
   Deploying to read a generic error message is the slow path.
 
+## The review bot skips silently
+
+`claude-code-action` refuses to run unless the workflow file on the PR branch is
+**byte-identical to the copy on the default branch**, which here is `master`. It
+is a security check: it stops a PR from editing the reviewer to exfiltrate
+secrets.
+
+The consequence is specific to this repo's branching. Work happens on `develop`
+and is promoted to `master`, so **any workflow change sitting on `develop` makes
+every open PR skip review** until `master` catches up. And a skip is reported as
+a **successful** check that finishes in under fifteen seconds.
+
+So a green `claude-review` does not mean the code was reviewed. Check the
+duration: under ~15s is a skip, a real review is 30s or more. If it skipped, the
+log says `Skipping action due to workflow validation`.
+
+When you change a workflow file, expect review to skip on that PR and on every
+other open PR until the change reaches `master`. That is working as designed.
+
 ## Episode guides
 
 Whenever we successfully implement a new feature, solve a major bug, or reach a logical stopping point, you must automatically generate a "YouTube Episode Guide." 
