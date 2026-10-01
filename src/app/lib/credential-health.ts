@@ -35,12 +35,27 @@ export function classify(httpStatus: number): CredentialStatus {
 }
 
 /**
+ * An HTML body means the host answered as a website, not an API.
+ *
+ * `<!doctype html>` truncated to 140 characters tells nobody anything. It
+ * usually means the base URL is wrong or the API has moved — a different
+ * problem from a rejected credential, and one that would otherwise be read as
+ * "the key is broken" and send someone to rotate a key that is fine.
+ */
+export function looksLikeHtml(body: string): boolean {
+  return /^\s*<(!doctype|html)\b/i.test(body);
+}
+
+/**
  * Truncated and stripped of anything that looks like a token.
  *
  * A failing provider often echoes the request back, so the body is not
  * automatically safe to surface.
  */
 export function safeDetail(body: string, limit = 140): string {
+  if (looksLikeHtml(body)) {
+    return 'endpoint returned HTML, not an API response — the base URL may have moved';
+  }
   return body
     .replace(/\b(sk-[A-Za-z0-9_-]{8,}|lin_api_[A-Za-z0-9]{8,}|pat-[A-Za-z0-9-]{8,}|[A-Za-z0-9_-]{40,})\b/g, '[redacted]')
     .replace(/\s+/g, ' ')

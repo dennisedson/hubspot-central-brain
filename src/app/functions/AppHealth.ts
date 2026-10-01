@@ -69,12 +69,20 @@ export async function main(context: HealthContext): Promise<{ statusCode: number
         headers: { Authorization: `Bearer ${key}` },
       }))),
 
-    probe('fellow', process.env.FELLOW_API_KEY, async key =>
-      statusAndBody(await fetch('https://api.fellow.app/graphql', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', Authorization: `Bearer ${key}` },
-        body: JSON.stringify({ query: '{ __typename }' }),
-      }))),
+    // Fellow is REST at /hapi/v2 with Bearer auth — see fellow-client.ts. An
+    // earlier version of this probe guessed /graphql, which answers with an
+    // HTML page and reported a working credential as broken. A health check
+    // that cries wolf is worse than none.
+    //
+    // A one-day window is the cheapest authenticated read: it exercises the
+    // same path AsanaPoll's Fellow counterpart uses, and returns almost nothing.
+    probe('fellow', process.env.FELLOW_API_KEY, async key => {
+      const day = new Date().toISOString().slice(0, 10);
+      return statusAndBody(await fetch(
+        `https://api.fellow.app/hapi/v2/action_items?from_date=${day}&to_date=${day}`,
+        { headers: { Authorization: `Bearer ${key}` } },
+      ));
+    }),
 
     // The refresh token is the thing that expires; exchanging it is the only
     // check that proves it. This one has already died once in production.
