@@ -48,22 +48,31 @@ export type ModelChoice = 'opus' | 'sonnet' | 'haiku';
 export type ThinkingChoice = 'adaptive' | 'off';
 
 /**
- * Current model ids.
+ * Newest of each family, confirmed against GET /v1/models on 2026-10-01 rather
+ * than assumed:
  *
- * Note `claude-client.ts` still pins `claude-opus-5`, which is not the current
- * Opus id — flagged rather than changed here, because that constant drives
- * video suggestions and is not this feature's to move.
+ *   claude-sonnet-5-5   Claude Sonnet 5.5
+ *   claude-opus-5-5     Claude Opus 5.5
+ *   claude-haiku-4-5-20251001   Claude Haiku 4.5
+ *
+ * Exact ids, never aliases. An alias moving under this feature is a change
+ * nobody made and nobody can see in a diff.
+ *
+ * The same listing shows `claude-opus-5` is still served, so claude-client.ts
+ * pinning it is out of date rather than broken — worth bumping deliberately,
+ * not urgently.
  */
 export const MODEL_IDS: Record<ModelChoice, string> = {
   opus: 'claude-opus-5-5',
-  sonnet: 'claude-sonnet-5',
+  sonnet: 'claude-sonnet-5-5',
   haiku: 'claude-haiku-4-5-20251001',
 };
 
 /**
- * Sonnet, not Opus: it generates fast enough to finish a standalone post
- * inside 20 seconds, where Opus demonstrably does not. Opus remains selectable
- * and is a reasonable choice for the short rollup entries.
+ * Sonnet 5.5 for both modes: fast enough to finish a standalone post inside 20
+ * seconds, where Opus demonstrably is not, and half the price. Opus remains
+ * selectable — it fits comfortably for the two-to-four-sentence rollup entries
+ * if its output is ever preferred there.
  */
 export const DEFAULT_MODEL: ModelChoice = 'sonnet';
 
