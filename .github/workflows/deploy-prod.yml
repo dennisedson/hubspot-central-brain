@@ -23,6 +23,14 @@ jobs:
 
       - run: npm ci
 
+      # Prod had no typecheck at all. Dev has had one since the workflows were
+      # written, so a UI extension that fails to compile would be caught on the
+      # way to dev and then deployed to prod unchecked if it ever reached master
+      # another way. Cheap, and it is the only compile-time gate prod gets:
+      # HubSpot's own validate does not bundle extensions.
+      - name: Typecheck cards, pages, settings
+        run: npm run typecheck:cards && npm run typecheck:pages && npm run typecheck:settings
+
       - name: Build functions
         run: npm run build
 

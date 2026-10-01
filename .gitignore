@@ -30,10 +30,10 @@ Thumbs.db
 # Editor
 .vscode/settings.json
 src/app/settings/node_modules/
-# Removed from git once over the npm.hubteam.com registry issue; keep it out.
-src/app/settings/package-lock.json
 src/app/functions/package-lock.json
-src/app/pages/package-lock.json
+# Extension lockfiles ARE tracked — see src/app/cards. They were ignored when
+# each extension was scaffolded, which left `"@hubspot/ui-extensions": "latest"`
+# resolving fresh on every CI run while local kept a months-old copy.
 src/app/pages/node_modules/
 .idea/
 
