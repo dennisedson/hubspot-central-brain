@@ -66,6 +66,19 @@ const REQUIRED_PROPERTIES: Record<'content' | 'video' | 'appConfig', string[]> =
     'enterpret_theme',
     'enterpret_quote_count',
     'enterpret_quotes',
+    // Added when the pipeline board began ordering columns by milestone. A
+    // portal without these passes every structural check and then sorts every
+    // column on nothing — which looks like the sync being wrong, not the
+    // schema.
+    'rollout_priority_date',
+    'rollout_priority_stage',
+    'rollout_private_beta_date',
+    'rollout_public_beta_date',
+    'rollout_live_date',
+    // The changelog card writes both, and the second is what stops it making a
+    // second Google Doc.
+    'changelog_draft',
+    'changelog_doc_url',
   ],
   video: [
     'youtube_video_id',
@@ -89,6 +102,15 @@ const REQUIRED_PROPERTIES: Record<'content' | 'video' | 'appConfig', string[]> =
     'youtube_last_sync',
     'linear_backfill_cursor', // the resumable import stores its position here
     'linear_backfill_count',
+    // Routing, drafting and the Drive folder. All settable from the settings
+    // page, so a portal missing them fails on save rather than on load.
+    'linear_project_map',
+    'linear_unmapped_projects',
+    'changelog_prompt_standalone',
+    'changelog_prompt_rollup',
+    'changelog_model',
+    'changelog_thinking',
+    'google_drive_folder_id',
   ],
 };
 

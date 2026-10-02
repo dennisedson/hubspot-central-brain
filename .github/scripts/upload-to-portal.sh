@@ -7,7 +7,7 @@
 # ---------------
 # `hs project upload --account=<staging|prod>` on its own ships whatever
 # actionUrl is committed — which is the DEV portal's. CI got a rewrite step
-# (see set-action-urls.sh); a developer running `npm run upload:staging` from
+# (see set-action-urls.sh); a developer running `npm run upload:prod` from
 # their laptop did not, so the same wrong-portal deploy was still one command
 # away.
 #
