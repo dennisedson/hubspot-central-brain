@@ -25,7 +25,7 @@ Download from [obsidian.md](https://obsidian.md) and install it. It is free for 
 ## 2. Get the vault template onto the machine
 
 The template lives in the `hubspot-central-brain` repo, on the **`develop`** branch. You do not
-need the repo itself — this is 21 files and about 56 KB, and nothing in the vault ever refers
+need the repo itself — this is 22 files and about 60 KB, and nothing in the vault ever refers
 back to it.
 
 **The one-liner.** Creates the vault folder and fills it, no git involved, nothing left behind:
@@ -67,9 +67,13 @@ No spaces — that is deliberate, and explained under "If a link does not open" 
 somewhere sensible — your home folder or Documents, **not** inside the git repo. The one-liner
 above already uses the right name.
 
-> **If you want a different name**, that is fine — but change it in two files afterwards
-> (`prompts/README.md` and `prompts/changelog-from-linear.md`), remembering that a space becomes
-> `%20`. There is a test in the repo that checks this: `npx vitest run src/app/__tests__/vault-template.test.ts`
+> **Renaming the vault costs more than this file used to admit.** Three prompt files carry
+> `obsidian://` URIs, not two — `prompts/README.md`, `prompts/changelog-from-linear.md` and
+> `prompts/promote-note.md` — plus `README.md` and this file. And
+> `src/app/__tests__/vault-template.test.ts` does not merely check the substitution is
+> complete: it asserts the name **is** `Dev-Central-Brain`, so a rename turns the suite red
+> until that expectation is changed too. Keep the name unless you have a reason.
+> (`npx vitest run src/app/__tests__/vault-template.test.ts` to see it.)
 
 ## 4. Open it in Obsidian
 

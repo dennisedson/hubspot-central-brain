@@ -2,8 +2,13 @@
 
 You are the driver. This walks the whole system from a fresh portal to daily use.
 
-It assumes the tooling is installed (Node 18+, the HubSpot CLI, Obsidian, Cowork) and that
-you have the repo cloned. It does **not** assume anything exists in the portal.
+It assumes the tooling is installed — **Node 20+**, the HubSpot CLI, Obsidian, Cowork — and
+that you have the repo cloned. It does **not** assume anything exists in the portal.
+
+> **Node 20, not 18.** The CLI pulls ink → string-width, which uses the `v` regex flag
+> introduced in Node 20, so on 18 the module fails to parse and the CLI never starts:
+> `SyntaxError: Invalid regular expression flags`. This guide said "Node 18+" until
+> 2026-10-02.
 
 `README.md` covers the developer path — build, deploy, CI. This is the operator path: what a
 person clicks, connects and authorises to make the thing actually run.
@@ -12,22 +17,29 @@ person clicks, connects and authorises to make the thing actually run.
 
 ## 0. What you are switching on, and what state it's in
 
-Be honest with yourself about this before you start, because three of these layers will
+Be honest with yourself about this before you start, because several of these layers will
 happily accept setup effort and give nothing back yet.
+
+Last reviewed against the code and the merged PRs on **2026-10-02**.
 
 | Layer | What it does | Status |
 |---|---|---|
-| **Content spine** | Linear ↔ HubSpot ↔ Asana, Fellow → tasks | **Working.** Exercised daily, 11 records in dev |
-| **Changelog** | Linear issue → Changelog record → pipeline | **Working, idle.** Wired end to end, 0 records |
-| **Cards** | Task Status, Related Content, Meeting Intelligence, Enterpret Insights | **Working** |
-| **Video** | YouTube OAuth, metrics sync, AI suggestions, UTM attribution | **New, unproven.** Code complete; no live Google or Anthropic call has ever been made |
+| **Content spine** | Linear ↔ HubSpot ↔ Asana | **Working.** Exercised daily; 11 records in dev as of 2026-09-29, 82 `content_piece` records on prod as of 2026-10-02 |
+| **Fellow → tasks** | Meeting action items become HubSpot Projects | **In doubt.** Every path on `api.fellow.app` now answers `404` with an HTML page, including the root, and prod has never set `fellow_last_sync`. Found by the credential probe, not yet diagnosed — §6.3 |
+| **Changelog** | Linear issue → Changelog record → pipeline | **Working, carrying records.** 70 changelog records on prod, and the drafting prompts measured against them |
+| **Changelog drafting** | Draft a post or a digest entry from the record, with Claude | **Working.** Card on the record, prompts in version control, model and thinking selectable — §4b |
+| **Rollout dates** | Milestone dates parsed from the Linear description, board sorted by the next one | **Working.** `rollout_*` properties; `1970-01-01` treated as unset |
+| **Cards** | Linear / Asana Status, Related Content, Enterpret Insights, Changelog Draft (Content), Meeting Intelligence (Contacts), YouTube (Video) | **Working** |
+| **App settings surface** | Settings reachable from Connected apps → the app → **Settings** | **Working since 2026-10-01.** This guide previously said it did not exist; the platform's tabs changed — §1.5 |
+| **Video** | YouTube OAuth, metrics sync, AI suggestions, UTM attribution | **Partly proven.** Live Google and Anthropic calls have both now been made. Dev is connected; **prod's refresh token is dead** (`invalid_grant`) and needs re-authorising — §4.2 |
+| **Credential health** | Daily probe of every external credential, from inside the app | **Deployed.** On `master` and active; no scheduled run observed yet — §1.7 |
 | **Breeze agent tools** | Ask Breeze about your pipeline | **Blocked.** Returns UNAUTHORIZED — see `docs/walkthroughs/` |
 | **Enterpret** | Friction themes on content | **Blocked.** No API key obtainable; data arrives out-of-band (#12) |
 | **Social / LinkedIn** | Auto-drafted posts | **Blocked.** HubSpot Social not connected (#18) |
 | **Cowork prompts** | Vault automations | **Unverified.** Nobody has watched Cowork run them |
 
-Sections 1–3 give you the working system. Section 4 is the new Video layer. Section 6 is
-what will not work no matter how correctly you set it up.
+Sections 1–3 give you the working system. Section 4 is the Video layer and 4b is changelog
+drafting. Section 6 is what will not work no matter how correctly you set it up.
 
 ---
 
@@ -62,6 +74,7 @@ PORTAL=dev npm run provision:asana-sync-token
 PORTAL=dev npm run provision:fellow-sync
 PORTAL=dev npm run provision:youtube-config         # required before YouTube auth
 PORTAL=dev npm run provision:enterpret-quotes
+PORTAL=dev npm run provision:changelog-drafting     # rollout dates, draft + prompt properties
 PORTAL=dev npm run provision:property-descriptions  # last — describes the rest
 ```
 
@@ -93,10 +106,10 @@ first four are required for the working system, the rest gate specific features.
 > `pending_secret` connection state for exactly this window.
 
 ```bash
-hs secrets add HS_ACCESS_TOKEN        # 21 functions — nothing works without it
-hs secrets add LINEAR_API_KEY         # 3
-hs secrets add ASANA_API_KEY          # 4
-hs secrets add SYNC_SHARED_SECRET     # 3
+hs secrets add HS_ACCESS_TOKEN        # 25 components — nothing works without it
+hs secrets add LINEAR_API_KEY         # 4
+hs secrets add ASANA_API_KEY          # 5
+hs secrets add SYNC_SHARED_SECRET     # 7
 hs secrets add LINEAR_WEBHOOK_SECRET  # inbound Linear webhook verification
 hs secrets add FELLOW_API_KEY         # Fellow sync
 hs secrets add ANTHROPIC_API_KEY      # Video AI suggestions
@@ -114,11 +127,25 @@ npx hs project deploy --deploy-latest-build
 PORTAL=dev npm run provision:workflows      # needs the deployed actions to exist
 ```
 
-### 1.5 Settings page
+### 1.5 Settings — two entrances, one form
 
-In the portal, open the app's settings page and pick your **Linear team** and **assignee
-filter**. This writes to the App Config record, which the sync functions read at runtime.
-Skip it and syncs run against an unset team.
+Pick your **Linear team** and **assignee filter**. This writes to the App Config record,
+which the sync functions read at runtime. Skip it and syncs run against an unset team —
+and in fact sync nothing at all, because an unanswered portal is treated as inert.
+
+Either entrance works and both render the same form:
+
+1. **Connected apps → HubSpot Central Brain → Settings**
+2. **Content Command Center → ⚙ Settings** (this one has a Back link)
+
+> This guide said on 2026-09-29 that the first of those did not exist, on the grounds
+> that a `type: "settings"` component renders nowhere for a private app. That was a
+> correct reading of the portal at the time — the app's entry had Overview and Insights
+> and no Settings tab. **The platform's tabs are now Overview / Settings / App cards**
+> and the component renders. Issue #88, PRs #100–#102.
+>
+> The form is also where you set the **changelog drafting prompts, model and thinking**
+> (§4b).
 
 ### 1.6 Confirm it's alive
 
@@ -131,6 +158,33 @@ npx hs app logs --app=<appId> --type=serverless-gateway-execution --since=10m
 Note the log type: these functions are reached through a public gateway URL, so invocations
 land in `serverless-gateway-execution`. `serverless-execution` shows silence whether or not
 anything ran — it is the wrong stream and will mislead you.
+
+### 1.7 Confirm the credentials are alive, not just present
+
+`npm run preflight` (§5b) checks *structure* — object ids, pipelines, stages, properties.
+A revoked key passes every one of its checks. Three credentials have died silently on this
+project: the HubSpot service key (a day to diagnose), the YouTube refresh token, and
+`ANTHROPIC_API_KEY`, which was invalid in `.env` **and on both portals at once**.
+
+So the app probes its own credentials. Ask it:
+
+```bash
+curl -sS -X POST https://<portalId>.hs-sites.com/hs/serverless/app-health \
+  -H 'content-type: application/json' \
+  -d '{"secret":"<SYNC_SHARED_SECRET>","portalId":"<portalId>"}' | jq .
+```
+
+It returns **200 even when degraded** — a non-2xx would be indistinguishable from the
+endpoint being down — so read `.checks[]`, not the status code. `unconfigured` means the
+credential is not set on that portal, which is not a failure.
+
+`.github/workflows/credential-health.yml` runs this against both portals daily at 13:00
+UTC and annotates each broken credential by name. It needs a `HUBSPOT_<PORTAL>_SYNC_SECRET`
+GitHub environment secret; a portal without one warns and skips rather than failing daily.
+Dev has none set today.
+
+The endpoint requires the shared secret because it is public and every probe costs a real
+third-party call — unauthenticated, anyone could spend this portal's Anthropic credits.
 
 ---
 
@@ -184,9 +238,20 @@ everything the serverless layer does not yet automate.
 
 ## 4. YouTube (the Video layer)
 
-**Read this first: none of this section has been exercised against real Google credentials.**
-The code is complete and unit-tested against mocks. You will be the first person to run it,
-so expect to debug it rather than to switch it on.
+**Read this first, and note that it replaces what this section said on 2026-09-29.** It
+claimed none of this had ever been exercised against real Google credentials. That is no
+longer true, and `docs/TEST-PLAN.md` §3 was the document that had it right:
+
+- **Dev is connected.** Channel `UCUp_0p0PFfaIEkUz5qMLLVw`, recorded as an observed
+  result in the test plan.
+- **Prod's refresh token is dead.** The credential probe got
+  `{"error":"invalid_grant","error_description":"Bad Request"}` on 2026-10-01 — the second
+  time this has happened. Re-authorise it (§4.2), and publish the consent screen first
+  (§4.1) or it will die again in seven days.
+- The daily sync in GitHub Actions **only syncs dev**: the job's `portal` input defaults
+  to `51869810` and nothing passes prod, so prod's dead token does not surface there.
+
+The card rendering (test plan §5) still has never been run by anyone.
 
 ### 4.1 Google side
 
@@ -245,16 +310,31 @@ but the refresh token is not yet set, so no API call can be made. `status` will 
 ### 4.3 Sync metrics
 
 **The schedule lives in GitHub, not in HubSpot.** `.github/workflows/youtube-sync.yml` runs it
-daily on a cron and can be triggered by hand from the Actions tab.
+on a `0 9 * * *` cron and can be triggered by hand from the Actions tab. The cron syncs **dev
+only** — the `portal` input defaults to `51869810`. To sync prod, dispatch it by hand with
+`22047910`, once prod's refresh token is alive again. GitHub also runs these crons late:
+observed firings have been around 15:30 UTC against a 09:00 schedule.
 
-That is not a stylistic choice. HubSpot Projects serverless has no scheduler, and a HubSpot
-workflow cannot supply one either: `buildPollWorkflow` enrols with `type: MANUAL`, because there
-is no cron trigger for a custom object. The three provisioned workflows named "(Daily)" are
-therefore not daily — they run when something enrols a record. Do not go looking for a recurrence
-setting on them; there isn't one.
+It lives in GitHub because a GitHub cron needs no provisioning step, no manual enable, and
+its logs are readable without a portal login. HubSpot Projects serverless has no scheduler
+of its own: a function runs when something invokes it — an HTTP request, a workflow step,
+or a card. `provision:workflows` still creates **YouTube → Sync Metrics** as a workflow
+action so the sync can be used as a step inside some other workflow; that was never what
+made it recur.
 
-`provision:workflows` still creates **YouTube → Sync Metrics** as a workflow action, so the sync
-can be used as a step inside some other workflow. That was never what made it recur.
+> **This section used to say the "(Daily)" HubSpot workflows are not daily.** That was
+> wrong, and wrong in a specific way worth knowing: it read `type: 'MANUAL'` off
+> `enrollmentCriteria`, which describes **how records enter** a workflow, and treated it as
+> the cadence. The cadence lives in `enrollmentSchedule`, a separate top-level field. Checked
+> against dev on 2026-10-01, both poll workflows carry
+> `{"type":"DAILY","timeOfDay":{"hour":17,"minute":0}}` and are ON. PR #85.
+>
+> **But the schedule is not provisioned.** `provision-workflows.ts` creates them
+> `isEnabled: false` with no `enrollmentSchedule`; dev's was set by hand in the UI and any
+> newly provisioned portal — prod included — needs the same: Edit → Enrollment triggers →
+> "On a schedule". The script preserves an existing schedule on re-run, which is why dev's
+> has survived repeated provisioning. The same comment still reads the old way in
+> `.github/workflows/youtube-sync.yml`; believe this file.
 
 > **The scheduled Action only runs from the default branch.** GitHub runs `schedule` triggers from
 > `master` alone, so the cron is inert until the workflow file is merged there. `workflow_dispatch`
@@ -294,6 +374,59 @@ from Claude.
 **It returns them; it does not write them.** Nothing here overwrites a human's title or
 description — and there is no suggestions property on the Video object to write into, so
 persisting them is a real follow-up that starts with provisioning a property.
+
+---
+
+## 4b. Changelog drafting
+
+On a Content record in the changelog pipeline, the **Changelog Draft** card drafts the post
+conversationally. Two modes, chosen by you rather than inferred: **standalone** (a change
+that earns its own announcement) and **rollup** (an entry inside a monthly digest, where the
+digest owns the title, teaser and call to action).
+
+Run `PORTAL=<portal> npm run provision:changelog-drafting` first. It adds `changelog_draft`
+and `changelog_draft_mode` to `content_piece`, the `rollout_*` date properties, and the
+prompt/model settings to App Config. Safe to re-run.
+
+### The 20-second ceiling is the thing to know
+
+**HubSpot kills an app function at 20 seconds.** Observed, not documented:
+
+```
+[runServerlessFunction] The serverless function 'changelog_draft_api' timed out.
+Task timed out after 20.00 seconds.
+```
+
+There is no timeout field in a function's hsmeta, so it cannot be raised, and
+`hubspot.fetch`'s configurable timeout is the extension's patience with the request — not the
+function's permission to keep running. The function gives itself a 16s budget so it can return
+a useful error of its own instead of being cut off mid-sentence with a generic RequestId.
+
+That makes generation speed a correctness concern rather than a nicety, and it is why the
+defaults are what they are:
+
+| Setting | Default | Why |
+|---|---|---|
+| `changelog_model` | **Sonnet** (`claude-sonnet-5-5`) | Fast enough to finish a standalone post inside 20s. Opus demonstrably is not — the first turn succeeded and the follow-up timed out |
+| `changelog_thinking` | **off** | Thinking happens *before* any output appears, so it is the worst thing to spend the budget on. It also bills as output |
+
+Opus and Haiku stay selectable from the settings form; Opus fits comfortably for the
+two-to-four-sentence rollup entries. Cost is not the reason for the defaults — a realistic
+month is under a dollar on any of the three. Model ids are pinned exactly, never to an alias,
+so a model moving under this feature would show up in a diff.
+
+### The prompts
+
+Both live in `src/app/lib/changelog-prompts.ts`, in version control, so a wording change shows
+up in a diff rather than being discovered from its output. The settings form can override
+either per portal, and **an empty override means "use the shipped default"** — that is
+deliberate, so a portal that has not customised its wording keeps receiving improvements.
+Writing the current default into the property would freeze that portal at today's text
+silently.
+
+Drafts are stored in `changelog_draft`, **never in `notes`**. `notes` holds the Linear issue
+description and is rewritten on every webhook, so anything a person wrote there would be
+destroyed the next time the issue moved.
 
 ---
 
@@ -359,8 +492,15 @@ PORTAL=prod npm run preflight
 ```
 
 Asserts that the target portal's live schema matches `src/app/lib/portal-config.ts`: every
-object type id, every pipeline id, every stage id, and all 28 properties the app reads or
-writes. Read-only — schemas, pipelines and properties, all GETs, so re-running costs nothing.
+object type id, every pipeline id, every stage id, and the 30 properties listed in
+`REQUIRED_PROPERTIES` (11 on Content, 9 on Video, 10 on App Config). Read-only — schemas,
+pipelines and properties, all GETs, so re-running costs nothing.
+
+> **That list is behind the code.** None of the `rollout_*` properties, `changelog_draft`,
+> `changelog_draft_mode` or the drafting settings are in it, and `rollout_priority_date` is
+> load-bearing — the pipeline board orders every column by it. A portal missing them passes
+> preflight and then sorts on nothing. See the rule two paragraphs down, which this is
+> currently in breach of.
 
 `.github/workflows/deploy-prod.yml` runs it before the upload, so a prod deploy cannot proceed
 over drift.
@@ -439,6 +579,18 @@ An empty Enterpret card means nobody has run the sync. It is not a fault to repo
   it worse: a subscription verifies, looks established, and delivers nothing.
   Metrics update on the daily poll only.
 
+### 6.3 Newly in doubt — needs a person, not a guess
+
+- **Fellow.** The credential probe added on 2026-10-01 found **every** path on
+  `api.fellow.app` answering `404` with an HTML page, the root included, and prod has
+  **never** set `fellow_last_sync`. An HTML body from an API host usually means the base
+  URL moved or the API is gone — a different problem from a rejected credential, and one
+  that must not be answered by guessing a replacement URL. Until someone establishes
+  whether the Fellow integration still exists, treat the "Fellow → tasks" row in §0 as
+  unverified rather than working. `fellow-client.ts` is what the probe mirrors.
+- **Prod's YouTube refresh token** is dead (`invalid_grant`) and `?action=status` will keep
+  answering `connected` while a token-shaped string sits in the secret — §4.2.
+
 ---
 
 ## Troubleshooting, by symptom
@@ -447,7 +599,10 @@ An empty Enterpret card means nobody has run the sync. It is not a fault to repo
 |---|---|
 | YouTube auth fails with `Error creating app_settings … ["linear_team_id"]` | The app is not installed, so there is no settings page, so no App Config record exists for the callback to update — §5c |
 | CI: `HUBSPOT_ACCOUNT_ID … is required but was not set` | Not a typo — `project-validate` reads `DEFAULT_ACCOUNT_ID` and derives that name itself. The job was missing `environment:`, and an environment secret read from a job without one resolves to an **empty string** rather than failing |
-| CI: `SyntaxError: Invalid regular expression flags` | Node 18. The HubSpot CLI pulls ink → string-width, which uses the `v` regex flag from Node 20, so the module fails to parse and the CLI never runs |
+| `SyntaxError: Invalid regular expression flags` from any `hs` command | Node 18. The HubSpot CLI pulls ink → string-width, which uses the `v` regex flag from Node 20, so the module fails to parse and the CLI never runs. Use Node 20+ |
+| `settings form is STALE — run: npm run sync:settings-form` | You edited `src/app/settings/LinearSettingsForm.tsx`, which is generated. Move the change to `src/app/pages/LinearSettingsForm.tsx` and re-run the sync |
+| A card times out with a generic RequestId and no error of ours | The 20-second app-function ceiling — §4b. Not raisable; there is no timeout field in an hsmeta |
+| The Settings tab is blank or errors | A cross-directory import. HubSpot bundles each extension directory alone, so `settings/` cannot import from `pages/` — the file is generated into `settings/` instead |
 | A deploy reports `[deployed]` but the endpoint serves old code | Container propagation. Build #269 needed ~75s after reporting deployed. Poll the postcondition until it flips rather than testing once |
 | Provisioning script exits `401` | Private app token expired — regenerate it |
 | `expired 20705 day(s) ago` | Epoch zero: the token is unparseable, not old — wrong variable or wrong token |

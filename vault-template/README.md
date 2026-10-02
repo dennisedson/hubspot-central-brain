@@ -15,7 +15,8 @@ cp -R vault-template/ ~/path/to/your-vault/
 
 1. Open the folder in Obsidian once, so it creates `.obsidian/`
 2. Connect the folder in Cowork
-3. Put your vault's name into `prompts/README.md` where the `obsidian://` URI needs it
+3. Name the folder exactly `Dev-Central-Brain`. The `obsidian://` URIs in the prompts are
+   already written against that name — see [SETUP.md](SETUP.md) step 3 for what renaming costs
 
 Re-running the copy is safe for the folders but **overwrites templates and prompts**. After the
 first time, copy selectively.
@@ -85,10 +86,10 @@ by hand, which beats a loop that corrupts quietly.
 
 ### `hubspot_object` is always `content_piece`
 
-A `changelog_entry` object exists on the portals (`2-67505888` on dev) but is vestigial — zero
+A `changelog_entry` object survives **on dev only** (`2-67505888`) and is vestigial — zero
 records, referenced only by `src/scripts/provision-asana-property.ts`, predating the consolidation
-of changelog into `content_piece`'s second pipeline. Changelog notes use `content_piece` with
-`hubspot_pipeline: changelog`.
+of changelog into `content_piece`'s second pipeline. It has been deleted from prod. Changelog
+notes use `content_piece` with `hubspot_pipeline: changelog`.
 
 ## Portal reference
 
