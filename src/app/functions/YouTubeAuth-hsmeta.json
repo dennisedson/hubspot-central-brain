@@ -5,13 +5,17 @@
     "entrypoint": "/app/functions/YouTubeAuth.js",
     "endpoint": {
       "path": "youtube-auth",
-      "methods": ["GET", "POST"]
+      "methods": [
+        "GET",
+        "POST"
+      ]
     },
     "secretKeys": [
       "YOUTUBE_CLIENT_ID",
       "YOUTUBE_CLIENT_SECRET",
       "YOUTUBE_REFRESH_TOKEN",
-      "HS_ACCESS_TOKEN"
+      "HS_ACCESS_TOKEN",
+      "GOOGLE_DRIVE_REFRESH_TOKEN"
     ]
   }
 }

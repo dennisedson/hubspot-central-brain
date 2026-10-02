@@ -94,6 +94,8 @@ interface AuthorizeResponse {
   authUrl: string;
   redirectUri: string;
   scopes: string[];
+  /** Which secret this authorisation's refresh token belongs in. */
+  secretName: string;
 }
 
 interface PromptSet {
@@ -191,6 +193,7 @@ export function LinearSettingsForm({ portalId, onBack }: { portalId: number; onB
   const [authUrl, setAuthUrl] = useState('');
   const [redirectUri, setRedirectUri] = useState('');
   const [grantedScopes, setGrantedScopes] = useState<string[]>([]);
+  const [secretName, setSecretName] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [googleError, setGoogleError] = useState('');
 
@@ -245,10 +248,10 @@ export function LinearSettingsForm({ portalId, onBack }: { portalId: number; onB
 
   /** The auth function is its own extension point; this page just asks it. */
   const callYouTubeAuth = useCallback(
-    async (action: string): Promise<ServerlessResult> =>
+    async (action: string, service?: string): Promise<ServerlessResult> =>
       (hubspot.serverless as (uid: string, opts: { parameters: Record<string, string> }) => Promise<ServerlessResult>)(
         'youtube_auth',
-        { parameters: { action, portalId: String(portalId) } },
+        { parameters: { action, portalId: String(portalId), ...(service ? { service } : {}) } },
       ),
     [portalId],
   );
@@ -264,10 +267,11 @@ export function LinearSettingsForm({ portalId, onBack }: { portalId: number; onB
       .catch(() => setGoogle('unknown'));
   }, [callYouTubeAuth]);
 
-  const startGoogleAuth = useCallback(() => {
+  const startGoogleAuth = useCallback((service: 'youtube' | 'drive') => {
     setConnecting(true);
     setGoogleError('');
-    callYouTubeAuth('authorize')
+    setAuthUrl('');
+    callYouTubeAuth('authorize', service)
       .then(res => {
         if (res.statusCode !== 200) {
           const data = JSON.parse(res.body) as { error?: string; detail?: string };
@@ -278,6 +282,7 @@ export function LinearSettingsForm({ portalId, onBack }: { portalId: number; onB
         setAuthUrl(data.authUrl);
         setRedirectUri(data.redirectUri);
         setGrantedScopes(data.scopes ?? []);
+        setSecretName(data.secretName ?? '');
       })
       .catch((err: unknown) =>
         setGoogleError(err instanceof Error ? err.message : 'Could not start the Google connection'))
@@ -526,9 +531,10 @@ export function LinearSettingsForm({ portalId, onBack }: { portalId: number; onB
 
       <Heading>Google connection</Heading>
       <Text variant="microcopy">
-        One authorisation covers YouTube and the Drive folder the changelog
-        documents go in. Google issues a refresh token per authorisation rather
-        than per scope, so adding a scope means connecting again.
+        Two separate connections. Google refuses to grant the YouTube scopes and
+        Drive in one authorisation — it blocks the consent screen with
+        &quot;scopes that cannot be requested together&quot; — so each has its own
+        consent and its own refresh token.
       </Text>
 
       <Flex align="center" gap="small">
@@ -557,9 +563,14 @@ export function LinearSettingsForm({ portalId, onBack }: { portalId: number; onB
       )}
 
       {!authUrl ? (
-        <Button variant="secondary" disabled={connecting} onClick={startGoogleAuth}>
-          {connecting ? 'Preparing…' : google === 'connected' ? 'Reconnect Google' : 'Connect Google'}
-        </Button>
+        <Flex gap="small">
+          <Button variant="secondary" disabled={connecting} onClick={() => startGoogleAuth('youtube')}>
+            {connecting ? 'Preparing…' : google === 'connected' ? 'Reconnect YouTube' : 'Connect YouTube'}
+          </Button>
+          <Button variant="secondary" disabled={connecting} onClick={() => startGoogleAuth('drive')}>
+            {connecting ? 'Preparing…' : 'Connect Drive'}
+          </Button>
+        </Flex>
       ) : (
         <Box>
           <Text format={{ fontWeight: 'bold' }}>1. Approve the connection</Text>
@@ -570,9 +581,10 @@ export function LinearSettingsForm({ portalId, onBack }: { portalId: number; onB
           <Text variant="microcopy">
             Google redirects back to this portal and the response contains a
             refresh token, shown once. Save it with
-            {' '}<Text format={{ fontWeight: 'bold' }}>hs secrets update YOUTUBE_REFRESH_TOKEN</Text>
+            {' '}<Text format={{ fontWeight: 'bold' }}>hs secrets add {secretName}</Text>
             {' '}and re-upload the project — a running function does not pick up a
-            changed secret without a deploy.
+            changed secret without a deploy. Each connection has its own secret,
+            so storing one under the other&apos;s name breaks both.
           </Text>
           <Text variant="microcopy">
             Check the account first: the CLI ignores --account when only one is

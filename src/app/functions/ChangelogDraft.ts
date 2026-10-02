@@ -7,7 +7,7 @@ import {
   resolveModel, resolveThinking, modelIdFor, thinkingConfigFor,
   DRAFT_TIMEOUT_MS, DRAFT_MAX_TOKENS,
 } from '../lib/changelog-model';
-import { getYouTubeAccessToken } from '../lib/youtube-auth';
+import { getAccessToken } from '../lib/youtube-auth';
 import {
   createFolder, folderExists, createDocFromMarkdown, DEFAULT_FOLDER_NAME,
 } from '../lib/google-drive';
@@ -383,7 +383,9 @@ export async function main(context: DraftContext): Promise<{ statusCode: number;
         return { statusCode: 400, body: JSON.stringify({ error: 'There is no draft to put in a document' }) };
       }
 
-      const accessToken = await getYouTubeAccessToken();
+      // The Drive authorisation, not the YouTube one. Google refuses to grant
+      // both in a single consent, so they are separate tokens entirely.
+      const accessToken = await getAccessToken('drive');
 
       // The folder is created once and remembered. `drive.file` cannot search
       // for it again — access is per-file by id — so a lost id means a new
