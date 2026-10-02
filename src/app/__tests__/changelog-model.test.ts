@@ -44,8 +44,18 @@ describe('resolveThinking', () => {
   });
 
   it('maps to a config the API understands', () => {
-    expect(thinkingConfigFor('off')).toEqual({ type: 'disabled' });
-    expect(thinkingConfigFor('adaptive')).toEqual({ type: 'adaptive' });
+    expect(thinkingConfigFor('off', 'haiku')).toEqual({ type: 'disabled' });
+    for (const model of ['opus', 'sonnet', 'haiku'] as const) {
+      expect(thinkingConfigFor('adaptive', model)).toEqual({ type: 'adaptive' });
+    }
+  });
+
+  it('turns thinking off the way each model accepts', () => {
+    // The 5.5 models answer 400 to {type:'disabled'} and ask for
+    // 'between_tools' instead. Haiku 4.5 still takes 'disabled'.
+    expect(thinkingConfigFor('off', 'sonnet')).toEqual({ type: 'between_tools' });
+    expect(thinkingConfigFor('off', 'opus')).toEqual({ type: 'between_tools' });
+    expect(thinkingConfigFor('off', 'haiku')).toEqual({ type: 'disabled' });
   });
 });
 

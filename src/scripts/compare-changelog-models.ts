@@ -73,7 +73,7 @@ async function draft(
     body: JSON.stringify({
       model: MODEL_IDS[model],
       max_tokens: 4096,
-      thinking: thinkingConfigFor(thinking),
+      thinking: thinkingConfigFor(thinking, model),
       system: [{ type: 'text', text: system }],
       messages: [
         { role: 'user', content: [{ type: 'text', text: opening, cache_control: { type: 'ephemeral' } }] },

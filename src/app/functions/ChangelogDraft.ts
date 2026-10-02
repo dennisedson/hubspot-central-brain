@@ -4,7 +4,7 @@ import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 import { createClaudeClient, CLAUDE_EFFORT } from '../lib/claude-client';
 import { resolvePrompt, type ChangelogDraftMode } from '../lib/changelog-prompts';
 import {
-  resolveModel, resolveThinking, modelIdFor, thinkingConfigFor,
+  resolveModel, resolveThinking, modelIdFor, thinkingConfigFor, type ThinkingConfig,
   DRAFT_TIMEOUT_MS, DRAFT_MAX_TOKENS,
 } from '../lib/changelog-model';
 import { getAccessToken } from '../lib/youtube-auth';
@@ -61,7 +61,7 @@ interface Turn {
 interface DraftRequestBody {
   model: string;
   max_tokens: number;
-  thinking: { type: 'adaptive' } | { type: 'disabled' };
+  thinking: ThinkingConfig;
   output_config: { effort: string };
   system: Array<{ type: 'text'; text: string }>;
   messages: Array<
@@ -109,7 +109,7 @@ async function readRecord(objectTypeId: string, objectId: string, token: string)
 interface DraftConfig {
   promptOverride: string | null;
   model: string;
-  thinking: { type: 'adaptive' } | { type: 'disabled' };
+  thinking: ThinkingConfig;
 }
 
 /** One search for everything the drafter is configured with. */
@@ -122,7 +122,7 @@ async function readDraftConfig(
   const fallback: DraftConfig = {
     promptOverride: null,
     model: modelIdFor(resolveModel(null)),
-    thinking: thinkingConfigFor(resolveThinking(null)),
+    thinking: thinkingConfigFor(resolveThinking(null), resolveModel(null)),
   };
 
   try {
@@ -141,7 +141,7 @@ async function readDraftConfig(
     return {
       promptOverride: props[promptProperty] ?? null,
       model: modelIdFor(resolveModel(props.changelog_model)),
-      thinking: thinkingConfigFor(resolveThinking(props.changelog_thinking)),
+      thinking: thinkingConfigFor(resolveThinking(props.changelog_thinking), resolveModel(props.changelog_model)),
     };
   } catch {
     // A settings read failing must not stop a draft; defaults are valid.
