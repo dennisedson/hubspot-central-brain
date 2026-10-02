@@ -111,7 +111,17 @@ export function modelIdFor(choice: ModelChoice): string {
   return MODEL_IDS[choice];
 }
 
-/** Adaptive thinking, or none. Thinking tokens are billed as output. */
-export function thinkingConfigFor(choice: ThinkingChoice): { type: 'adaptive' } | { type: 'disabled' } {
-  return choice === 'off' ? { type: 'disabled' } : { type: 'adaptive' };
+export type ThinkingConfig = { type: 'adaptive' } | { type: 'disabled' } | { type: 'between_tools' };
+
+/**
+ * Adaptive thinking, or none. Thinking tokens are billed as output.
+ *
+ * "None" is spelled differently per model: the 5.5 models answer 400 to
+ * `{type:'disabled'}` and ask for `between_tools` (no thinking before the
+ * response; short updates between tool calls only). Haiku 4.5 still takes
+ * `disabled`.
+ */
+export function thinkingConfigFor(choice: ThinkingChoice, model: ModelChoice): ThinkingConfig {
+  if (choice === 'adaptive') return { type: 'adaptive' };
+  return model === 'haiku' ? { type: 'disabled' } : { type: 'between_tools' };
 }

@@ -225,7 +225,7 @@ describe('the turn action', () => {
     const call = mockFetch().mock.calls.find(([u]) => String(u).includes('api.anthropic.com'));
     const body = JSON.parse(call![1].body as string) as { model: string; thinking: { type: string } };
     expect(body.model).toBe('claude-sonnet-5-5');
-    expect(body.thinking).toEqual({ type: 'disabled' });
+    expect(body.thinking).toEqual({ type: 'between_tools' });
   });
 
   it('falls back to the default model when the setting is empty or unknown', async () => {
@@ -343,7 +343,7 @@ describe('the 20-second budget', () => {
     const body = JSON.parse(call![1].body as string) as { max_tokens: number; thinking: { type: string } };
     expect(body.max_tokens).toBeLessThanOrEqual(2048);
     // Thinking happens before any output, so it is the worst use of the budget.
-    expect(body.thinking).toEqual({ type: 'disabled' });
+    expect(body.thinking).toEqual({ type: 'between_tools' });
   });
 });
 
