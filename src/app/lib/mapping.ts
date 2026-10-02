@@ -157,6 +157,17 @@ export const ASANA_PROJECT_GID = '1202179514576728';
 export const ASANA_PIPELINE_STAGE_FIELD_GID = '1202184607659964';
 export const ASANA_LINEAR_ISSUE_URL_FIELD_GID = '1213736210804469';
 
+/**
+ * "Draft File" on BuildRel | Advocacy Content Factory — where the Google Doc
+ * link goes.
+ *
+ * Present on the PROD project only. Dennis-Staging carries 8 of that project's
+ * 21 fields and this is not one, so the write has to be conditional on the
+ * value existing rather than assumed — otherwise dev fails on a field it does
+ * not have.
+ */
+export const ASANA_DRAFT_FILE_FIELD_GID = '1202184607656856';
+
 // HubSpot Content stage names → Asana Pipeline Stage enum option GIDs
 export const CONTENT_STAGE_TO_ASANA_STAGE: Record<ContentStage, string> = {
   idea: '1212751789107073',     // New Idea
