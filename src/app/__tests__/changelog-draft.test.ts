@@ -357,7 +357,9 @@ describe('the 20-second budget', () => {
  */
 describe('the createDoc action', () => {
   beforeEach(() => {
-    process.env.YOUTUBE_REFRESH_TOKEN = 'refresh';
+    // The DRIVE token, not the YouTube one: Google refuses to grant both in a
+    // single authorisation, so they are separate secrets.
+    process.env.GOOGLE_DRIVE_REFRESH_TOKEN = 'drive-refresh';
     process.env.YOUTUBE_CLIENT_ID = 'id';
     process.env.YOUTUBE_CLIENT_SECRET = 'secret';
   });

@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   YOUTUBE_AUTH_PATH,
   YOUTUBE_SCOPES,
-  GOOGLE_SCOPES,
+  SCOPES_FOR,
+  REFRESH_TOKEN_ENV,
   buildAuthUrl,
   buildRedirectUri,
   exchangeCodeForTokens,
@@ -132,7 +133,7 @@ describe('the redirect URI', () => {
 
 describe('buildAuthUrl', () => {
   it('asks for offline access with a forced consent screen', () => {
-    const url = new URL(buildAuthUrl(CLIENT_ID, REDIRECT_URI, 'state-123'));
+    const url = new URL(buildAuthUrl(CLIENT_ID, REDIRECT_URI, 'state-123', 'youtube'));
     expect(url.origin + url.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
     // Together these are the only reason a refresh_token comes back.
     expect(url.searchParams.get('access_type')).toBe('offline');
@@ -141,57 +142,87 @@ describe('buildAuthUrl', () => {
   });
 
   it('passes the client id, redirect and state through', () => {
-    const url = new URL(buildAuthUrl(CLIENT_ID, REDIRECT_URI, 'state-123'));
+    const url = new URL(buildAuthUrl(CLIENT_ID, REDIRECT_URI, 'state-123', 'youtube'));
     expect(url.searchParams.get('client_id')).toBe(CLIENT_ID);
     expect(url.searchParams.get('redirect_uri')).toBe(REDIRECT_URI);
     expect(url.searchParams.get('state')).toBe('state-123');
   });
 
-  it('requests every scope one authorisation has to cover', () => {
-    // Google issues a refresh token per AUTHORISATION, not per scope, and this
-    // app has one token. A scope missing here is a 403 from the API later, not
-    // an error at consent time.
-    const url = new URL(buildAuthUrl(CLIENT_ID, REDIRECT_URI, 's'));
-    const scopes = (url.searchParams.get('scope') ?? '').split(' ');
+  it('requests one service\'s scopes, never both', () => {
+    // Google blocks the combination at the consent screen, after the operator
+    // clicks:
+    //
+    //   Access blocked: Authorization Error
+    //   This request contains scopes that cannot be requested together:
+    //   [youtube.readonly, …, drive.file]
+    //   Error 400: invalid_request
+    //
+    // Nothing before the consent screen detects it, so this is the guard.
+    const youtube = (new URL(buildAuthUrl(CLIENT_ID, REDIRECT_URI, 's', 'youtube'))
+      .searchParams.get('scope') ?? '').split(' ');
+    const drive = (new URL(buildAuthUrl(CLIENT_ID, REDIRECT_URI, 's', 'drive'))
+      .searchParams.get('scope') ?? '').split(' ');
 
-    expect(scopes).toEqual(GOOGLE_SCOPES);
-    for (const youtube of YOUTUBE_SCOPES) expect(scopes).toContain(youtube);
-    expect(scopes).toContain('https://www.googleapis.com/auth/yt-analytics.readonly');
+    expect(youtube).toEqual(SCOPES_FOR.youtube);
+    expect(drive).toEqual(SCOPES_FOR.drive);
+
+    // The sets must not overlap, and neither request may carry the other's.
+    expect(youtube.some(x => x.includes('/drive'))).toBe(false);
+    expect(drive.some(x => x.includes('youtube') || x.includes('yt-analytics'))).toBe(false);
   });
 
   it('asks for drive.file and nothing broader', () => {
-    // Walking an existing year/month hierarchy would have needed
-    // drive.metadata.readonly or full drive — both restricted, both refusable
-    // by a Workspace admin. The app creates its own folder instead.
-    const scopes = (new URL(buildAuthUrl(CLIENT_ID, REDIRECT_URI, 's'))
+    const drive = (new URL(buildAuthUrl(CLIENT_ID, REDIRECT_URI, 's', 'drive'))
       .searchParams.get('scope') ?? '').split(' ');
 
-    expect(scopes).toContain('https://www.googleapis.com/auth/drive.file');
-    expect(scopes).not.toContain('https://www.googleapis.com/auth/drive');
-    expect(scopes).not.toContain('https://www.googleapis.com/auth/drive.metadata.readonly');
-    expect(scopes).not.toContain('https://www.googleapis.com/auth/documents');
+    expect(drive).toContain('https://www.googleapis.com/auth/drive.file');
+    expect(drive).not.toContain('https://www.googleapis.com/auth/drive');
+    expect(drive).not.toContain('https://www.googleapis.com/auth/drive.metadata.readonly');
+    expect(drive).not.toContain('https://www.googleapis.com/auth/documents');
   });
+
+  it('keeps each service\'s refresh token in its own secret', () => {
+    // A token is minted per authorisation, so one slot would hand Drive a
+    // YouTube token.
+    expect(REFRESH_TOKEN_ENV.youtube).toBe('YOUTUBE_REFRESH_TOKEN');
+    expect(REFRESH_TOKEN_ENV.drive).toBe('GOOGLE_DRIVE_REFRESH_TOKEN');
+    expect(REFRESH_TOKEN_ENV.youtube).not.toBe(REFRESH_TOKEN_ENV.drive);
+  });
+
 });
 
 describe('the signed state', () => {
   it('round-trips the portal id', () => {
-    const state = signState(PORTAL_ID, CLIENT_SECRET);
-    expect(verifyState(state, CLIENT_SECRET)).toBe(PORTAL_ID);
+    const state = signState(PORTAL_ID, CLIENT_SECRET, 'youtube');
+    expect(verifyState(state, CLIENT_SECRET)).toEqual({ portalId: PORTAL_ID, service: 'youtube' });
+  });
+
+  it('carries which service came back, because the redirect carries nothing else', () => {
+    const drive = signState(PORTAL_ID, CLIENT_SECRET, 'drive');
+    expect(verifyState(drive, CLIENT_SECRET)).toEqual({ portalId: PORTAL_ID, service: 'drive' });
+  });
+
+  it('refuses the old single-service format rather than guessing', () => {
+    // Three parts was the format before Google forced two authorisations.
+    // States live for minutes, so none survive a deploy — failing closed costs
+    // one retry and guessing could store a Drive token as the YouTube one.
+    expect(verifyState(`${PORTAL_ID}.nonce.signature`, CLIENT_SECRET)).toBeNull();
   });
 
   it('is unique per call, so two authorisations never share a state', () => {
-    expect(signState(PORTAL_ID, CLIENT_SECRET)).not.toBe(signState(PORTAL_ID, CLIENT_SECRET));
+    expect(signState(PORTAL_ID, CLIENT_SECRET, 'youtube'))
+      .not.toBe(signState(PORTAL_ID, CLIENT_SECRET, 'youtube'));
   });
 
   // The attack the Firebase version was open to: state was the bare portal id.
   it('rejects a swapped portal id', () => {
-    const state = signState(PORTAL_ID, CLIENT_SECRET);
+    const state = signState(PORTAL_ID, CLIENT_SECRET, 'youtube');
     const forged = state.replace(String(PORTAL_ID), '22047910');
     expect(verifyState(forged, CLIENT_SECRET)).toBeNull();
   });
 
   it('rejects a signature from a different secret', () => {
-    expect(verifyState(signState(PORTAL_ID, 'other-secret'), CLIENT_SECRET)).toBeNull();
+    expect(verifyState(signState(PORTAL_ID, 'other-secret', 'youtube'), CLIENT_SECRET)).toBeNull();
   });
 
   it('rejects malformed and missing states', () => {
@@ -372,7 +403,8 @@ describe('YouTubeAuth — authorize', () => {
     expect(body.redirectUri).toBe(REDIRECT_URI);
     const url = new URL(body.authUrl);
     expect(url.searchParams.get('redirect_uri')).toBe(REDIRECT_URI);
-    expect(verifyState(url.searchParams.get('state') ?? '', CLIENT_SECRET)).toBe(PORTAL_ID);
+    expect(verifyState(url.searchParams.get('state') ?? '', CLIENT_SECRET))
+      .toEqual({ portalId: PORTAL_ID, service: 'youtube' });
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
@@ -399,7 +431,7 @@ describe('YouTubeAuth — callback', () => {
     return {
       query: {
         code: 'auth-code',
-        state: signState(PORTAL_ID, CLIENT_SECRET),
+        state: signState(PORTAL_ID, CLIENT_SECRET, 'youtube'),
         ...overrides,
       },
     };

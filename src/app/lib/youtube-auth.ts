@@ -80,14 +80,40 @@ export const YOUTUBE_SCOPES = [
 ];
 
 /**
- * Everything one authorisation must cover.
+ * TWO AUTHORISATIONS, NOT ONE.
  *
- * Google issues a refresh token per authorisation, not per scope, so a token
- * minted before a scope was added simply does not carry it — and the failure is
- * a 403 from the API rather than anything at consent time. Adding a scope means
- * re-running the connect flow.
+ * Google refuses to grant the YouTube scopes and Drive together:
+ *
+ *   Access blocked: Authorization Error
+ *   This request contains scopes that cannot be requested together:
+ *   [youtube.readonly, youtube.upload, youtube, youtube.force-ssl,
+ *    yt-analytics.readonly, drive.file]
+ *   Error 400: invalid_request
+ *
+ * That is not documented anywhere I could find — the error itself is the
+ * source. It also arrives at the consent screen, after the operator clicks,
+ * rather than from the API, so nothing before that point can detect it.
+ *
+ * So each service is its own authorisation with its own refresh token. A token
+ * is minted per authorisation rather than per scope, so they genuinely cannot
+ * be shared.
  */
-export const GOOGLE_SCOPES = [...YOUTUBE_SCOPES, ...DRIVE_SCOPES];
+export type GoogleService = 'youtube' | 'drive';
+
+export const SCOPES_FOR: Record<GoogleService, string[]> = {
+  youtube: YOUTUBE_SCOPES,
+  drive: DRIVE_SCOPES,
+};
+
+/** Which secret holds each service's refresh token. */
+export const REFRESH_TOKEN_ENV: Record<GoogleService, string> = {
+  youtube: 'YOUTUBE_REFRESH_TOKEN',
+  drive: 'GOOGLE_DRIVE_REFRESH_TOKEN',
+};
+
+export function isGoogleService(value: string | undefined): value is GoogleService {
+  return value === 'youtube' || value === 'drive';
+}
 
 /**
  * Where per-portal YouTube state lives on `app_configs`.
@@ -203,8 +229,8 @@ function requireGoogleCredentials(): GoogleCredentials {
  */
 const PLACEHOLDER_TOKENS = new Set(['pending', 'placeholder', 'changeme', 'todo', 'none', 'tbd']);
 
-export function readRefreshToken(): string | null {
-  const token = process.env.YOUTUBE_REFRESH_TOKEN?.trim();
+export function readRefreshToken(service: GoogleService = 'youtube'): string | null {
+  const token = process.env[REFRESH_TOKEN_ENV[service]]?.trim();
   if (!token) return null;
   return PLACEHOLDER_TOKENS.has(token.toLowerCase()) ? null : token;
 }
@@ -240,23 +266,41 @@ export function buildRedirectUri(portalId: number): string {
  * flow, so no new secret to provision — makes the portal id tamper-evident and
  * proves the callback belongs to an authorisation this app started.
  */
-export function signState(portalId: number, clientSecret: string, nonce?: string): string {
+export function signState(
+  portalId: number,
+  clientSecret: string,
+  service: GoogleService,
+  nonce?: string,
+): string {
   const n = nonce ?? crypto.randomBytes(9).toString('base64url');
-  const payload = `${portalId}.${n}`;
+  // The service rides in the signed payload because Google's redirect carries
+  // nothing but `code` and `state`, and the callback has to know which token it
+  // is storing. Signed rather than a query param so it cannot be switched.
+  const payload = `${portalId}.${service}.${n}`;
   const sig = crypto.createHmac('sha256', clientSecret).update(payload).digest('base64url');
   return `${payload}.${sig}`;
 }
 
 /** The portal id from a valid state, or null if absent, malformed or forged. */
-export function verifyState(state: string | undefined, clientSecret: string): number | null {
+export interface VerifiedState {
+  portalId: number;
+  service: GoogleService;
+}
+
+export function verifyState(
+  state: string | undefined,
+  clientSecret: string,
+): VerifiedState | null {
   if (!state) return null;
   const parts = state.split('.');
-  if (parts.length !== 3) return null;
-  const [portalPart, noncePart, sig] = parts;
+  // A three-part state is the old single-service format. It fails closed rather
+  // than being guessed at — states live for minutes, so none survive a deploy.
+  if (parts.length !== 4) return null;
+  const [portalPart, servicePart, noncePart, sig] = parts;
 
   const expected = crypto
     .createHmac('sha256', clientSecret)
-    .update(`${portalPart}.${noncePart}`)
+    .update(`${portalPart}.${servicePart}.${noncePart}`)
     .digest('base64url');
 
   const a = Buffer.from(sig);
@@ -265,7 +309,10 @@ export function verifyState(state: string | undefined, clientSecret: string): nu
   if (!crypto.timingSafeEqual(a, b)) return null;
 
   const portalId = Number(portalPart);
-  return Number.isInteger(portalId) && portalId > 0 ? portalId : null;
+  if (!Number.isInteger(portalId) || portalId <= 0) return null;
+  if (!isGoogleService(servicePart)) return null;
+
+  return { portalId, service: servicePart };
 }
 
 // ---------------------------------------------------------------------------
@@ -279,11 +326,18 @@ export function verifyState(state: string | undefined, clientSecret: string): nu
  * `refresh_token` comes back. Drop either and the callback can succeed while
  * producing nothing worth keeping.
  */
-export function buildAuthUrl(clientId: string, redirectUri: string, state: string): string {
+export function buildAuthUrl(
+  clientId: string,
+  redirectUri: string,
+  state: string,
+  service: GoogleService,
+): string {
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
-    scope: GOOGLE_SCOPES.join(' '),
+    // One service's scopes only — see SCOPES_FOR. Sending the union is what
+    // Google blocks at the consent screen.
+    scope: SCOPES_FOR[service].join(' '),
     response_type: 'code',
     access_type: 'offline',
     prompt: 'consent',
@@ -378,11 +432,16 @@ export async function refreshAccessToken(refreshToken: string): Promise<YouTubeT
  * cold start simply mints another. No shared store, nothing to keep consistent,
  * and no way for a stale write to clobber a good token.
  */
-let cachedToken: { token: string; expiresAt: number } | null = null;
+/**
+ * One cache per service: the tokens are minted by separate authorisations and
+ * carry different scopes, so sharing a slot would hand Drive a YouTube token.
+ */
+const cachedTokens: Partial<Record<GoogleService, { token: string; expiresAt: number }>> = {};
 
 /** Test seam. Production code has no reason to call this. */
 export function resetAccessTokenCache(): void {
-  cachedToken = null;
+  delete cachedTokens.youtube;
+  delete cachedTokens.drive;
 }
 
 /**
@@ -390,21 +449,27 @@ export function resetAccessTokenCache(): void {
  * window. Throws when the portal has never been connected — callers should
  * treat that as "not connected", not as an outage.
  */
-export async function getYouTubeAccessToken(): Promise<string> {
-  if (cachedToken && Date.now() < cachedToken.expiresAt - REFRESH_SKEW_MS) {
-    return cachedToken.token;
+export async function getAccessToken(service: GoogleService = 'youtube'): Promise<string> {
+  const cached = cachedTokens[service];
+  if (cached && Date.now() < cached.expiresAt - REFRESH_SKEW_MS) {
+    return cached.token;
   }
 
-  const refreshToken = readRefreshToken();
+  const refreshToken = readRefreshToken(service);
   if (!refreshToken) {
     throw new Error(
-      'YOUTUBE_REFRESH_TOKEN is not set — run the YouTubeAuth connect flow for this portal',
+      `${REFRESH_TOKEN_ENV[service]} is not set — connect ${service} for this portal from Settings`,
     );
   }
 
   const tokens = await refreshAccessToken(refreshToken);
-  cachedToken = { token: tokens.accessToken, expiresAt: tokens.expiresAt };
+  cachedTokens[service] = { token: tokens.accessToken, expiresAt: tokens.expiresAt };
   return tokens.accessToken;
+}
+
+/** The YouTube token. Kept so the YouTube code reads as it always did. */
+export async function getYouTubeAccessToken(): Promise<string> {
+  return getAccessToken('youtube');
 }
 
 // ---------------------------------------------------------------------------

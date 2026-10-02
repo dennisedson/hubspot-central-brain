@@ -29,7 +29,10 @@ import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 import {
   YOUTUBE_CONFIG_PROPERTIES,
   YOUTUBE_CONFIG_PROPERTY_LIST,
-  GOOGLE_SCOPES,
+  SCOPES_FOR,
+  REFRESH_TOKEN_ENV,
+  isGoogleService,
+  type GoogleService,
   buildAuthUrl,
   buildRedirectUri,
   exchangeCodeForTokens,
@@ -133,17 +136,24 @@ async function writeYouTubeConfig(
 /** `initiateYouTubeAuth`. Returns the URL instead of issuing a 302: an app
  *  function is called by the UI extension over `hubspot.serverless()`, which
  *  cannot follow a redirect — the extension opens the URL itself. */
-function handleAuthorize(portalId: number, clientId: string, clientSecret: string) {
+function handleAuthorize(
+  portalId: number,
+  clientId: string,
+  clientSecret: string,
+  service: GoogleService,
+) {
   const redirectUri = buildRedirectUri(portalId);
-  const state = signState(portalId, clientSecret);
+  const state = signState(portalId, clientSecret, service);
   return json(200, {
-    authUrl: buildAuthUrl(clientId, redirectUri, state),
+    service,
+    authUrl: buildAuthUrl(clientId, redirectUri, state, service),
     // Echoed so an operator can paste it straight into the Google Cloud console
     // as an Authorised redirect URI — the single most common setup failure.
     redirectUri,
-    // GOOGLE_SCOPES, not YOUTUBE_SCOPES: the consent URL above sends the
-    // union, and echoing a shorter list would misreport what is being granted.
-    scopes: GOOGLE_SCOPES,
+    // This service's scopes only. Google rejects the YouTube set and Drive in
+    // one request, at the consent screen, with `invalid_request`.
+    scopes: SCOPES_FOR[service],
+    secretName: REFRESH_TOKEN_ENV[service],
   });
 }
 
@@ -166,12 +176,14 @@ async function handleCallback(ctx: YouTubeAuthContext, clientSecret: string, hsT
   const code = param(ctx, 'code');
   if (!code) return json(400, { error: 'Missing code' });
 
-  const portalId = verifyState(param(ctx, 'state'), clientSecret);
-  if (!portalId) {
-    // Unsigned, tampered, or from a different client secret. Refuse rather than
-    // fall back to a portal id the caller supplied.
+  const verified = verifyState(param(ctx, 'state'), clientSecret);
+  if (!verified) {
+    // Unsigned, tampered, from a different client secret, or the old
+    // single-service format. Refuse rather than fall back to a portal id the
+    // caller supplied.
     return json(400, { error: 'Invalid or missing state' });
   }
+  const { portalId, service } = verified;
 
   let objectTypeId: string;
   try {
@@ -188,6 +200,28 @@ async function handleCallback(ctx: YouTubeAuthContext, clientSecret: string, hsT
     const detail = err instanceof Error ? err.message : String(err);
     console.error('YouTube code exchange failed', detail);
     return json(502, { error: 'Could not exchange the authorisation code', detail });
+  }
+
+  // A Drive authorisation has no YouTube scope, so the channel lookup below
+  // would 403 on it — and there is no channel to record either. It returns its
+  // token here and the rest of this function stays about YouTube.
+  if (service === 'drive') {
+    if (!tokens.refreshToken) {
+      return json(502, {
+        error: 'Google returned no refresh_token',
+        detail: 'Revoke the app at myaccount.google.com/permissions and connect again.',
+      });
+    }
+    return json(200, {
+      ok: true,
+      service,
+      // Shown once, to the operator who just consented, and never logged.
+      refreshToken: tokens.refreshToken,
+      secretName: REFRESH_TOKEN_ENV.drive,
+      nextStep:
+        `Set this as an app secret, then re-upload the project: ` +
+        `hs secrets add ${REFRESH_TOKEN_ENV.drive}`,
+    });
   }
 
   let channel;
@@ -409,7 +443,11 @@ export async function main(context: YouTubeAuthContext): Promise<{ statusCode: n
   const action = param(context, 'action') ?? 'authorize';
 
   if (action === 'authorize') {
-    return handleAuthorize(portalId, credentials.clientId, credentials.clientSecret);
+    // Defaults to youtube so the existing flow is unchanged for anyone who
+    // does not pass one.
+    const requested = param(context, 'service');
+    const service: GoogleService = isGoogleService(requested) ? requested : 'youtube';
+    return handleAuthorize(portalId, credentials.clientId, credentials.clientSecret, service);
   }
   if (action === 'status') {
     return handleStatus(objectTypeId, hsToken);
