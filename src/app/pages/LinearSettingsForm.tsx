@@ -9,6 +9,7 @@ import {
   Form,
   Heading,
   Input,
+  Link,
   LoadingSpinner,
   Select,
   Tag,
@@ -70,6 +71,19 @@ type ProjectMap = Record<string, ProjectKind>;
 interface UnmappedProject {
   id: string;
   name: string;
+}
+
+type GoogleStatus = 'disconnected' | 'pending_secret' | 'connected' | 'unknown';
+
+interface GoogleStatusResponse {
+  status: GoogleStatus;
+  channelTitle?: string | null;
+}
+
+interface AuthorizeResponse {
+  authUrl: string;
+  redirectUri: string;
+  scopes: string[];
 }
 
 interface PromptSet {
@@ -162,6 +176,14 @@ export function LinearSettingsForm({ portalId, onBack }: { portalId: number; onB
   const [prompts, setPrompts] = useState<PromptSet>({ standalone: '', rollup: '' });
   const [promptDefaults, setPromptDefaults] = useState<PromptSet>({ standalone: '', rollup: '' });
   // '' means "use the shipped default", the same convention as the prompts.
+  const [google, setGoogle] = useState<GoogleStatus>('unknown');
+  const [googleChannel, setGoogleChannel] = useState('');
+  const [authUrl, setAuthUrl] = useState('');
+  const [redirectUri, setRedirectUri] = useState('');
+  const [grantedScopes, setGrantedScopes] = useState<string[]>([]);
+  const [connecting, setConnecting] = useState(false);
+  const [googleError, setGoogleError] = useState('');
+
   const [model, setModel] = useState('');
   const [thinking, setThinking] = useState('');
 
@@ -210,6 +232,47 @@ export function LinearSettingsForm({ portalId, onBack }: { portalId: number; onB
       .catch(() => setTeamMembers([]))
       .finally(() => setLoadingMembers(false));
   }, [portalId]);
+
+  /** The auth function is its own extension point; this page just asks it. */
+  const callYouTubeAuth = useCallback(
+    async (action: string): Promise<ServerlessResult> =>
+      (hubspot.serverless as (uid: string, opts: { parameters: Record<string, string> }) => Promise<ServerlessResult>)(
+        'youtube_auth',
+        { parameters: { action, portalId: String(portalId) } },
+      ),
+    [portalId],
+  );
+
+  useEffect(() => {
+    callYouTubeAuth('status')
+      .then(res => {
+        if (res.statusCode !== 200) { setGoogle('unknown'); return; }
+        const data = JSON.parse(res.body) as GoogleStatusResponse;
+        setGoogle(data.status ?? 'unknown');
+        setGoogleChannel(data.channelTitle ?? '');
+      })
+      .catch(() => setGoogle('unknown'));
+  }, [callYouTubeAuth]);
+
+  const startGoogleAuth = useCallback(() => {
+    setConnecting(true);
+    setGoogleError('');
+    callYouTubeAuth('authorize')
+      .then(res => {
+        if (res.statusCode !== 200) {
+          const data = JSON.parse(res.body) as { error?: string; detail?: string };
+          setGoogleError(data.detail ?? data.error ?? 'Could not start the Google connection');
+          return;
+        }
+        const data = JSON.parse(res.body) as AuthorizeResponse;
+        setAuthUrl(data.authUrl);
+        setRedirectUri(data.redirectUri);
+        setGrantedScopes(data.scopes ?? []);
+      })
+      .catch((err: unknown) =>
+        setGoogleError(err instanceof Error ? err.message : 'Could not start the Google connection'))
+      .finally(() => setConnecting(false));
+  }, [callYouTubeAuth]);
 
   const handleSave = useCallback(() => {
     setSaving(true);
@@ -447,6 +510,76 @@ export function LinearSettingsForm({ portalId, onBack }: { portalId: number; onB
             ]}
           />
         ))
+      )}
+
+      <Divider />
+
+      <Heading>Google connection</Heading>
+      <Text variant="microcopy">
+        One authorisation covers YouTube and the Drive folder the changelog
+        documents go in. Google issues a refresh token per authorisation rather
+        than per scope, so adding a scope means connecting again.
+      </Text>
+
+      <Flex align="center" gap="small">
+        <Tag variant={google === 'connected' ? 'success' : google === 'pending_secret' ? 'warning' : 'error'}>
+          {google === 'connected' ? 'Connected'
+            : google === 'pending_secret' ? 'Awaiting secret'
+            : google === 'disconnected' ? 'Not connected'
+            : 'Unknown'}
+        </Tag>
+        {googleChannel && <Text>{googleChannel}</Text>}
+      </Flex>
+
+      {google === 'pending_secret' && (
+        <Alert title="Connected, but the token is not stored yet" variant="warning">
+          <Text>
+            Google approved the connection and returned a refresh token. Until it
+            is saved as a secret and the project re-uploaded, nothing can use it.
+          </Text>
+        </Alert>
+      )}
+
+      {googleError && (
+        <Alert title="Could not start the Google connection" variant="error">
+          <Text>{googleError}</Text>
+        </Alert>
+      )}
+
+      {!authUrl ? (
+        <Button variant="secondary" disabled={connecting} onClick={startGoogleAuth}>
+          {connecting ? 'Preparing…' : google === 'connected' ? 'Reconnect Google' : 'Connect Google'}
+        </Button>
+      ) : (
+        <Box>
+          <Text format={{ fontWeight: 'bold' }}>1. Approve the connection</Text>
+          <Link href={authUrl}>Open the Google consent screen</Link>
+          <Text variant="microcopy">Granting: {grantedScopes.join(', ')}</Text>
+
+          <Text format={{ fontWeight: 'bold' }}>2. Store the token it returns</Text>
+          <Text variant="microcopy">
+            Google redirects back to this portal and the response contains a
+            refresh token, shown once. Save it with
+            {' '}<Text format={{ fontWeight: 'bold' }}>hs secrets update YOUTUBE_REFRESH_TOKEN</Text>
+            {' '}and re-upload the project — a running function does not pick up a
+            changed secret without a deploy.
+          </Text>
+          <Text variant="microcopy">
+            Check the account first: the CLI ignores --account when only one is
+            configured, so an update can land on the wrong portal.
+          </Text>
+
+          <Text variant="microcopy">
+            If Google rejects the redirect, add this to the OAuth client as an
+            authorised redirect URI: {redirectUri}
+          </Text>
+          <Text variant="microcopy">
+            The Cloud project also needs the Google Drive API enabled — consenting
+            to a scope and the project being allowed to call the API are separate
+            things. Only Drive: the documents are created by uploading HTML and
+            letting Drive convert it, so the Docs API is never called.
+          </Text>
+        </Box>
       )}
 
       <Divider />
