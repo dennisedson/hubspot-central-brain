@@ -29,7 +29,10 @@ Concretely:
 - A bug fix with no failing test first is not finished.
 - 300 lines of new behaviour with no new tests is not finished.
 - `npm run validate` must exit 0 before you open a PR. It runs lint, typecheck,
-  the three UI-extension typechecks, and the suite.
+  the suite, and the three UI-extension typechecks — `cards`, `pages` and
+  `settings`. Run it locally: CI's test job typechecks only `cards` and `pages`,
+  so a type error in `src/app/settings/` passes a PR and is caught by the deploy
+  workflows instead.
 - Mock by **intent, not call order** — route a fetch mock on the URL or the
   query it carries. Order-based mocks break the moment a request is added.
 - Mock what the API **actually** returns. Linear answers a bogus id with a null
@@ -58,8 +61,30 @@ Each of these cost a day at least once.
 - **UI extensions are remote components.** No raw DOM elements — a bare
   `<strong>` takes down the whole view. Use `<Text format={{ fontWeight: 'bold' }}>`.
   `src/app/__tests__/ui-no-raw-html.test.ts` enforces this.
-- **`src/app/pages/SettingsApp.tsx` is the page people actually open.** A
-  `type: "settings"` component renders nowhere for this private app.
+- **The settings form has one editable copy and two entrances.** Edit
+  `src/app/pages/LinearSettingsForm.tsx` and nothing else.
+  `src/app/settings/LinearSettingsForm.tsx` is **generated** by
+  `npm run sync:settings-form`, which `npm run build` runs first, and
+  `settings-form-in-sync.test.ts` fails while the two differ. The duplication is
+  not a choice: HubSpot copies each extension directory to its own temp root and
+  resolves from there, so an import that leaves the directory cannot resolve
+  (`Could not resolve "../pages/LinearSettingsForm.tsx"`). Sharing by import —
+  including via `../lib` — is not available.
+- **A `type: "settings"` component does render.** This file said it rendered
+  nowhere for a private app, which was true when written on 2026-09-29: the
+  app's entry under Connected apps had Overview and Insights and no Settings
+  tab. The platform's tabs are now Overview / Settings / App cards, the probe in
+  PR #100 rendered, and `src/app/settings/SettingsPage.tsx` is live at Connected
+  apps → the app → Settings. `src/app/pages/SettingsApp.tsx` is still the
+  Content Command Center page and the other entrance. Issue #88, PRs #100–#102.
+- **An app function is killed at 20 seconds.** Observed, not documented:
+  `The serverless function 'changelog_draft_api' timed out. Task timed out after
+  20.00 seconds.` There is no timeout field in a function's hsmeta, so it cannot
+  be raised, and `hubspot.fetch`'s timeout is the extension's patience with the
+  request rather than the function's permission to keep running. That makes
+  generation speed a correctness concern: changelog drafting defaults to Sonnet
+  with thinking **off** because Opus with adaptive thinking does not reliably
+  finish in time. See `src/app/lib/changelog-model.ts`.
 - **Deploys lie.** `hs project upload` prints "DONE" while the build is still
   BUILDING, and containers lag 60–75s after `[deployed]`. Verify the
   postcondition, never the exit code or the status line.
@@ -71,7 +96,11 @@ Each of these cost a day at least once.
 - Branch off `develop`, PR back into it. There is no staging environment.
 - Never push to a branch whose PR is already merged — the commits strand.
   Check first, do not remember: `gh pr view <n> --json state`. This has gone
-  wrong four times, and every time the rule was already written down.
+  wrong six times, and every time the rule was already written down.
+- `develop` is the base branch, and it was briefly deleted by GitHub's
+  delete-branch-on-merge after a `develop` → `master` PR. It has been restored.
+  If `develop` is missing, recreate it from `master` rather than branching off
+  `master` and leaving the model behind.
 - Confirm a UI change renders before building the next thing on top of it.
 - `hs project dev` runs the extension locally and shows the real exception.
   Deploying to read a generic error message is the slow path.
@@ -94,6 +123,10 @@ federation, so it will fail the same way until that fix is applied. It is
 mention-triggered, so it costs nothing to leave in place.
 
 ## The review bot skipped silently — why a green check meant nothing
+
+Kept because the mechanism still applies to `claude.yml` and to anything else
+built on `claude-code-action`, and because it is the reason not to trust a fast
+green check. There is no code-review bot on PRs today.
 
 `claude-code-action` refuses to run unless the workflow file on the PR branch is
 **byte-identical to the copy on the default branch**, which here is `master`. It
