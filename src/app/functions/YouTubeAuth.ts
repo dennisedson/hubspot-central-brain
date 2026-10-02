@@ -29,7 +29,7 @@ import { HS_BASE, objectPath, objectSearchPath } from '../lib/hs-api';
 import {
   YOUTUBE_CONFIG_PROPERTIES,
   YOUTUBE_CONFIG_PROPERTY_LIST,
-  YOUTUBE_SCOPES,
+  GOOGLE_SCOPES,
   buildAuthUrl,
   buildRedirectUri,
   exchangeCodeForTokens,
@@ -141,7 +141,9 @@ function handleAuthorize(portalId: number, clientId: string, clientSecret: strin
     // Echoed so an operator can paste it straight into the Google Cloud console
     // as an Authorised redirect URI — the single most common setup failure.
     redirectUri,
-    scopes: YOUTUBE_SCOPES,
+    // GOOGLE_SCOPES, not YOUTUBE_SCOPES: the consent URL above sends the
+    // union, and echoing a shorter list would misreport what is being granted.
+    scopes: GOOGLE_SCOPES,
   });
 }
 
