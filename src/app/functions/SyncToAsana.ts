@@ -81,16 +81,24 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
   // failure here must not cost us the sync — the due date is an enhancement to
   // the task, not the reason the task exists.
   let dueOn: string | null = null;
+  let changelogDocUrl: string | null = null;
+
   if (recordId) {
     try {
       const token = process.env.PRIVATE_APP_ACCESS_TOKEN ?? process.env.HS_ACCESS_TOKEN;
+      // Both properties in the one request that was already being made. The doc
+      // URL is read here rather than passed as a workflow-action input, because
+      // adding an input means editing the action definition and every
+      // provisioned workflow — and updating a live workflow is what returned
+      // `400 Invalid request to flow update`.
       const res = await fetch(
-        `${HS_BASE}${objectPath(config.content.objectTypeId, recordId)}?properties=target_date`,
+        `${HS_BASE}${objectPath(config.content.objectTypeId, recordId)}?properties=target_date,changelog_doc_url`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (res.ok) {
         const body = (await res.json()) as { properties?: Record<string, string | null> };
         dueOn = toAsanaDueOn(body.properties?.target_date);
+        changelogDocUrl = body.properties?.changelog_doc_url ?? null;
       }
     } catch (err) {
       console.warn('Could not read target_date; continuing without a due date:', err);
@@ -158,6 +166,11 @@ export async function main(context: SyncToAsanaContext): Promise<{ statusCode: n
 
       const customFields: Record<string, string> = { [ASANA_PIPELINE_STAGE_FIELD_GID]: asanaStageGid };
       if (linearIssueUrl) customFields[ASANA_LINEAR_ISSUE_URL_FIELD_GID] = linearIssueUrl;
+      // Both conditions matter: no URL means nothing to write, and no gid means
+      // this portal's Asana project has no such field.
+      if (changelogDocUrl && config.asanaDraftFileFieldGid) {
+        customFields[config.asanaDraftFileFieldGid] = changelogDocUrl;
+      }
       const sectionGid = config.asanaSections[objectType] || undefined;
       const task = await createTask(
         asanaApiKey,

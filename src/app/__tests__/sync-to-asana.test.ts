@@ -305,3 +305,76 @@ describe('SyncToAsana — nothing is created below Outline', () => {
     expect(createTask).toHaveBeenCalled();
   });
 });
+
+/**
+ * The Google Doc link reaches Asana's "Draft File" field.
+ *
+ * Read from the record rather than passed as a workflow-action input: adding an
+ * input means editing the action definition AND every provisioned workflow, and
+ * updating a live workflow is what returned `400 Invalid request to flow
+ * update` — a fix that has never been run against a live portal.
+ */
+describe('the Draft File field', () => {
+  /** Runs a task CREATION and returns the custom fields it was built with. */
+  async function customFieldsOnCreate(opts: {
+    draftFileGid?: string;
+    properties: Record<string, string>;
+  }): Promise<Record<string, string>> {
+    vi.resetModules();
+
+    vi.doMock('@lib/portal-config', () => ({
+      getPortalConfig: vi.fn().mockReturnValue({
+        ...TEST_PORTAL_CONFIG,
+        ...(opts.draftFileGid ? { asanaDraftFileFieldGid: opts.draftFileGid } : {}),
+      }),
+      DEFAULT_APP_SETTINGS: { linearTeamId: '', assigneeFilter: 'all', linearAssigneeId: '' },
+    }));
+
+    const createTask = vi.fn().mockResolvedValue({ gid: 'asana-task-new' });
+    vi.doMock('@lib/asana-client', () => ({
+      // null forces the creation path rather than an update.
+      findTaskByLinearIssueUrl: vi.fn().mockResolvedValue(null),
+      updateTaskPipelineStage: vi.fn().mockResolvedValue(undefined),
+      createTask,
+      setTaskDueDate: vi.fn().mockResolvedValue(undefined),
+      setTaskAssignee: vi.fn().mockResolvedValue(undefined),
+      toAsanaDueOn: vi.fn().mockReturnValue(null),
+    }));
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => ({ properties: opts.properties }),
+      text: async () => '',
+    }));
+
+    const mod = await import('../functions/SyncToAsana');
+    await mod.main(baseCtx);
+    vi.unstubAllGlobals();
+
+    // createTask(apiKey, projectGid, name, customFields, …)
+    return (createTask.mock.calls[0]?.[3] ?? {}) as Record<string, string>;
+  }
+
+  const DRAFT_FILE = '1202184607656856';
+  const DOC = 'https://docs.google.com/document/d/abc/edit';
+
+  it('is set when the record has a doc URL and the portal has the field', async () => {
+    const fields = await customFieldsOnCreate({
+      draftFileGid: DRAFT_FILE,
+      properties: { changelog_doc_url: DOC },
+    });
+    expect(fields[DRAFT_FILE]).toBe(DOC);
+  });
+
+  it('is left alone on a portal whose Asana project has no such field', async () => {
+    // Dennis-Staging carries 8 of the project's 21 custom fields and this is
+    // not one of them. Writing an unknown field gid is an Asana error.
+    const fields = await customFieldsOnCreate({ properties: { changelog_doc_url: DOC } });
+    expect(fields[DRAFT_FILE]).toBeUndefined();
+  });
+
+  it('is left alone when there is no document yet', async () => {
+    const fields = await customFieldsOnCreate({ draftFileGid: DRAFT_FILE, properties: {} });
+    expect(fields[DRAFT_FILE]).toBeUndefined();
+  });
+});

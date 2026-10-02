@@ -7,6 +7,10 @@ import {
   resolveModel, resolveThinking, modelIdFor, thinkingConfigFor,
   DRAFT_TIMEOUT_MS, DRAFT_MAX_TOKENS,
 } from '../lib/changelog-model';
+import { getYouTubeAccessToken } from '../lib/youtube-auth';
+import {
+  createFolder, folderExists, createDocFromMarkdown, DEFAULT_FOLDER_NAME,
+} from '../lib/google-drive';
 import {
   parseRolloutNotes,
   missingForStandalone,
@@ -89,7 +93,10 @@ function parseConversation(raw: string | undefined): Turn[] {
 }
 
 async function readRecord(objectTypeId: string, objectId: string, token: string) {
-  const props = ['title', 'notes', 'changelog_draft', 'changelog_draft_mode', 'hs_pipeline'];
+  const props = [
+    'title', 'notes', 'changelog_draft', 'changelog_draft_mode', 'hs_pipeline',
+    'changelog_doc_url',
+  ];
   const res = await fetch(
     `${HS_BASE}${objectPath(objectTypeId, objectId)}?properties=${props.join(',')}`,
     { headers: { Authorization: `Bearer ${token}` } },
@@ -142,6 +149,37 @@ async function readDraftConfig(
   }
 }
 
+
+/** Reads one property from the single App Config record. */
+async function readAppConfig(
+  appConfigTypeId: string,
+  property: string,
+  token: string,
+): Promise<{ recordId?: string; value?: string }> {
+  const res = await fetch(`${HS_BASE}${objectSearchPath(appConfigTypeId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ filterGroups: [], properties: [property], limit: 1 }),
+  });
+  if (!res.ok) return {};
+  const body = await res.json() as { results: Array<{ id: string; properties: Record<string, string | null> }> };
+  const record = body.results[0];
+  return { recordId: record?.id, value: record?.properties[property] ?? undefined };
+}
+
+async function writeAppConfig(
+  appConfigTypeId: string,
+  recordId: string,
+  properties: Record<string, string>,
+  token: string,
+): Promise<void> {
+  await fetch(`${HS_BASE}${objectPath(appConfigTypeId, recordId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ properties }),
+  });
+}
+
 export async function main(context: DraftContext): Promise<{ statusCode: number; body: string }> {
   const portalId = context.accountId ?? parseInt(param(context, 'portalId') ?? '0', 10);
   if (!portalId) return { statusCode: 400, body: JSON.stringify({ error: 'Missing portalId' }) };
@@ -183,6 +221,7 @@ export async function main(context: DraftContext): Promise<{ statusCode: number;
           missingForStandalone: missingForStandalone(source),
           draft: props.changelog_draft ?? '',
           draftMode: props.changelog_draft_mode ?? '',
+          docUrl: props.changelog_doc_url ?? '',
           // The card renders on every content_piece because that is the only
           // object there is — changelogs are a pipeline, not a type. So it has
           // to be told which pipeline it landed on.
@@ -314,6 +353,71 @@ export async function main(context: DraftContext): Promise<{ statusCode: number;
         statusCode: 500,
         body: JSON.stringify({ error: 'Could not save the draft', detail: err instanceof Error ? err.message : String(err) }),
       };
+    }
+  }
+
+
+  /**
+   * Creates a Google Doc from the saved draft.
+   *
+   * Refuses when one already exists. Document creation is not idempotent by
+   * nature — call it twice and Drive makes two documents, with nothing to say
+   * which is the real one. `changelog_doc_url` being set is the record of that,
+   * and the same rule the Asana task lookup had to learn.
+   */
+  if (action === 'createDoc') {
+    try {
+      const props = await readRecord(objectTypeId, objectId, token);
+
+      if (props.changelog_doc_url) {
+        return {
+          statusCode: 409,
+          body: JSON.stringify({
+            error: 'This record already has a document',
+            docUrl: props.changelog_doc_url,
+          }),
+        };
+      }
+      const draft = props.changelog_draft ?? '';
+      if (!draft.trim()) {
+        return { statusCode: 400, body: JSON.stringify({ error: 'There is no draft to put in a document' }) };
+      }
+
+      const accessToken = await getYouTubeAccessToken();
+
+      // The folder is created once and remembered. `drive.file` cannot search
+      // for it again — access is per-file by id — so a lost id means a new
+      // folder, not a found one.
+      const appConfigTypeId = config.appConfig.objectTypeId;
+      const stored = await readAppConfig(appConfigTypeId, 'google_drive_folder_id', token);
+
+      let folderId: string | null =
+        stored.value && await folderExists(accessToken, stored.value) ? stored.value : null;
+
+      if (!folderId) {
+        folderId = await createFolder(accessToken, DEFAULT_FOLDER_NAME);
+        if (stored.recordId) {
+          await writeAppConfig(appConfigTypeId, stored.recordId, { google_drive_folder_id: folderId }, token);
+        }
+      }
+
+      const { documentUrl } = await createDocFromMarkdown(
+        accessToken,
+        props.title ?? 'Untitled changelog',
+        draft,
+        folderId,
+      );
+
+      await fetch(`${HS_BASE}${objectPath(objectTypeId, objectId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ properties: { changelog_doc_url: documentUrl } }),
+      });
+
+      return { statusCode: 200, body: JSON.stringify({ docUrl: documentUrl }) };
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      return { statusCode: 502, body: JSON.stringify({ error: 'Could not create the document', detail }) };
     }
   }
 
