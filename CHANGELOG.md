@@ -12,9 +12,149 @@ unless the text says issue.
 
 ---
 
+## 2026-10-02
+
+### Documentation audit against the code
+
+31 PRs landed on 2026-10-01 and the docs were written before most of them. This
+pass corrected what had gone stale rather than rewriting anything: the app
+settings surface (which now works), the settings form's two files, the removed
+review workflow, rollout dates, changelog drafting and its 20-second ceiling,
+the credential health check, Node 20 for the CLI, `hs secrets` over
+`hs app secret`, and the operator-guide / test-plan disagreement about whether a
+live Google or Anthropic call had ever been made. It had, twice over.
+
+---
+
+## 2026-10-01
+
+A 31-PR day, and the entry that was never written at the time. Reconstructed on
+2026-10-02 from the merged PRs and the code, so it is shorter on narrative than
+the entries above and below it.
+
+### The app settings surface turned out to work — [#88], [#100]–[#102]
+
+On 2026-09-29 a `type: "settings"` component was deleted because it rendered
+nowhere, and the diagnosis — private apps do not get that surface — was recorded
+in four documents. **The platform changed.** The app's entry under Connected
+apps had Overview and Insights; it now has Overview, Settings and App cards. A
+probe carrying nothing but a success alert ([#100]) rendered there. The hsmeta
+had been the documented shape the whole time.
+
+Restoring it meant solving the thing that made the original harmful: it had
+become a second, invisible copy of the Linear settings form, and three changes
+had landed in the copy nobody could see. The form moved to
+`pages/LinearSettingsForm.tsx` and both entrances import it ([#101]) — except
+that the import across directories **cannot resolve**, because HubSpot copies
+each extension directory to its own temp root and bundles it alone:
+
+```
+Could not resolve "../pages/LinearSettingsForm.tsx"
+  from "../../tmp/app/settings/SettingsPage.tsx"
+```
+
+Which rules out sharing by import entirely, `../lib` included. So the file
+exists twice, and the second copy is **generated**: `npm run sync:settings-form`
+writes it, `npm run build` runs that first, and `settings-form-in-sync.test.ts`
+fails while the two differ ([#102]). A copy that cannot silently drift is a
+different thing from two implementations.
+
+### Changelog drafting — [#87], [#89], [#94], [#96]
+
+Two system prompts in version control, a Changelog Draft card on the record,
+per-portal prompt overrides, and a model/thinking choice. An empty override
+means "use the shipped default", so a portal that has not customised its wording
+keeps receiving improvements.
+
+**The constraint that set the defaults: HubSpot kills an app function at 20
+seconds.** Observed, not documented; there is no timeout field in an hsmeta, so
+it cannot be raised. Opus with adaptive thinking does not reliably finish a
+standalone post inside it — the first turn succeeded and the follow-up did not.
+Hence Sonnet 5.5 with thinking **off**, confirmed against `GET /v1/models`
+rather than assumed, with exact ids and no aliases. Cost was not the reason; a
+realistic month is under a dollar on any of the three models.
+
+### Rollout milestone dates — [#105], [#108], [#109]
+
+Milestone dates parsed out of the Linear description's `### Timeline` block into
+`rollout_*` properties, with `rollout_priority_date` as the sort key, and the
+pipeline board ordering each column by the next milestone that forces action.
+Three rules, each from a real failure:
+
+- **`1970-01-01` is not a date.** 23 of prod's 70 changelog records carry a
+  `### Timeline` block and 10 of those hold epoch zero, which is how HubSpot
+  returns an unset date. Sorting ascending without excluding it presents the ten
+  records we know least about as the most urgent.
+- **A description edit has to write.** The webhook returned outright when the
+  stage already matched the Linear state, so adding a date to an existing issue
+  produced no write and the board kept sorting on the old one ([#108]).
+- **Never blank a date somebody typed.** With no milestone in the notes at all,
+  `rolloutProperties` returns `null` and the caller writes nothing, rather than
+  writing `''` over a manual entry ([#109]). An emptied timeline and a timeline
+  that never existed are indistinguishable, and a stale date beats destroyed
+  work.
+
+`rollout_priority_upcoming` is deliberately not stored — it is relative to
+today, so a stored copy is right for one day.
+
+### A daily credential health check — [#93], [#104]
+
+`npm run preflight` is entirely structural, so a revoked key passes all of it.
+Three credentials had already died silently: the HubSpot service key (a day to
+diagnose), the YouTube refresh token, and `ANTHROPIC_API_KEY` — invalid in
+`.env` and on both portals at once, unnoticed because the changelog card was the
+first thing ever to call Anthropic for real.
+
+So an `app-health` function probes each dependency with the cheapest
+authenticated call it offers, **from inside the app**, because the credentials
+live in four separate homes and validating a copy in CI proves nothing about the
+one the running functions use. `credential-health.yml` asks both portals daily
+at 13:00 UTC and annotates each broken credential by name.
+
+PR [#104] found three things before its first scheduled run: the GitHub secret name
+had been invented (`SYNC_SHARED_SECRET` is what the *portal* calls the env var;
+GitHub uses `HUBSPOT_<PORTAL>_SYNC_SECRET`), so the check would have failed on
+both portals; the Fellow probe was guessing an endpoint and reporting a working
+credential as broken; and two real faults, left as findings — **prod's YouTube
+refresh token is dead** (`invalid_grant`), and **Fellow looks gone rather than
+misconfigured**, with every path on `api.fellow.app` answering 404 with HTML and
+prod's `fellow_last_sync` never set.
+
+### The review bot was removed — [#99], issue [#98]
+
+`claude-code-review.yml` never produced a single review in its life. Two
+separate faults: it skipped on every PR because `claude-code-action` requires
+the workflow file to be byte-identical to the copy on the default branch, and
+this repo develops on `develop` — a skip that reports as a **passing** check
+finishing in 9–13 seconds. Once that was cleared, the token exchange 401'd on a
+Workload Identity subject-prefix mismatch. Issue [#98] has the one-field fix.
+`claude.yml` stays: it is mention-triggered, so it costs nothing.
+
+### Also
+
+- **The build script named 23 functions by hand and missed the 24th** ([#90]).
+  Now a glob. `function-entrypoints.test.ts` exists because an uncompiled
+  entrypoint fails at upload and nothing before it.
+- **The settings test gap from 2026-09-30 is closed** ([#82]), and the tests
+  exposed a batching bug: **83 issues selected, 33 imported, reported as
+  success** ([#80]).
+- **The "(Daily)" workflows are daily after all** ([#85]). The docs had read
+  `type: 'MANUAL'` off `enrollmentCriteria` — which describes how records enter
+  a workflow — and treated it as the cadence. The cadence is `enrollmentSchedule`,
+  a separate top-level field, and dev's poll workflows carry
+  `{"type":"DAILY","timeOfDay":{"hour":17,"minute":0}}`. The script still does
+  not create one: a newly provisioned portal needs it set by hand.
+- **Prod deploys now typecheck the extensions** ([#107]), and the UI extension
+  library is pinned — `"latest"` was resolving fresh on every CI run.
+- Issues [#17] (rotate credentials) and [#21] (prod changelog pipeline) closed.
+- **No episode guides were written for any of this.** `docs/walkthroughs/` stops
+  at 56, so it is no longer a complete record of the build.
+
+---
+
 ## 2026-09-30
 
-### Shared instructions, so both machines know the rules — [#77] (open)
+### Shared instructions, so both machines know the rules — [#77]
 
 The trigger: the settings rebuild below shipped **333 lines with no new tests**.
 The suite sat at 999 before it and 999 after. Every rule the other machine's
@@ -73,7 +213,8 @@ author. In rough order:
 
 The `AppSettingsApi` half of this work — the project queries, the unmapped merge,
 the import gate — landed across six commits that touched **no test file**. That
-gap is open.
+gap was closed the next day by [#82], which also exposed the batching bug fixed
+in [#80].
 
 ### Other
 
@@ -143,8 +284,15 @@ portal ([#54]).
 
 The import section had been placed inside `Form`, so it never rendered at all
 ([#57]). The button was then moved to the page people actually open ([#59]), and
-the `type: "settings"` component was deleted outright ([#60]) — it renders
+the `type: "settings"` component was deleted outright ([#60]) — it rendered
 nowhere for a private app. `src/app/pages/SettingsApp.tsx` is the settings page.
+
+> **Superseded on 2026-10-01.** The platform's tabs changed from
+> Overview/Insights to Overview/Settings/App cards, the settings surface works,
+> and it is a second entrance to the same form. See the 2026-10-01 entry and
+> `docs/ARCHITECTURE.md` §3. The deletion was still right at the time, and for
+> the second reason given in [#60]: the component had become an invisible copy
+> of the form.
 
 ### Also
 
@@ -152,7 +300,7 @@ nowhere for a private app. `src/app/pages/SettingsApp.tsx` is the settings page.
   [#45]). Linear defaults a connection to 50 and caps a page at 250; one request
   is a page, not a set.
 - **Prod's changelog pipeline was configured** (`3d3916f`), which is the substance
-  of issue [#21] — still open, worth verifying and closing.
+  of issue [#21] — closed on 2026-10-01.
 - **App scopes trimmed** to the ones the app actually uses ([#40], [#41]). An
   unfulfillable scope fails the whole install without naming itself.
 - **CI: the validate job could not see its secrets** ([#38]). A GitHub
@@ -186,6 +334,13 @@ Linear issues, created four minutes apart, with every call returning 200.
   Projects serverless has no scheduler, and the three workflows named "(Daily)"
   enrol with `type: 'MANUAL'`. They only ever ran when somebody pressed
   something.
+
+  > **The second half of that is wrong, corrected by [#85] on 2026-10-01.**
+  > `type: 'MANUAL'` is the type of `enrollmentCriteria` — how records *enter* a
+  > workflow — not the cadence, which lives in the separate top-level
+  > `enrollmentSchedule`. Dev's poll workflows do run daily at 17:00. A GitHub
+  > cron is still the better home for the YouTube sync, for the reasons given in
+  > `youtube-sync.yml`, but not for the reason stated here.
 - The channel id moved from a secret to the `app_configs` record — a function can
   read a secret but cannot write one, and the OAuth callback needs to write.
 - Stopped requesting `impressions` and `click_through_rate`: they are not metrics
@@ -464,3 +619,24 @@ The foundation, in one week.
 [#75]: https://github.com/dennisedson/hubspot-central-brain/issues/75
 [#76]: https://github.com/dennisedson/hubspot-central-brain/issues/76
 [#77]: https://github.com/dennisedson/hubspot-central-brain/pull/77
+[#17]: https://github.com/dennisedson/hubspot-central-brain/issues/17
+[#80]: https://github.com/dennisedson/hubspot-central-brain/pull/80
+[#82]: https://github.com/dennisedson/hubspot-central-brain/pull/82
+[#85]: https://github.com/dennisedson/hubspot-central-brain/pull/85
+[#87]: https://github.com/dennisedson/hubspot-central-brain/pull/87
+[#88]: https://github.com/dennisedson/hubspot-central-brain/issues/88
+[#89]: https://github.com/dennisedson/hubspot-central-brain/pull/89
+[#90]: https://github.com/dennisedson/hubspot-central-brain/pull/90
+[#93]: https://github.com/dennisedson/hubspot-central-brain/pull/93
+[#94]: https://github.com/dennisedson/hubspot-central-brain/pull/94
+[#96]: https://github.com/dennisedson/hubspot-central-brain/pull/96
+[#98]: https://github.com/dennisedson/hubspot-central-brain/issues/98
+[#99]: https://github.com/dennisedson/hubspot-central-brain/pull/99
+[#100]: https://github.com/dennisedson/hubspot-central-brain/pull/100
+[#101]: https://github.com/dennisedson/hubspot-central-brain/pull/101
+[#102]: https://github.com/dennisedson/hubspot-central-brain/pull/102
+[#104]: https://github.com/dennisedson/hubspot-central-brain/pull/104
+[#105]: https://github.com/dennisedson/hubspot-central-brain/pull/105
+[#107]: https://github.com/dennisedson/hubspot-central-brain/pull/107
+[#108]: https://github.com/dennisedson/hubspot-central-brain/pull/108
+[#109]: https://github.com/dennisedson/hubspot-central-brain/pull/109

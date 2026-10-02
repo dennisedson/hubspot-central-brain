@@ -35,6 +35,7 @@ beforeEach(async () => {
     // the rest of this file was written against.
     readProjectState: vi.fn().mockResolvedValue({ recordId: 'cfg-1', map: {}, unmapped: [] }),
     recordUnmappedProject: vi.fn().mockResolvedValue(undefined),
+    refreshDerivedProperties: vi.fn().mockResolvedValue(undefined),
   }));
   vi.doMock('@lib/portal-config', async () => ({
     ...(await vi.importActual<typeof import('@lib/portal-config')>('@lib/portal-config')),
@@ -110,6 +111,35 @@ describe('LinearWebhook.main', () => {
     const result = await main(baseCtx);
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).reason).toBe('stage already matches');
+  });
+
+  it('still refreshes the derived properties when the stage write is skipped', async () => {
+    // The guard protects the STAGE. The description may still have changed —
+    // a rollout date added, moved or removed — while the issue sat in the same
+    // state throughout. Returning outright meant adding a date to an existing
+    // issue produced no write at all.
+    const { getCurrentStage: mockGetStage, refreshDerivedProperties: mockRefresh, upsertContent: mockUpsert } =
+      await import('@lib/hubspot-client');
+    vi.mocked(mockGetStage).mockResolvedValue('stage-idea');
+
+    const ctx = {
+      ...baseCtx,
+      body: {
+        ...baseCtx.body,
+        data: { ...baseCtx.body.data, description: '### Timeline\n\n**Live Date:** 2099-01-01' },
+      },
+    };
+    const result = await main(ctx);
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).refreshed).toBe(true);
+    expect(mockRefresh).toHaveBeenCalledWith(
+      expect.any(String),
+      ctx.body.data.id,
+      '### Timeline\n\n**Live Date:** 2099-01-01',
+    );
+    // And the stage itself is still left alone.
+    expect(mockUpsert).not.toHaveBeenCalled();
   });
 
   it('skips overwrite when the current HubSpot stage shares the incoming Linear state bucket (editing/drafting)', async () => {

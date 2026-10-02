@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   YOUTUBE_AUTH_PATH,
   YOUTUBE_SCOPES,
+  GOOGLE_SCOPES,
   buildAuthUrl,
   buildRedirectUri,
   exchangeCodeForTokens,
@@ -146,11 +147,29 @@ describe('buildAuthUrl', () => {
     expect(url.searchParams.get('state')).toBe('state-123');
   });
 
-  it('requests all five YouTube scopes the app depends on', () => {
+  it('requests every scope one authorisation has to cover', () => {
+    // Google issues a refresh token per AUTHORISATION, not per scope, and this
+    // app has one token. A scope missing here is a 403 from the API later, not
+    // an error at consent time.
     const url = new URL(buildAuthUrl(CLIENT_ID, REDIRECT_URI, 's'));
     const scopes = (url.searchParams.get('scope') ?? '').split(' ');
-    expect(scopes).toEqual(YOUTUBE_SCOPES);
+
+    expect(scopes).toEqual(GOOGLE_SCOPES);
+    for (const youtube of YOUTUBE_SCOPES) expect(scopes).toContain(youtube);
     expect(scopes).toContain('https://www.googleapis.com/auth/yt-analytics.readonly');
+  });
+
+  it('asks for drive.file and nothing broader', () => {
+    // Walking an existing year/month hierarchy would have needed
+    // drive.metadata.readonly or full drive — both restricted, both refusable
+    // by a Workspace admin. The app creates its own folder instead.
+    const scopes = (new URL(buildAuthUrl(CLIENT_ID, REDIRECT_URI, 's'))
+      .searchParams.get('scope') ?? '').split(' ');
+
+    expect(scopes).toContain('https://www.googleapis.com/auth/drive.file');
+    expect(scopes).not.toContain('https://www.googleapis.com/auth/drive');
+    expect(scopes).not.toContain('https://www.googleapis.com/auth/drive.metadata.readonly');
+    expect(scopes).not.toContain('https://www.googleapis.com/auth/documents');
   });
 });
 

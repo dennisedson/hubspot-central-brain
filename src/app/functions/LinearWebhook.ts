@@ -2,6 +2,7 @@ import {
   getCurrentStage,
   upsertContent,
   archiveContentByLinearId,
+  refreshDerivedProperties,
   readAppSettings,
   readProjectState,
   recordUnmappedProject,
@@ -189,8 +190,21 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
       const mappedLinearState = currentStageName ? (forwardMap as Record<string, string>)[currentStageName] : null;
       console.log(`LinearWebhook: currentStageName=${currentStageName} mappedLinearState=${mappedLinearState}`);
       if (currentStageName && mappedLinearState === payload.data.state.name) {
-        console.log(`Skipping echo for Linear ${payload.data.id}: stage already matches`);
-        return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'stage already matches' }) };
+        // The STAGE is what this guard protects, and it is left alone. But the
+        // description may still have changed — a rollout date added, moved or
+        // removed — while the issue sat in the same state throughout. Returning
+        // outright, as this did, meant adding a date to an existing issue
+        // produced no write and the pipeline kept sorting on the old one.
+        console.log(`Skipping stage write for Linear ${payload.data.id}; refreshing derived properties`);
+        await refreshDerivedProperties(
+          portalConfig.content.objectTypeId,
+          payload.data.id,
+          payload.data.description,
+        );
+        return {
+          statusCode: 200,
+          body: JSON.stringify({ skipped: true, reason: 'stage already matches', refreshed: true }),
+        };
       }
     }
 

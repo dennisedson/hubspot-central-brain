@@ -346,3 +346,102 @@ describe('the 20-second budget', () => {
     expect(body.thinking).toEqual({ type: 'disabled' });
   });
 });
+
+/**
+ * Creating the Google Doc.
+ *
+ * Document creation is not idempotent by nature: call it twice and Drive makes
+ * two documents, with nothing to say which is the real one. `changelog_doc_url`
+ * being set is the record of that — the same rule the Asana task lookup had to
+ * learn the hard way.
+ */
+describe('the createDoc action', () => {
+  beforeEach(() => {
+    process.env.YOUTUBE_REFRESH_TOKEN = 'refresh';
+    process.env.YOUTUBE_CLIENT_ID = 'id';
+    process.env.YOUTUBE_CLIENT_SECRET = 'secret';
+  });
+
+  /** Routes Google, HubSpot search, and HubSpot writes. */
+  function driveFetch(record: Record<string, string | null>, opts: { folderId?: string } = {}) {
+    const writes: Array<{ url: string; properties: Record<string, string> }> = [];
+    mockFetch().mockImplementation((url: string, init?: { method?: string; body?: string }) => {
+      const u = String(url);
+      if (u.includes('oauth2.googleapis.com')) {
+        // googleTokenRequest reads the body with res.json(), because Google
+        // puts its error detail there on a 4xx.
+        return Promise.resolve({ ok: true, status: 200,
+          json: async () => ({ access_token: 'g-token', expires_in: 3600 }),
+          text: async () => '' } as unknown as Response);
+      }
+      if (u.includes('upload/drive')) {
+        return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ id: 'doc-99' }) } as unknown as Response);
+      }
+      if (u.includes('googleapis.com/drive/v3/files')) {
+        // A GET is the folder check; a POST creates one.
+        if (init?.method === 'POST') {
+          return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ id: 'new-folder' }) } as unknown as Response);
+        }
+        return Promise.resolve({ ok: true, status: 200,
+          text: async () => JSON.stringify({ id: opts.folderId, trashed: false, mimeType: 'application/vnd.google-apps.folder' }) } as unknown as Response);
+      }
+      if (init?.method === 'PATCH') {
+        writes.push({ url: u, properties: (JSON.parse(init.body ?? '{}') as { properties: Record<string, string> }).properties });
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({}), text: async () => '' } as unknown as Response);
+      }
+      if (u.includes('/search')) {
+        return Promise.resolve({ ok: true, status: 200,
+          json: async () => ({ results: [{ id: 'cfg-1', properties: { google_drive_folder_id: opts.folderId ?? '' } }] }),
+          text: async () => '' } as unknown as Response);
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ properties: record }), text: async () => '' } as unknown as Response);
+    });
+    return writes;
+  }
+
+  it('creates the document and stores its URL on the record', async () => {
+    const writes = driveFetch({
+      title: 'A changelog', changelog_draft: '# Title\n\nBody.',
+      changelog_doc_url: null, hs_pipeline: '929918080',
+    }, { folderId: 'folder-1' });
+
+    const res = await main({ accountId: DEV_PORTAL, parameters: { action: 'createDoc', objectId: '1' } });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).docUrl).toBe('https://docs.google.com/document/d/doc-99/edit');
+    const recordWrite = writes.find(w => w.properties.changelog_doc_url);
+    expect(recordWrite!.properties.changelog_doc_url).toBe('https://docs.google.com/document/d/doc-99/edit');
+  });
+
+  it('refuses when a document already exists, rather than making a second', async () => {
+    driveFetch({
+      title: 'x', changelog_draft: 'body',
+      changelog_doc_url: 'https://docs.google.com/document/d/existing/edit',
+      hs_pipeline: '929918080',
+    });
+
+    const res = await main({ accountId: DEV_PORTAL, parameters: { action: 'createDoc', objectId: '1' } });
+
+    expect(res.statusCode).toBe(409);
+    expect(JSON.parse(res.body).docUrl).toContain('existing');
+  });
+
+  it('refuses when there is no draft to put in it', async () => {
+    driveFetch({ title: 'x', changelog_draft: '   ', changelog_doc_url: null, hs_pipeline: '929918080' });
+    const res = await main({ accountId: DEV_PORTAL, parameters: { action: 'createDoc', objectId: '1' } });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('creates the folder when the portal has none, and remembers it', async () => {
+    // drive.file cannot search for a folder it did not create, so a missing id
+    // means a new folder — never a found one.
+    const writes = driveFetch({
+      title: 'x', changelog_draft: 'body', changelog_doc_url: null, hs_pipeline: '929918080',
+    }, { folderId: '' });
+
+    await main({ accountId: DEV_PORTAL, parameters: { action: 'createDoc', objectId: '1' } });
+
+    const configWrite = writes.find(w => w.properties.google_drive_folder_id);
+    expect(configWrite!.properties.google_drive_folder_id).toBe('new-folder');
+  });
+});

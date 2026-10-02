@@ -8,6 +8,7 @@ import {
   Flex,
   Heading,
   Input,
+  Link,
   LoadingSpinner,
   Select,
   Tag,
@@ -53,6 +54,7 @@ interface SourceResponse {
   missingForStandalone: string[];
   draft: string;
   draftMode: string;
+  docUrl: string;
   isChangelog: boolean;
 }
 
@@ -116,6 +118,8 @@ function ChangelogDraftCard({ objectId, portalId }: { objectId: string; portalId
   const [savedDraft, setSavedDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [docUrl, setDocUrl] = useState('');
+  const [creatingDoc, setCreatingDoc] = useState(false);
 
   useEffect(() => {
     callApi({ action: 'source', objectId, portalId })
@@ -129,6 +133,7 @@ function ChangelogDraftCard({ objectId, portalId }: { objectId: string; portalId
         setSource(data);
         setDraft(data.draft);
         setSavedDraft(data.draft);
+        setDocUrl(data.docUrl ?? '');
         if (data.draftMode === 'rollup' || data.draftMode === 'standalone') setMode(data.draftMode);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not read this record'))
@@ -185,6 +190,24 @@ function ChangelogDraftCard({ objectId, portalId }: { objectId: string; portalId
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not save'))
       .finally(() => setSaving(false));
   }, [objectId, portalId, mode, draft]);
+
+  const createDoc = useCallback(() => {
+    setCreatingDoc(true);
+    setError(null);
+    callApi({ action: 'createDoc', objectId, portalId })
+      .then(res => {
+        const data = JSON.parse(res.body) as { docUrl?: string; error?: string; detail?: string };
+        // 409 still carries the existing URL: the record already has a
+        // document, which is information rather than a failure.
+        if (res.statusCode === 200 || (res.statusCode === 409 && data.docUrl)) {
+          setDocUrl(data.docUrl ?? '');
+          return;
+        }
+        setError(data.detail ?? data.error ?? 'Could not create the document');
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not create the document'))
+      .finally(() => setCreatingDoc(false));
+  }, [objectId, portalId]);
 
   if (loading) return <LoadingSpinner label="Loading changelog source…" />;
 
@@ -287,9 +310,28 @@ function ChangelogDraftCard({ objectId, portalId }: { objectId: string; portalId
         onChange={value => { setDraft(String(value ?? '')); setSaved(false); }}
       />
       {saved && !unsaved && <Alert title="Draft saved" variant="success" />}
-      <Button variant="primary" disabled={saving || !unsaved} onClick={save}>
-        {saving ? 'Saving…' : 'Save draft'}
-      </Button>
+      <Flex gap="small" align="center">
+        <Button variant="primary" disabled={saving || !unsaved} onClick={save}>
+          {saving ? 'Saving…' : 'Save draft'}
+        </Button>
+
+        {docUrl ? (
+          <Link href={docUrl}>Open Google Doc</Link>
+        ) : (
+          <Button
+            variant="secondary"
+            // Unsaved text would not be in the document: the server reads the
+            // draft from the record, not from this editor.
+            disabled={creatingDoc || !savedDraft.trim() || unsaved}
+            onClick={createDoc}
+          >
+            {creatingDoc ? 'Creating…' : 'Create Google Doc'}
+          </Button>
+        )}
+      </Flex>
+      {!docUrl && unsaved && savedDraft.trim() && (
+        <Text variant="microcopy">Save the draft before creating a document — the document is made from what is stored.</Text>
+      )}
     </Box>
   );
 }

@@ -11,8 +11,13 @@ assumes setup is done and asks a different question: **does it work?**
 
 ## Before you start
 
-**Read section 7 first.** Four things are known-broken. Filing them as bugs
-wastes your afternoon and everyone else's.
+**Read section 7 first.** Four things are known-broken (7.1), two work and are
+simply waiting for someone to start them (7.2), and two were found on
+2026-10-01 and are still open (7.3). Filing any of them as new bugs wastes your
+afternoon and everyone else's.
+
+**Every URL in this plan is the dev portal, `51869810`.** Expected results were
+observed there. Prod (`22047910`) differs in ways that matter — see 1.2 and 7.3.
 
 **Keep the log stream open in a second terminal.** It is the only place that
 reliably tells the truth when something looks wrong:
@@ -49,27 +54,42 @@ succeeded before continuing.
 
 Open **Settings → Data Management → Objects → Custom Objects**.
 
-**Expect** exactly four. The UI lists objects by their **plural label**, not the
-internal name the API uses, so you are looking for:
+The UI lists objects by their **plural label**, not the internal name the API
+uses, so you are looking for:
 
-| Shown in the UI | Internal name (what the code uses) |
-|---|---|
-| Content Pieces | `content_piece` |
-| Changelog Entries | `changelog_entry` |
-| Videos | `video` |
-| App Configs | `app_configs` |
+| Shown in the UI | Internal name (what the code uses) | Expected on |
+|---|---|---|
+| Content Pieces | `content_piece` | both |
+| Videos | `video` | both |
+| App Configs | `app_configs` | dev |
+| App Settings | `app_settings` | prod — portals predating the rename carry this name, and the scripts accept either |
+| Changelog Entries | `changelog_entry` | **dev only.** Vestigial, 0 records, deleted from prod in 2026-10 |
 
-**Fail signal** — a fifth object, **App Settings**, alongside App Configs. Those
+So: **four on dev, three on prod.** This section said "exactly four" when it was
+written, before `changelog_entry` was deleted from prod.
+
+**Fail signal** — `app_configs` *and* `app_settings` on the same portal. Those
 are not interchangeable: the app reads `app_configs`, and a stray `app_settings`
 shadows it in two provisioning scripts.
 
-### 1.3 Settings are configured
+### 1.3 Settings are configured — from either entrance
 
-Open the app's settings page.
+There are two, and both must show the same form:
+
+1. **Connected apps → HubSpot Central Brain → Settings** — no Back link
+2. **Content Command Center → ⚙ Settings** — has a Back link
 
 **Expect** a Linear team and assignee filter already selected.
-**Why it matters** — the sync functions read these at runtime. Unset means syncs
-run against no team and quietly do nothing useful.
+**Why it matters** — the sync functions read these at runtime. Unset means an
+unconfigured portal, which is treated as inert and syncs nothing at all.
+**Fail signal** — the Settings tab renders but the Command Center page does not,
+or the two forms differ. They are one component:
+`pages/LinearSettingsForm.tsx`, copied into `settings/` by
+`npm run sync:settings-form`. Differing forms mean the generated copy is stale,
+which `settings-form-in-sync.test.ts` should have caught before deploy.
+**Not a bug** — the Settings tab existing at all. This plan predates it; the
+tab was reported absent on 2026-09-29 and the platform has since changed to
+Overview / Settings / App cards (operator guide §1.5).
 
 ---
 
@@ -187,9 +207,10 @@ and writes its sync token on that record and cannot run without it.
 
 Open any Content record.
 
-**Expect** three cards: *Linear / Asana Status*, *Related Content*, *Enterpret
-Insights*.
-**Expect** Enterpret Insights to be empty or say it has no data — see 7.3. That
+**Expect** four cards: *Linear / Asana Status*, *Related Content*, *Enterpret
+Insights* and *Changelog Draft*. (This said three before the Changelog Draft
+card shipped on 2026-10-01.)
+**Expect** Enterpret Insights to be empty or say it has no data — see 7.2. That
 is correct behaviour, not a failure.
 
 ### 2.5 Unassignment archives the record and clears the Asana task
@@ -235,9 +256,77 @@ a bug worth filing.
 **Changelog records are skipped, not archived.** That pipeline has no Archived
 stage to move to.
 
+### 2.6 Rollout dates track the Linear description
+
+New on 2026-10-01 and **not yet exercised by hand** — recorded here as what to
+check, not as an observed result.
+
+In Linear, add or move a date in a rollout issue's `### Timeline` block
+**without changing its state.**
+
+**Expect** `rollout_private_beta_date` / `rollout_public_beta_date` /
+`rollout_live_date` to follow it on the HubSpot record, along with
+`rollout_priority_date` and `rollout_priority_stage` — the next milestone that
+forces action.
+**Expect the pipeline column to reorder** on the Content Command Center page.
+Columns sort by the next milestone, upcoming ones first.
+**Why editing without a state change is the test** — the webhook used to return
+outright when the HubSpot stage already matched the Linear state, so a date
+added to an existing issue produced no write at all and the board kept sorting
+on the old one. That branch now refreshes the derived properties and answers
+`{"skipped":true,"reason":"stage already matches","refreshed":true}` (PR #108).
+
+**Then remove the whole `### Timeline` block and expect the dates to stay.**
+That is deliberate. An issue that never had a timeline and one whose timeline
+was emptied look identical from here, and `rolloutProperties` returns `null` —
+writing nothing — rather than risk blanking a date somebody typed in by hand
+(PR #109). Removing *one* date from a timeline that still has others **does**
+clear that one.
+
+**Not a bug** — a record showing no rollout dates. Most issues have no timeline
+block; the tooling adds them going forward and does not backfill.
+**Fail signal** — `1970-01-01` appearing as a milestone, or unset records
+sorting to the top of a column. Epoch zero is how HubSpot returns an unset
+date, 10 of the 23 prod records that carry a `### Timeline` block hold exactly
+that, and it is meant to be treated as no date at all.
+
+### 2.7 Changelog drafting
+
+Open a Content record in the **changelog** pipeline and find the **Changelog
+Draft** card. `provision:changelog-drafting` must have run on the portal.
+
+**Expect** a mode choice — *Standalone post* or *Rollup entry* — and a draft
+written into `changelog_draft`.
+**Expect it to finish in well under 20 seconds.** HubSpot kills an app function
+at 20s and the function budgets 16s so it can return its own error instead of
+being cut off. Defaults are Sonnet with thinking **off** for exactly this
+reason.
+**Expect the draft never to land in `notes`.** That property holds the Linear
+issue description and is rewritten on every webhook, so a draft there would be
+destroyed the next time the issue moved.
+**Expect it to ask rather than guess** when the source material is thin —
+dates, rollout plan, docs links. Measured across the 70 changelog records on
+prod, Type / Audiences / Use Cases / User Impact are present on about 71%, so
+roughly three records in ten genuinely lack what the post needs.
+**Fail signal** — a timeout with a generic RequestId and no error of ours.
+Check whether the portal's `changelog_model` has been switched to Opus with
+adaptive thinking; that combination demonstrably does not fit the budget for a
+standalone post.
+
 ---
 
 ## 3. Video — connection
+
+> **Every URL in this section is dev (`51869810`), and that matters here more
+> than anywhere else in this plan.** On 2026-10-01 the credential probe found
+> **prod's refresh token dead** — `{"error":"invalid_grant"}`. Running §3.1
+> against prod will answer `connected` anyway, because the status check only
+> proves a token-shaped string exists in the secret. §3.2 is what tells you
+> the truth. Re-authorise prod before trusting anything below against it.
+>
+> This section's recorded dev result was also the evidence that settled a
+> contradiction: the operator guide claimed until 2026-10-02 that no live
+> Google or Anthropic call had ever been made. Both have.
 
 ### 3.1 Connection status
 
@@ -270,6 +359,34 @@ curl -s -X POST https://51869810.hs-sites.com/hs/serverless/youtube-sync \
 **Why this is the real test** — the sync exchanges the refresh token for an
 access token *before* it searches for records. A clean response means that
 exchange succeeded. A `500` means it did not.
+
+**Cheaper, and it names the credential:** `app-health` probes the refresh
+exchange directly alongside every other credential, and reports a verdict
+rather than a stack trace. Operator guide §1.7.
+
+---
+
+## 3b. Credentials are alive, not just present
+
+```bash
+curl -sS -X POST https://51869810.hs-sites.com/hs/serverless/app-health \
+  -H 'content-type: application/json' \
+  -d '{"secret":"<SYNC_SHARED_SECRET>","portalId":"51869810"}' | jq '.checks[]'
+```
+
+**Expect** `ok` for `hubspot`, `linear`, `asana` and `anthropic`.
+**Expect** the endpoint to answer **200 even when a credential is broken** —
+read `.checks[]`, never the status code. A non-2xx would be
+indistinguishable from the endpoint itself being down.
+**Expect** `unconfigured` on a portal where a credential is simply not set.
+That is not a failure.
+**Recorded on prod, 2026-10-01:** `anthropic`, `linear`, `asana` and `hubspot`
+`ok`; `youtube` `error` with `invalid_grant`; `fellow` returning HTML from
+every path on `api.fellow.app`, root included, with `fellow_last_sync` never
+set. The last two are findings, not test failures — see 7.3.
+**Fail signal** — a `401`/`403` with zero outbound calls made. The endpoint
+requires `SYNC_SHARED_SECRET`, because it is public and every probe spends a
+real third-party call.
 
 ---
 
@@ -483,6 +600,19 @@ what was stored. That is the architecture, not a shortfall.
 |---|---|---|
 | **Enterpret** | The read side works. `EnterpretInsightsApi` makes one CRM read and renders three properties, degrading gracefully on partial data | Nothing writes `enterpret_theme` / `enterpret_quote_count` / `enterpret_quotes`. `prompts/enterpret-sync.md`, run on the machine with Enterpret MCP connected, is the only writer. See `docs/enterpret-mcp-sync.md` |
 | **Vault promotion** | Built, never run. A note with `promote: true` becomes a `content_piece` at Outline, which fans out to Linear and Asana | `prompts/promote-note.md`, pasted into a Cowork conversation with the vault connected |
+
+---
+
+### 7.3 Found on 2026-10-01, open, not yet diagnosed
+
+These are real faults rather than known limitations. They are listed so you do
+not spend an afternoon rediscovering them, but unlike 7.1 they do have a route
+forward — somebody just has to take it.
+
+| Area | Symptom | State |
+|---|---|---|
+| **Prod's YouTube refresh token** | `{"error":"invalid_grant"}` from the refresh exchange, while `?action=status` still answers `connected` | Dead. Second occurrence. Re-authorise and publish the consent screen first, or it expires again in 7 days — operator guide §4.1–§4.2 |
+| **Fellow** | Every path on `api.fellow.app` answers `404` with an HTML page, the root included; prod has never set `fellow_last_sync` | Unknown. An HTML body from an API host means the base URL moved or the API is gone, which is a different problem from a rejected credential. **Do not guess a replacement URL** |
 
 ---
 

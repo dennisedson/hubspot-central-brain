@@ -243,16 +243,29 @@ export function rolloutPriority(
  * Stored rather than derived at read time so HubSpot's own list views can sort
  * and filter on them, not just our board.
  *
- * WHY EVERY KEY IS ALWAYS PRESENT
+ * NULL MEANS "DO NOT TOUCH THESE"
  * -------------------------------
- * Dates move. A milestone can be brought forward, pushed back, or removed
- * entirely, and a stored date that never updates is worse than no date — it is
- * a wrong date presented with the same confidence as a right one.
+ * Returns `null` when the notes carry no usable milestone at all, and the
+ * caller then writes none of these properties.
  *
- * So this returns every key on every call, using `''` for "no value" rather
- * than omitting it. An omitted property leaves whatever was there before;
- * an empty string clears it. Returning a partial object would mean a date
- * deleted in Linear lived on in HubSpot forever.
+ * That is what protects a date typed into HubSpot by hand. Most issues have no
+ * `### Timeline` block — the rollout tooling adds it going forward and will
+ * not backfill — so for an older issue the notes have no opinion about dates.
+ * Writing `''` for every key on every sync, which is what this used to do,
+ * would blank a manual entry the next time anything touched that issue. And
+ * since a description edit now refreshes too, "anything" is most edits.
+ *
+ * WHEN THERE IS A MILESTONE, EVERY KEY IS STILL WRITTEN
+ * -----------------------------------------------------
+ * Once the notes do carry dates, Linear is authoritative and all five keys are
+ * returned, `''` included. That is what clears a milestone removed upstream:
+ * remove the public beta date from a timeline that still has a live date, and
+ * the public beta property empties.
+ *
+ * The case this cannot catch is emptying a timeline COMPLETELY — that looks
+ * identical to an issue that never had one, and the stored dates stay until
+ * someone clears them by hand. Preferring that to wiping manual entries is a
+ * deliberate trade: one is a stale date, the other is destroyed work.
  *
  * `upcoming` is deliberately NOT stored. It is relative to today, so a stored
  * copy is correct for one day and silently wrong afterwards. The board
@@ -276,20 +289,20 @@ const STAGE_TO_PROPERTY: Record<string, keyof RolloutProperties> = {
 export function rolloutProperties(
   notes: string | null | undefined,
   today: Date = new Date(),
-): RolloutProperties {
-  const empty: RolloutProperties = {
+): RolloutProperties | null {
+  const source = parseRolloutNotes(notes);
+  const found = milestones(source);
+  // No opinion: leave whatever is in HubSpot alone, including anything typed
+  // in by hand.
+  if (found.length === 0) return null;
+
+  const out: RolloutProperties = {
     rollout_private_beta_date: '',
     rollout_public_beta_date: '',
     rollout_live_date: '',
     rollout_priority_date: '',
     rollout_priority_stage: '',
   };
-
-  const source = parseRolloutNotes(notes);
-  const found = milestones(source);
-  if (found.length === 0) return empty;
-
-  const out: RolloutProperties = { ...empty };
   for (const milestone of found) {
     const property = STAGE_TO_PROPERTY[milestone.stage];
     // First wins: milestones are sorted earliest-first, and an earlier date

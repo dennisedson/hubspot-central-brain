@@ -57,6 +57,20 @@ export const YOUTUBE_AUTH_PATH = 'youtube-auth';
  *   youtube.force-ssl      read captions for AI analysis
  *   yt-analytics.readonly  impressions, CTR, watch time
  */
+/**
+ * Drive access for the changelog documents.
+ *
+ * `drive.file` only — per-file access to what this app creates. Not the Docs
+ * API, not `drive.metadata.readonly`, not full `drive`. Walking an existing
+ * year/month hierarchy would have needed one of those, and all of them are
+ * restricted scopes a Workspace admin can refuse. The app creates its own
+ * folder instead, which this covers.
+ *
+ * Granted on the same consent screen as the YouTube scopes, because Google
+ * issues one refresh token per authorisation and this app has one.
+ */
+export const DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive.file'];
+
 export const YOUTUBE_SCOPES = [
   'https://www.googleapis.com/auth/youtube.readonly',
   'https://www.googleapis.com/auth/youtube.upload',
@@ -64,6 +78,16 @@ export const YOUTUBE_SCOPES = [
   'https://www.googleapis.com/auth/youtube.force-ssl',
   'https://www.googleapis.com/auth/yt-analytics.readonly',
 ];
+
+/**
+ * Everything one authorisation must cover.
+ *
+ * Google issues a refresh token per authorisation, not per scope, so a token
+ * minted before a scope was added simply does not carry it — and the failure is
+ * a 403 from the API rather than anything at consent time. Adding a scope means
+ * re-running the connect flow.
+ */
+export const GOOGLE_SCOPES = [...YOUTUBE_SCOPES, ...DRIVE_SCOPES];
 
 /**
  * Where per-portal YouTube state lives on `app_configs`.
@@ -259,7 +283,7 @@ export function buildAuthUrl(clientId: string, redirectUri: string, state: strin
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
-    scope: YOUTUBE_SCOPES.join(' '),
+    scope: GOOGLE_SCOPES.join(' '),
     response_type: 'code',
     access_type: 'offline',
     prompt: 'consent',

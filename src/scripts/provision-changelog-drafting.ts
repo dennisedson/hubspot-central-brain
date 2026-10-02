@@ -97,6 +97,9 @@ async function main() {
       // description and a checklist.
       fieldType: 'textarea',
     },
+    // The Google Doc made from the draft. Also what makes creation idempotent:
+    // set means a document already exists, so do not make a second one.
+    { name: 'changelog_doc_url', label: 'Changelog Doc URL', type: 'string', fieldType: 'text' },
     {
       name: 'changelog_draft_mode',
       label: 'Changelog Draft Mode',
@@ -124,6 +127,9 @@ async function main() {
         { label: 'Haiku — cheapest, fastest', value: 'haiku', displayOrder: 2, hidden: false },
       ],
     },
+    // The Drive folder this app created for its documents. Stored because
+    // `drive.file` cannot search for it again — access is per-file, by id.
+    { name: 'google_drive_folder_id', label: 'Google Drive Folder ID', type: 'string', fieldType: 'text' },
     {
       name: 'changelog_thinking',
       label: 'Changelog Thinking',

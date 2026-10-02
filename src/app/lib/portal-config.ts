@@ -59,6 +59,15 @@ export interface PortalConfig {
   };
   asanaWorkspaceGid: string;
   asanaProjectGid: string;
+  /**
+   * "Draft File" — where the Google Doc link goes.
+   *
+   * Per portal because the projects differ: BuildRel | Advocacy Content Factory
+   * carries 21 custom fields and Dennis-Staging carries 8, and this is not one
+   * of the 8. Writing a field gid a project does not have is an Asana error, so
+   * dev simply has none and the write is skipped there.
+   */
+  asanaDraftFileFieldGid?: string;
   asanaSections: {
     content: string;
     changelog: string;
@@ -132,6 +141,7 @@ const CONFIGS: Record<number, PortalConfig> = {
     appConfig: { objectTypeId: '2-68180129' },
     asanaWorkspaceGid: '8587152060687',  // hubspot.com
     asanaProjectGid: '1202179514576728', // BuildRel | Advocacy Content Factory
+    asanaDraftFileFieldGid: '1202184607656856', // "Draft File"; absent on the dev project
     asanaSections: {
       content: '1210601763434613',   // Developer Blog
       changelog: '1210743009828493', // Developer Changelog

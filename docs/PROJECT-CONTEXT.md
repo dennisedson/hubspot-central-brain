@@ -32,6 +32,7 @@ It connects:
 | **Fellow** | in | `FellowSync` — meeting action items become HubSpot Projects |
 | **YouTube** | in | `YouTubeSync` — daily metrics onto `video` records |
 | **Enterpret** | in, out-of-band | CRM read only; nothing server-side writes the data |
+| **Anthropic** | out | `ChangelogDraft` (the Changelog Draft card) and `VideoAiSuggestions` |
 | **Obsidian vault** | out | local markdown, driven by Cowork prompts in `vault-template/prompts/` |
 
 The HubSpot side is one custom object doing most of the work — `content_piece`,
@@ -55,17 +56,25 @@ portal holds the joined-up view.
 
 Secondary, and the reason for `docs/walkthroughs/`: the build itself is content.
 57 episode guides (numbered 01–56, plus an `07b`) were written as features
-shipped and bugs were solved.
+shipped and bugs were solved. **The run stops at 56.** Nothing between PR #79
+and PR #109 — the whole of 2026-10-01, 31 merged PRs — has a guide, so the
+directory is no longer a complete record of the build.
 
-## 3. Where things actually stand — 2026-09-30
+## 3. Where things actually stand — 2026-10-02
 
 Sources for this section: `docs/OPERATOR-GUIDE.md` §0 and §6, `docs/TEST-PLAN.md`
-§7, the open issues, and the code. **This machine cannot reach either portal or
-the Obsidian vault** — testing happens elsewhere — so every portal-state claim
-below is sourced from a document or a commit, never from a live check.
+§7, the open issues, the merged PRs and the code. **This machine cannot reach
+either portal or the Obsidian vault** — testing happens elsewhere — so every
+portal-state claim below is sourced from a document, a commit or the operator,
+never from a live check.
 
-Baseline that *is* verified here: `npm run validate` exits 0, with **999 tests
-across 44 files**.
+Baseline that *is* verified here: on `develop` at `f8f56e6`, `npm run validate`
+exits 0 with **1,142 tests across 55 files**. (It read "999 across 44" when this
+section was written on 2026-09-30.)
+
+Portal state, operator-reported 2026-10-02 and not checkable from here: prod
+`22047910` now has **all 8 HubSpot workflows provisioned** and **82
+`content_piece` records**, and its `changelog_entry` object has been **deleted**.
 
 ### 3.1 Works end to end
 
@@ -81,38 +90,75 @@ across 44 files**.
   reached production.
 - **Assignee-first sync.** "Issues assigned to me, wherever they live" is a
   complete configuration; excluded issues are **archived, not skipped**.
-- **Fellow → HubSpot Projects**, per the operator guide's status table.
-- **The four record cards** — Task Status, Related Content, Meeting
-  Intelligence, Enterpret Insights — render. (The Enterpret one renders whatever
-  is stored, which today is nothing; see 3.3.)
+- **Fellow → HubSpot Projects**, per the operator guide's status table — but
+  **that status is now in doubt.** The credential probe added in PR #93 found
+  every path on `api.fellow.app` answering `404` with an HTML page, the root
+  included, and prod's `fellow_last_sync` has never been set (PR #104). Nobody
+  has guessed a replacement URL; that needs someone who knows whether the
+  integration still exists. Treat Fellow as unverified until it is re-probed.
+- **The app settings surface.** Since 2026-10-01 the settings form is reachable
+  at Connected apps → the app → **Settings**, as well as from the Content
+  Command Center. One implementation, two entrances — see §4 for why the file
+  exists twice and which copy is editable. Issue #88, PRs #100–#102.
+- **The five record cards** — Linear / Asana Status, Related Content, Enterpret
+  Insights and Changelog Draft on `content_piece`, Meeting Intelligence on
+  Contacts, plus YouTube on `video` — render. (The Enterpret one renders
+  whatever is stored, which today is nothing; see 3.3.)
+- **Changelog drafting.** Two prompts in version control, a Changelog Draft card
+  on the record, and per-portal model and thinking settings. Defaults are Sonnet
+  with thinking **off** because HubSpot kills an app function at 20 seconds and
+  Opus with adaptive thinking does not reliably finish. PRs #87, #89, #94, #96.
+- **Rollout milestone dates.** Parsed from `notes` into `rollout_*` properties,
+  with the pipeline board ordering each column by the next milestone. Epoch zero
+  (`1970-01-01`) is treated as no date. PRs #105, #108, #109.
+- **A daily credential health check.** `credential-health.yml` asks the
+  `app-health` function on each portal to probe every external credential from
+  inside the app. It has already found two things nothing else would have
+  (§3.2). No scheduled run has been observed yet — see `ARCHITECTURE.md` §5.
 - **Preflight.** `npm run preflight` asserts object type ids, pipelines, stages
-  and every property the app reads or writes, and fingerprints the key in use. It
-  is what replaced the staging portal.
+  and the 30 properties in its `REQUIRED_PROPERTIES` list, and fingerprints the
+  key in use. It is what replaced the staging portal. **The list is behind the
+  code** — none of the `rollout_*` or changelog-drafting properties are in it
+  yet, so it no longer covers "every property the app reads or writes" (§5).
 
 ### 3.2 Built but unverified
 
 Treat everything here as "the code exists and has unit tests; nobody has watched
 it work."
 
-- **The Video layer.** `docs/OPERATOR-GUIDE.md` (2026-09-29) calls it "new,
-  unproven — no live Google or Anthropic call has ever been made."
-  `docs/TEST-PLAN.md` §3 contradicts that: it records a connected channel
-  (`UCUp_0p0PFfaIEkUz5qMLLVw`) as an observed result. **These two documents
-  disagree and the disagreement has not been resolved.** The daily sync has been
-  on a GitHub Actions cron since 2026-09-28.
+- **The Video layer.** The contradiction this section used to record is
+  **resolved, in the test plan's favour.** `docs/OPERATOR-GUIDE.md` said on
+  2026-09-29 that "no live Google or Anthropic call has ever been made";
+  `docs/TEST-PLAN.md` §3 recorded a connected channel
+  (`UCUp_0p0PFfaIEkUz5qMLLVw`) as an observed result. Both calls have since
+  demonstrably happened, and both left evidence:
+  - **Anthropic** was reached for real by the changelog draft card, which is how
+    `ANTHROPIC_API_KEY` was discovered to be invalid in `.env` and on both
+    portals at once (PR #93). The replacement key authenticates on prod.
+  - **Google** answered the credential probe, and the answer was that **prod's
+    YouTube refresh token is dead** — `{"error":"invalid_grant"}` (PR #104). The
+    second time that has happened; see the consent-screen trap in
+    `OPERATOR-GUIDE.md` §4.1.
+
+  The daily sync has been on a GitHub Actions cron since 2026-09-28, and it
+  syncs **dev only** — the job's portal input defaults to `51869810`, so prod's
+  dead token does not surface there.
 - **The 2026-09-30 settings work** — project routing UI, historical-import
-  preview, unmapped-project banner. The webhook half of project routing *is*
-  tested (`linear-webhook.test.ts` covers `classifyIssue` and the project map).
-  The `AppSettingsApi` half — project list filtering, the unmapped merge, the
-  import gate — was six commits that touched **no test file**. This is the gap
-  that PR #77 was opened about.
+  preview, unmapped-project banner. **The test gap is closed.** PR #82
+  ("test(settings): cover the project routing work, and fix what it exposed")
+  covered the `AppSettingsApi` half — project list filtering, the unmapped
+  merge, the import gate — in `src/app/__tests__/app-settings-api.test.ts`, and
+  PR #80 fixed the batching bug those tests exposed (83 issues selected, 33
+  imported, reported as success). PR #77 is merged.
 - **Cowork prompts.** Six prompts in `vault-template/prompts/`. Marked unverified
   since the day they were written; nobody has watched Cowork execute one.
 - **`provision:workflows` against an already-provisioned portal.** Creating
-  workflows on a fresh portal works. Updating existing ones returned
-  `400 Invalid request to flow update`; a fix was committed (`71ba6da`,
-  2026-09-09) and has never been run against a live portal. Edit existing
-  workflows in the UI until someone confirms it.
+  workflows on a fresh portal works, and prod now carries all 8. Updating
+  existing ones returned `400 Invalid request to flow update`; a fix was
+  committed (`71ba6da`, 2026-09-09) and **still** has never been confirmed
+  against a live portal — prod being provisioned says nothing about the update
+  path, which is the one that was broken. Edit existing workflows in the UI
+  until someone re-runs it and reports.
 
 ### 3.3 Paused or blocked — do not spend time here without new information
 
@@ -146,12 +192,19 @@ it work."
   (`vault-template/prompts/promote-note.md`) and the test plan step (§6.4) all
   exist. Nobody has run it end to end.
 
-### 3.5 Things that are open but appear already done
+### 3.5 Issue tracker versus reality
 
-- **Issue #21** ("Changelog pipeline ID is empty for staging and prod") is still
-  open, but `src/app/lib/portal-config.ts` now carries a prod changelog pipeline
-  (`940329858`) and its four stages, set by `3d3916f` on 2026-09-29. Staging no
-  longer exists. Verify against the portal, then close it.
+- **Issue #21** ("Changelog pipeline ID is empty for staging and prod") **was
+  closed** as completed on 2026-10-01. `src/app/lib/portal-config.ts` carries the
+  prod changelog pipeline (`940329858`) and its four stages, set by `3d3916f`.
+  Issue **#17** ("Rotate all credentials before go-live") was also closed on
+  2026-10-01 — it is no longer the go-live blocker §5 used to call it.
+- **Issue #88** ("Can a private app get a Settings tab?") is still open but is
+  answered: yes, and it renders. The implementation shipped in PRs #100–#102.
+  What remains is the last checkbox on the issue — recording the answer in
+  `ARCHITECTURE.md`, now done in its §3 — and deciding whether a component that
+  deploys `DONE` to a surface that does not exist is worth raising as a
+  platform/DX bug.
 - **Issues #23–#34 and #62** are Phase 5 — explicitly post-MVP. They are a
   backlog, not work in progress.
 
@@ -190,9 +243,10 @@ This was decided on 2026-08-26 (`ab353d7`, episode 15) — **and re-decided on
 and `8008340` reverted it five minutes later. If you find yourself adding an
 `objectTypeId` per pipeline, you are repeating that afternoon.
 
-A `changelog_entry` object still exists on both portals holding **0 records**
-each. It is vestigial and pending deletion; `provision-asana-property.ts`
-already treats its absence as the expected state. Do not build on it.
+The `changelog_entry` object has now been **deleted from prod**. Dev still
+carries it (`2-67505888`) holding 0 records; `provision-asana-property.ts`
+already treats its absence as the expected state, so nothing breaks either way.
+Do not build on it.
 
 ### Ideas stay local. Outline is the single threshold.
 
@@ -220,11 +274,19 @@ decision for next time, not a task.** Not an MVP change.
 - **`linear_team_id` uses the sentinel `'any'`**, not `''`, because it is the
   object's primary display property and HubSpot will not let one be cleared.
   Read it through `isAnyTeam()` — `'any'` is truthy.
-- **`src/app/pages/SettingsApp.tsx` is the settings page.** A `type: "settings"`
-  component renders nowhere for this private app; one was built and deleted
-  (PR #60). HubSpot Projects allows one page per project, so the Content Command
-  Center, the settings view and the Changelog Manager are three views behind one
-  entry point.
+- **The settings form has two entrances and one editable copy.** This bullet
+  used to read "a `type: "settings"` component renders nowhere for this private
+  app" — true of the portal on 2026-09-29, when the app's entry showed Overview
+  and Insights, and **false since the platform's tabs became Overview /
+  Settings / App cards.** The surface works (PR #100). Both
+  `pages/SettingsApp.tsx` and `settings/SettingsPage.tsx` render
+  `LinearSettingsForm`; `pages/LinearSettingsForm.tsx` is the only copy anyone
+  edits and `settings/LinearSettingsForm.tsx` is generated by
+  `npm run sync:settings-form`, because HubSpot bundles each extension directory
+  in isolation and an import cannot leave one. `ARCHITECTURE.md` §3 has the
+  detail. HubSpot Projects still allows one *page* per project, so the Content
+  Command Center, the settings view and the Changelog Manager remain three views
+  behind one page entry point.
 - **Asana is polled, not pushed.** HubSpot strips the `X-Hook-Secret` header, so
   the push webhook could never complete handshake. `AsanaPoll` replaced it.
 - **The "(Daily)" HubSpot workflows really are daily — but the schedule is not
@@ -262,18 +324,35 @@ is tracked as such (#23–#34, #62).
 
 ### What remains before it
 
-- **Close the test gap in `AppSettingsApi`** left by the 2026-09-30 settings
-  work (§3.2). This is the highest-value thing an incoming session can do.
-- **Verify the 2026-09-30 settings UI on a live portal.** Five of the last ten
-  settings commits were fixes for a view that would not render at all.
-- **Resolve the video-layer contradiction** between the operator guide and the
-  test plan (§3.2), and make one of them right.
-- **Rotate every credential before go-live** — issue #17, still open and still a
-  blocker. Every key in `.env` has been used from a personal machine.
-- **Close or re-verify issue #21** (§3.5).
+Five of the eight items this section listed on 2026-09-30 are done. What is
+left, plus what 2026-10-01 added:
+
+- **Re-authorise YouTube on prod.** The refresh token is dead
+  (`invalid_grant`, PR #104) and `?action=status` will keep answering
+  `connected` while a token-shaped string sits in the secret. Operator guide
+  §4.1–§4.2; publish the consent screen first or it will die again in 7 days.
+- **Find out whether Fellow still exists.** Every path on `api.fellow.app`
+  404s with HTML and prod has never set `fellow_last_sync` (§3.1). Either a URL
+  changed or the integration is gone; both need a person, not a guess.
+- **Enable and schedule prod's two "(Daily)" poll workflows.**
+  `provision-workflows.ts` creates them `isEnabled: false` with no
+  `enrollmentSchedule`, and prod's 8 workflows will have arrived that way. Edit
+  → Enrollment triggers → "On a schedule", as dev's were set by hand.
+- **Add the load-bearing new properties to `preflight.ts`.**
+  `REQUIRED_PROPERTIES` covers 30 properties and none of them are `rollout_*`,
+  `changelog_draft` or the drafting settings — so a portal missing them passes
+  preflight and then sorts a board on nothing. The operator guide's own rule
+  (§5b) says to add a property the moment it becomes load-bearing.
 - **Run the vault promotion path once**, end to end, and record the result.
-- **Delete `changelog_entry` from both portals** once someone confirms 0 records.
+- **Delete `changelog_entry` from dev**, the last portal holding it.
 - **Decide the Breeze probe**: put one tool in a workflow, or formally drop it.
+- **Write the missing episode guides**, or stop claiming `docs/walkthroughs/` is
+  a record of the build (§2).
+
+Done since 2026-09-30, for the avoidance of re-doing it: the `AppSettingsApi`
+test gap (PR #82), the settings UI verified on a live portal (PRs #100–#102),
+the video-layer contradiction (§3.2), credential rotation (issue #17, closed),
+and issue #21 (closed).
 
 ---
 
@@ -289,7 +368,9 @@ is tracked as such (#23–#34, #62).
 3. **Confirm your intended direction against §4.** If your plan contradicts a
    decision there, stop and say so before writing code.
 4. **Run `npm run validate` before you change anything.** It must exit 0 and
-   report 999+ tests across 44+ files. If it is already red, that is the task.
+   report at least the 1,142 tests across 55 files that `develop` carries at
+   `f8f56e6`. If it is already red, that is the task. It does **not** prove the
+   project will build — see `CLAUDE.md`.
 5. **Branch off `develop`.** Never work on `develop` or `master` directly, and
    never push to a branch whose PR is already merged.
 6. **Write the failing test first.** Every behaviour change ships with a test;
