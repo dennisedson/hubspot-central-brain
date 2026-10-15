@@ -85,6 +85,36 @@ Each of these cost a day at least once.
   generation speed a correctness concern: changelog drafting defaults to Sonnet
   with thinking **off** because Opus with adaptive thinking does not reliably
   finish in time. See `src/app/lib/changelog-model.ts`.
+- **A function cannot declare a secret that does not exist yet.** Adding a name
+  to `secretKeys` in an hsmeta fails the deploy until that secret exists on the
+  portal:
+
+      The secret GOOGLE_DRIVE_REFRESH_TOKEN referenced in the config file
+      `changelog_draft_api` doesn't exist.
+
+  Which deadlocks whenever the value comes from the deployed code — an OAuth
+  token, say. Create it with a placeholder first (`hs secrets add NAME`, value
+  `pending`), deploy, then replace it. `readRefreshToken` already treats
+  `pending`, `placeholder`, `changeme`, `todo`, `none` and `tbd` as "not set",
+  so a placeholder reads as not-connected rather than as a broken token.
+- **An `endpoint` in a function's hsmeta is a public, unauthenticated URL.**
+  Omit the field and the function is private — `hubspot.serverless('<uid>')`
+  still reaches it, which is how every card, the page and the settings form
+  already call their functions. Verified on 2026-10-15: `task-status-api`
+  returned 404 over HTTPS while the card went on loading Linear and Asana data.
+  Seven functions published endpoints that nothing called, two of which
+  (`changelog_draft_api`, `video_ai_suggestions`) reach Anthropic and so were an
+  open door onto the API bill. They are closed, and
+  `function-endpoints-are-justified.test.ts` is the ratchet — an endpoint now
+  needs a named caller in that file's allowlist.
+  The exceptions are real: workflow actions POST to `actionUrl`, the Breeze
+  tools are called by HubSpot's agent runtime, and Google, Linear, Asana and
+  PubSubHubbub all hold URLs. So does the **CMS theme** in `src/theme/`, which
+  fetches `content-data-api` and `settings-api` from `getServerSideProps` —
+  server-side CMS rendering, where `hubspot.serverless()` does not exist. Grep
+  `src/theme/` before privatising anything; that is what this missed the first
+  time. Those two remain open to the internet and want a shared secret.
+
 - **Deploys lie.** `hs project upload` prints "DONE" while the build is still
   BUILDING, and containers lag 60–75s after `[deployed]`. Verify the
   postcondition, never the exit code or the status line.
