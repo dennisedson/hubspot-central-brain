@@ -577,6 +577,12 @@ export function LinearSettingsForm({ portalId, onBack }: { portalId: number; onB
             so storing one under the other&apos;s name breaks both.
           </Text>
           <Text variant="microcopy">
+            If the secret does not exist yet the deploy fails before this point —
+            a function cannot declare a secret that is absent. Create it with the
+            value &quot;pending&quot; first, deploy, then replace it with the real
+            token.
+          </Text>
+          <Text variant="microcopy">
             Check the account first: the CLI ignores --account when only one is
             configured, so an update can land on the wrong portal.
           </Text>
