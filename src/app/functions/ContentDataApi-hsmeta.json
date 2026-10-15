@@ -3,10 +3,6 @@
   "type": "app-function",
   "config": {
     "entrypoint": "/app/functions/ContentDataApi.js",
-    "endpoint": {
-      "path": "content-data-api",
-      "methods": ["GET"]
-    },
     "secretKeys": ["HS_ACCESS_TOKEN"]
   }
 }

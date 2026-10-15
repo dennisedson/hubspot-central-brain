@@ -46,12 +46,12 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   breeze_friction_finder: 'Breeze agent tool, called by URL',
   breeze_meeting_router: 'Breeze agent tool, called by URL',
 
-  // The CMS theme fetches these from getServerSideProps, which runs on
-  // HubSpot's render servers and has no hubspot.serverless(). See
-  // src/theme/central-brain-dashboard/components/modules/Dashboard/index.jsx.
-  // Neither is authenticated today — tracked separately.
-  content_data_api: 'CMS dashboard theme fetches /content-data-api',
-  app_settings_api: 'CMS dashboard theme fetches /settings-api',
+  // The CMS theme server-renders in HubSpot's CMS, where hubspot.serverless()
+  // does not exist, so it needs exactly one URL. This is it: read-only, and it
+  // requires DASHBOARD_SHARED_SECRET, which the theme reads via getSecret()
+  // during SSR. content_data_api and app_settings_api used to be that door and
+  // were unauthenticated — app_settings_api answers saveSettings and backfill.
+  dashboard_data_api: 'CMS dashboard theme fetches /dashboard-data, secret-gated',
 
   // Third parties hold these URLs; they cannot be asked to call by uid.
   youtube_auth: "Google redirects the browser here after OAuth consent",
@@ -99,6 +99,8 @@ describe('function endpoints are justified', () => {
     'related_content_api',
     'meeting_intelligence_api',
     'enterpret_insights_api',
+    'content_data_api',
+    'app_settings_api',
   ])('%s is private — the UI calls it by uid', uid => {
     const fn = allFunctions().find(f => f.uid === uid);
 
