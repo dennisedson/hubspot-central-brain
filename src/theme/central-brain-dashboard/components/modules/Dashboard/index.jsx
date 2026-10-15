@@ -32,7 +32,7 @@ export async function getServerSideProps({ hublData }) {
   const portalId = hublData?.portalId;
   const noData = error => ({
     serverSideProps: { pipeline: null, settings: null, fetchError: error },
-    cacheConfig: { cacheControl: 'no-cache' },
+    caching: { cacheControl: 'no-cache' },
   });
 
   if (!portalId) return noData('Could not determine portal ID');
@@ -59,14 +59,19 @@ export async function getServerSideProps({ hublData }) {
         settings: data.settings ?? null,
         fetchError: null,
       },
-      cacheConfig: { cacheControl: 'no-cache' },
+      caching: { cacheControl: 'no-cache' },
     };
   } catch (err) {
     return noData(String(err));
   }
 }
 
-export function Component({ pipeline, settings, fetchError, fieldValues }) {
+export function Component({ serverSideProps, fieldValues }) {
+  // getServerSideProps' return lands under `serverSideProps` — it is NOT
+  // spread into props. Destructuring pipeline/settings/fetchError at the top
+  // level yielded three undefineds, which rendered as "0 active records" with
+  // no error, and looked for six weeks like a portal with nothing in it.
+  const { pipeline, settings, fetchError } = serverSideProps ?? {};
   const activeStages =
     pipeline?.stages?.filter(s => !s.metadata?.isClosed && s.label !== 'Archived') ?? [];
   const recordsByStage = {};
