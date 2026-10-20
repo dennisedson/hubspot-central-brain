@@ -1,5 +1,7 @@
 ## 🎬 YouTube Episode Guide: Shipping HubSpot Apps with GitHub Actions: The Traps No One Warns You About
 
+> **⚠️ Update, 2026-10-20 — read before following along.** This pipeline had **three portals and a `staging` branch**. Staging was removed on 2026-09-29 (episode 53): today there are two portals — `develop` deploys to dev on push, `master` deploys to prod when someone triggers *Deploy › Prod*. The traps this episode covers still apply.
+
 **🎯 Core Learning Objective:**
 "By the end of this video, you will know how to set up a working GitHub Actions CI/CD pipeline that compiles TypeScript and deploys a HubSpot Project app to multiple portals — including how to avoid three specific traps that will silently break your deploys."
 

@@ -1,5 +1,7 @@
 ## 🎬 YouTube Episode Guide: Stop Clicking, Start Scripting: Provisioning HubSpot Workflows Programmatically
 
+> **⚠️ Update, 2026-10-20 — read before following along.** **The upsert shown here sends a partial PUT, and HubSpot's PUT is a full replace** — that body is what produced `400 Invalid request to flow update`. The current recipe GETs the flow, drops `createdAt`/`updatedAt`/`dataSources` and sends the rest back, and since 2026-10-20 also keeps each action's live team id and version (`src/scripts/flow-actions.ts`, episode 60). Creating workflows, the part this episode is about, is unchanged.
+
 **🎯 Core Learning Objective:**
 "By the end of this video, you will know how to write a TypeScript script that creates fully configured HubSpot automation workflows — with custom actions, event-based enrollment, and field mappings — using the v4 Flows API, so you never have to click through the UI again."
 

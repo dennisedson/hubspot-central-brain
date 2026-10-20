@@ -123,6 +123,12 @@ Each of these cost a day at least once.
   `dashboard_data_api`, gated by `DASHBOARD_SHARED_SECRET` (read with
   `getSecret()` during SSR), and those two are private.
 
+- **HubSpot workflows do run on a schedule.** The cadence is the flow's
+  top-level `enrollmentSchedule`; `enrollmentCriteria.type: 'MANUAL'` only says
+  which records enrol. Reading one for the other put the YouTube sync on a
+  GitHub cron for three weeks — dev only, hours late, unauthenticated. Scheduled
+  work is a "(Daily)" workflow (PROJECT-CONTEXT §4); provisioning creates it off
+  and unscheduled, so set both in the UI.
 - **Deploys lie.** `hs project upload` prints "DONE" while the build is still
   BUILDING, and containers lag 60–75s after `[deployed]`. Verify the
   postcondition, never the exit code or the status line.

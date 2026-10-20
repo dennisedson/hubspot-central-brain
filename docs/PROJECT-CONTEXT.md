@@ -55,33 +55,41 @@ associations already model relationships, and workflow actions already model
 portal holds the joined-up view.
 
 Secondary, and the reason for `docs/walkthroughs/`: the build itself is content.
-57 episode guides (numbered 01–56, plus an `07b`) were written as features
-shipped and bugs were solved. **The run stops at 56.** Nothing between PR #79
-and PR #109 — the whole of 2026-10-01, 31 merged PRs — has a guide, so the
-directory is no longer a complete record of the build.
+Episode guides are written as features ship and bugs are solved —
+`docs/walkthroughs/README.md` indexes them and says which ones later changes have
+overtaken. **There is one gap:** nothing between PR #79 and PR #109 — the whole of
+2026-10-01, 31 merged PRs — has a guide. The run picks up again at 57.
 
-## 3. Where things actually stand — 2026-10-02
+## 3. Where things actually stand — 2026-10-20
 
-Sources for this section: `docs/OPERATOR-GUIDE.md` §0 and §6, `docs/TEST-PLAN.md`
-§7, the open issues, the merged PRs and the code. **This machine cannot reach
-either portal or the Obsidian vault** — testing happens elsewhere — so every
-portal-state claim below is sourced from a document, a commit or the operator,
-never from a live check.
+Sources for this section: the code, the merged PRs, and **read-only checks of
+both portals made on 2026-10-20** from the machine with `.env` — schema lists,
+workflow states, deployed actions, properties. Where a claim is older and was not
+re-checked, it says so. The Obsidian vault lives on the other machine and was not
+checked.
 
-Baseline that *is* verified here: on `develop` at `f8f56e6`, `npm run validate`
-exits 0 with **1,142 tests across 55 files**. (It read "999 across 44" when this
-section was written on 2026-09-30.)
+Baseline: `npm run validate` exits 0 with **1,322 tests across 67 files** on
+`feat/youtube-daily-in-hubspot` (1,142 across 55 on 2026-10-02; 999 across 44 on
+2026-09-30).
 
-Portal state, operator-reported 2026-10-02 and not checkable from here: prod
-`22047910` now has **all 8 HubSpot workflows provisioned** and **82
-`content_piece` records**, and its `changelog_entry` object has been **deleted**.
+Portal state, checked 2026-10-20:
+- **Prod `22047910`** was deployed twice that day (#129, #135), so it carries the
+  rollup doc links (#128), the provisioning fix (#130) and the `SyncToLinear`
+  team fix (#133). **All eight Central Brain workflows on prod are switched
+  off**, so HubSpot → Linear/Asana sync does not run there; Linear → HubSpot
+  (the webhook) does.
+- **`changelog_entry` is gone from both portals.**
+- **Dev `51869810`** has its workflows on, except the two dailies created that
+  day — *Changelog Rollup Docs* and *YouTube → Sync Metrics* — which are off and
+  unscheduled.
 
 ### 3.1 Works end to end
 
-- **The content spine.** Linear issue → `content_piece` → Asana task, and stage
-  changes travelling both ways. `docs/TEST-PLAN.md` §2.1–2.5 records observed
-  outcomes on dev; the operator guide calls it "exercised daily, 11 records in
-  dev" as of 2026-09-29.
+- **The content spine — on dev.** Linear issue → `content_piece` → Asana task,
+  and stage changes travelling both ways. `docs/TEST-PLAN.md` §2.1–2.5 records
+  observed outcomes on dev. **On prod only the Linear → HubSpot half runs**: the
+  workflows that carry stage changes back out are off (above). They can be
+  switched on as they are — operator guide §1.8.
 - **Echo suppression and dedup.** `[hs-sync]` origin tags, unique `linear_id`
   with atomic upsert, and a stage-match skip. These are the oldest and
   most-tested paths in the repo (`linear-webhook.test.ts`, `hubspot-client.test.ts`).
@@ -111,15 +119,16 @@ Portal state, operator-reported 2026-10-02 and not checkable from here: prod
 - **Rollout milestone dates.** Parsed from `notes` into `rollout_*` properties,
   with the pipeline board ordering each column by the next milestone. Epoch zero
   (`1970-01-01`) is treated as no date. PRs #105, #108, #109.
-- **A daily credential health check.** `credential-health.yml` asks the
-  `app-health` function on each portal to probe every external credential from
-  inside the app. It has already found two things nothing else would have
-  (§3.2). No scheduled run has been observed yet — see `ARCHITECTURE.md` §5.
+- **A credential health check, on demand.** `PORTAL=prod npm run health` asks
+  the `app-health` function to probe every external credential from inside the
+  app. It found two things nothing else would have (§3.2). It used to run daily
+  from `credential-health.yml`; #125 removed that because the prod job sat behind
+  the deploy approval gate and fourteen runs queued unreported.
 - **Preflight.** `npm run preflight` asserts object type ids, pipelines, stages
-  and the 30 properties in its `REQUIRED_PROPERTIES` list, and fingerprints the
-  key in use. It is what replaced the staging portal. **The list is behind the
-  code** — none of the `rollout_*` or changelog-drafting properties are in it
-  yet, so it no longer covers "every property the app reads or writes" (§5).
+  and the 45 properties in its `REQUIRED_PROPERTIES` list — `rollout_*`,
+  changelog drafting and `changelog_rollup` included — and fingerprints the key in
+  use. It is what replaced the staging portal. Prod passed all 13 checks on
+  2026-10-20.
 
 ### 3.2 Built but unverified
 
@@ -140,9 +149,11 @@ it work."
     second time that has happened; see the consent-screen trap in
     `OPERATOR-GUIDE.md` §4.1.
 
-  The daily sync has been on a GitHub Actions cron since 2026-09-28, and it
-  syncs **dev only** — the job's portal input defaults to `51869810`, so prod's
-  dead token does not surface there.
+  **No daily sync runs on either portal right now.** It was a GitHub Actions
+  cron from 2026-09-28 — dev only, hours late, and calling `/youtube-sync` with
+  no secret. On 2026-10-20 it became the *YouTube → Sync Metrics (Daily)*
+  workflow, behind the shared secret (§4); that workflow is off on both portals,
+  and prod's must stay off until its token is re-authorised.
 - **The 2026-09-30 settings work** — project routing UI, historical-import
   preview, unmapped-project banner. **The test gap is closed.** PR #82
   ("test(settings): cover the project routing work, and fix what it exposed")
@@ -161,14 +172,21 @@ it work."
   snapshot; `src/scripts/flow-actions.ts` now carries both over from the live
   flow, and a re-run on dev diffed **identical** across all 9 workflows. Not yet
   run on prod.
-- **Rollup doc links** (2026-10-20, `feat/rollup-doc-link`). Monthly changelog
-  rollups are Linear releases; the webhook and a daily sweep put each rollup's
-  Google Doc and name on my entries in it. Unit-tested end to end, and the
-  Linear queries were run read-only against the workspace — but two things are
-  unobserved: that adding an issue to a release sends an `Issue` webhook with
-  `releases` populated (if not, the sweep still delivers within a day), and the
-  first live run of *Changelog Rollup Docs (Daily)*. October's release had no
-  doc linked when this was written. Operator guide §4b.
+- **Rollup doc links** (#128, deployed to both portals 2026-10-20). Monthly
+  changelog rollups are Linear releases; the webhook and a daily sweep put each
+  rollup's Google Doc and name on my entries in it. `changelog_rollup` is
+  provisioned on both portals and the action is deployed on both. Unit-tested end
+  to end, and the Linear queries were run read-only against the workspace — but
+  three things are unobserved: an `Issue` webhook carrying `releases` (if it does
+  not, the sweep still delivers within a day), the first live run of *Changelog
+  Rollup Docs (Daily)* (exists on dev, off; not yet created on prod), and a doc
+  on October's release, which had none. Operator guide §4b.
+- **Workflow-action authentication.** Every action URL is public. Four actions
+  check the shared secret end to end — the two sync actions, rollup docs and
+  related content — and since 2026-10-20 the YouTube sync makes five. Seven do
+  not yet, each named with its reason in `NOT_YET_AUTHENTICATED` in
+  `workflow-actions.test.ts`, which also stops a new one joining them. None calls
+  Anthropic; the cost of an unauthenticated call is a triggered sync or a write.
 
 ### 3.3 Paused or blocked — do not spend time here without new information
 
@@ -200,7 +218,10 @@ it work."
 - **Vault promotion.** A note with `promote: true` becomes a `content_piece` at
   Outline, which fans out to both Linear and Asana. The code, the prompt
   (`vault-template/prompts/promote-note.md`) and the test plan step (§6.4) all
-  exist. Nobody has run it end to end.
+  exist. Nobody has run it end to end. **On a portal whose sync workflow carries
+  `linearTeamId: 'any'` — prod — it cannot create the Linear issue**: since
+  2026-10-20 `SyncToLinear` answers `no_team_for_create` rather than failing.
+  A real team on the action, or a "team for new issues" setting, would fix it.
 
 ### 3.5 Issue tracker versus reality
 
@@ -215,6 +236,9 @@ it work."
   `ARCHITECTURE.md`, now done in its §3 — and deciding whether a component that
   deploys `DONE` to a surface that does not exist is worth raising as a
   platform/DX bug.
+- **Issue #78** (content containers and lineage) is still open, but its rollup
+  half is superseded: monthly rollups are Linear releases (#128). The
+  video-series half still stands.
 - **Issues #23–#34 and #62** are Phase 5 — explicitly post-MVP. They are a
   backlog, not work in progress.
 
@@ -253,10 +277,31 @@ This was decided on 2026-08-26 (`ab353d7`, episode 15) — **and re-decided on
 and `8008340` reverted it five minutes later. If you find yourself adding an
 `objectTypeId` per pipeline, you are repeating that afternoon.
 
-The `changelog_entry` object has now been **deleted from prod**. Dev still
-carries it (`2-67505888`) holding 0 records; `provision-asana-property.ts`
-already treats its absence as the expected state, so nothing breaks either way.
-Do not build on it.
+The `changelog_entry` object is **gone from both portals** (checked 2026-10-20).
+Do not bring it back.
+
+### Monthly changelog rollups are Linear releases — 2026-10-20
+
+A digest is a release named `<Month> <Year> Changelog Rollup` in Linear's
+*Monthly Changelog Rollups* pipeline, owned by whoever writes it, with its
+Google Doc linked on the release. Membership arrives on the issue webhook, so
+HubSpot needs no digest record and no association label for it — the rollup half
+of the containers design (#78) is superseded. Matched by name, because Spotlight
+releases share the pipeline. The release's doc overrides whatever an entry
+holds; only a rollup's doc is ever cleared. Spec
+`docs/superpowers/specs/2026-10-20-rollup-doc-link-design.md`.
+
+### Scheduled work is a HubSpot "(Daily)" workflow, not a GitHub cron — 2026-10-20
+
+HubSpot workflows run on a schedule: the cadence is the top-level
+`enrollmentSchedule`, separate from `enrollmentCriteria`, whose `type: 'MANUAL'`
+says which records enrol. Misreading one for the other put the YouTube sync on a
+GitHub cron for three weeks — dev only, hours late, and calling its endpoint with
+no secret. A daily workflow covers every portal, logs where the rest of the app
+logs, and posts with the shared secret. The cost: the schedule and the on switch
+are set by hand in the UI after `provision:workflows`, and a run that "succeeds"
+with nothing done shows as green — read the output fields. `npm run health` is
+deliberately on demand rather than scheduled (#125).
 
 ### Ideas stay local. Outline is the single threshold.
 
@@ -300,15 +345,13 @@ decision for next time, not a task.** Not an MVP change.
 - **Asana is polled, not pushed.** HubSpot strips the `X-Hook-Secret` header, so
   the push webhook could never complete handshake. `AsanaPoll` replaced it.
 - **The "(Daily)" HubSpot workflows really are daily — but the schedule is not
-  provisioned.** Verified on dev: both carry
-  `enrollmentSchedule: {"type":"DAILY","timeOfDay":{"hour":17,"minute":0}}`.
-  That is a **top-level field, separate from `enrollmentCriteria`**, whose
-  `type: 'MANUAL'` describes the enrolment criteria and not the cadence —
-  reading one for the other is how this was previously documented backwards.
-  `provision-workflows.ts` creates these workflows **without** a schedule and
-  `isEnabled: false`; the dev schedule was set by hand in the UI, and a newly
-  provisioned portal needs the same (Edit → Enrollment triggers → "On a
-  schedule"). The script preserves an existing schedule on re-run.
+  provisioned.** See the scheduling decision above. `provision-workflows.ts`
+  creates every workflow **without** a schedule and `isEnabled: false`; set both
+  by hand (operator guide §1.8). The script preserves them on re-run — and since
+  2026-10-20 it also preserves each action's team id and version.
+- **Merges into `master` are merge commits, never squash** — promotions and the
+  repairs alike. `CLAUDE.md` → Process has why; it went wrong three times in one
+  day (#131, #129) before it was written down.
 
 ---
 
@@ -334,41 +377,42 @@ is tracked as such (#23–#34, #62).
 
 ### What remains before it
 
-Five of the eight items this section listed on 2026-09-30 are done. What is
-left, plus what 2026-10-01 added:
+As of 2026-10-20. The first item is the one that stands between prod and MVP
+point 2.
 
+- **Turn on prod's workflows.** All eight are off, so stage changes do not leave
+  HubSpot on prod. The two sync workflows can go on as they are — their
+  `linearTeamId: 'any'` stopped mattering for stage syncs on 2026-10-20 — and so
+  can the Asana poll (schedule it first) and the two Associate workflows. Operator
+  guide §1.8 lists each, with what to leave off and why.
+- **Create and schedule *Changelog Rollup Docs (Daily)* on prod**
+  (`PORTAL=prod npm run provision:workflows` — safe to re-run since #130), and
+  attach the digest's Google Doc to `October 2026 Changelog Rollup` in Linear.
 - **Re-authorise YouTube on prod.** The refresh token is dead
   (`invalid_grant`, PR #104) and `?action=status` will keep answering
   `connected` while a token-shaped string sits in the secret. Operator guide
   §4.1–§4.2; publish the consent screen first or it will die again in 7 days.
+  Only then turn on prod's *YouTube → Sync Metrics (Daily)*.
 - **Find out whether Fellow still exists.** Every path on `api.fellow.app`
   404s with HTML and prod has never set `fellow_last_sync` (§3.1). Either a URL
   changed or the integration is gone; both need a person, not a guess.
-- **Enable and schedule prod's two "(Daily)" poll workflows.**
-  `provision-workflows.ts` creates them `isEnabled: false` with no
-  `enrollmentSchedule`, and prod's 8 workflows will have arrived that way. Edit
-  → Enrollment triggers → "On a schedule", as dev's were set by hand.
-  **Checked 2026-10-20: all 8 are still disabled** — so no HubSpot → Linear or
-  Asana sync runs on prod at all. Both sync workflows carry
-  `linearTeamId: 'any'` from their original provisioning. That no longer
-  blocks enabling them: since 2026-10-20 `SyncToLinear` asks each existing
-  issue for its own team. It only means a note promoted from the vault gets
-  `no_team_for_create` instead of a Linear issue, until a real team is set.
-- **Add the load-bearing new properties to `preflight.ts`.**
-  `REQUIRED_PROPERTIES` covers 30 properties and none of them are `rollout_*`,
-  `changelog_draft` or the drafting settings — so a portal missing them passes
-  preflight and then sorts a board on nothing. The operator guide's own rule
-  (§5b) says to add a property the moment it becomes load-bearing.
-- **Run the vault promotion path once**, end to end, and record the result.
-- **Delete `changelog_entry` from dev**, the last portal holding it.
+- **Authenticate the seven remaining workflow actions** named in
+  `NOT_YET_AUTHENTICATED` (§3.2), the Breeze three once their call shape is
+  known. Each is a secret check in the function, a `sharedSecret` input on the
+  action, and a field in `provision:workflows`; the test then makes them leave
+  the list.
+- **Run the vault promotion path once**, end to end, and record the result —
+  and decide where a new issue's team comes from on an `'any'` portal (§3.4).
 - **Decide the Breeze probe**: put one tool in a workflow, or formally drop it.
-- **Write the missing episode guides**, or stop claiming `docs/walkthroughs/` is
-  a record of the build (§2).
+- **Write the missing episode guides** for 2026-10-01 (#79–#109), or record the
+  gap as permanent (§2).
 
-Done since 2026-09-30, for the avoidance of re-doing it: the `AppSettingsApi`
-test gap (PR #82), the settings UI verified on a live portal (PRs #100–#102),
-the video-layer contradiction (§3.2), credential rotation (issue #17, closed),
-and issue #21 (closed).
+Done since 2026-10-02, for the avoidance of re-doing it: preflight now covers the
+`rollout_*`, drafting and rollup properties; `changelog_entry` is gone from dev;
+`provision:workflows`' update path is confirmed and fixed (#130); the dashboard's
+public endpoints became one secret-gated door (#127); the YouTube sync left
+GitHub. Earlier: the `AppSettingsApi` test gap (PR #82), the settings UI on a
+live portal (PRs #100–#102), credential rotation (#17), issue #21.
 
 ---
 
@@ -384,15 +428,18 @@ and issue #21 (closed).
 3. **Confirm your intended direction against §4.** If your plan contradicts a
    decision there, stop and say so before writing code.
 4. **Run `npm run validate` before you change anything.** It must exit 0 and
-   report at least the 1,142 tests across 55 files that `develop` carries at
-   `f8f56e6`. If it is already red, that is the task. It does **not** prove the
-   project will build — see `CLAUDE.md`.
+   report at least the count in §3 (1,322 across 67 files on 2026-10-20). If it
+   is already red, that is the task. It does **not** prove the project will
+   build — run `npm run build` too, and see `CLAUDE.md`.
 5. **Branch off `develop`.** Never work on `develop` or `master` directly, and
    never push to a branch whose PR is already merged.
 6. **Write the failing test first.** Every behaviour change ships with a test;
    every bug fix starts with a test you have watched fail.
-7. **Remember what this machine cannot do.** It cannot reach either portal, the
-   Obsidian vault or the local `.env` — those live on the testing machine. Do not
-   assert portal state you have not been shown; mark it unverified instead.
+7. **Know what your machine can reach.** Portal access needs `.env` with the
+   portal keys; on 2026-10-20 the development machine had one and reached both
+   portals, where until then only the testing machine did. The Obsidian vault is
+   on the testing machine. Do not assert portal state you have not checked —
+   read-only checks are cheap (`npm run preflight`, the schema and flow listings);
+   mark anything else unverified. Writes to a portal want the user's say-so.
 8. **When you finish something**, write the episode guide (`CLAUDE.md` says how)
    and add a dated entry to `CHANGELOG.md`.
