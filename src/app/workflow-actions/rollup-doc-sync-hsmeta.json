@@ -1,0 +1,55 @@
+{
+  "uid": "rollup_doc_sync_v1",
+  "type": "workflow-action",
+  "config": {
+    "actionUrl": "https://51869810.hs-sites.com/hs/serverless/rollup-doc-sync",
+    "isPublished": true,
+    "supportedClients": [
+      {
+        "client": "WORKFLOWS"
+      }
+    ],
+    "objectTypes": [],
+    "inputFields": [
+      {
+        "typeDefinition": {
+          "name": "sharedSecret",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": [
+          "STATIC_VALUE"
+        ],
+        "isRequired": true
+      }
+    ],
+    "outputFields": [
+      { "typeDefinition": { "name": "syncStatus", "type": "string", "fieldType": "text" } },
+      { "typeDefinition": { "name": "updated", "type": "string", "fieldType": "text" } },
+      { "typeDefinition": { "name": "cleared", "type": "string", "fieldType": "text" } },
+      { "typeDefinition": { "name": "skipped", "type": "string", "fieldType": "text" } },
+      { "typeDefinition": { "name": "detail", "type": "string", "fieldType": "text" } }
+    ],
+    "labels": {
+      "en": {
+        "actionName": "Sync Rollup Doc Links",
+        "appDisplayName": "Central Brain",
+        "actionDescription": "Copies each monthly changelog rollup's Google Doc from its release onto the entries in it, and clears links that no longer apply",
+        "actionCardContent": "Rollup doc links → changelog entries",
+        "inputFieldLabels": {
+          "sharedSecret": "Shared Secret"
+        },
+        "inputFieldDescriptions": {
+          "sharedSecret": "Shared secret that authenticates this request; must match the SYNC_SHARED_SECRET function secret"
+        },
+        "outputFieldLabels": {
+          "syncStatus": "Sync Status",
+          "updated": "Entries Updated",
+          "cleared": "Doc Links Cleared",
+          "skipped": "Entries Skipped",
+          "detail": "Detail"
+        }
+      }
+    }
+  }
+}

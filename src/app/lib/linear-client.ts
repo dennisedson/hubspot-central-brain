@@ -1,5 +1,6 @@
 import type { LinearState } from './types';
 import { HS_SYNC_TAG } from './mapping';
+import { isMonthlyRollup, ROLLUP_NAME_SUFFIX, type RollupRelease } from './rollup-doc';
 
 const LINEAR_API = 'https://api.linear.app/graphql';
 
@@ -205,4 +206,139 @@ export async function getLinearIssue(apiKey: string, issueId: string): Promise<L
     updatedAt: data.issue.updatedAt,
     url: data.issue.url,
   };
+}
+
+export interface Connection<T> {
+  nodes: T[];
+  pageInfo: { hasNextPage: boolean; endCursor?: string | null };
+}
+
+/** Linear caps a page at 250. */
+const MAX_PAGE_SIZE = 250;
+/** 40 pages of 250 is 10,000 nodes — far past anything this app reads. */
+const MAX_PAGES = 40;
+
+/**
+ * Every node of one connection — or an error. Never part of it.
+ *
+ * Deliberately not AppSettingsApi's fetchAllPages, which returns what it has
+ * when a later page fails. That is right for a settings dropdown and wrong for
+ * the rollup sweep: there, an issue missing from a partial list reads as "not
+ * in a rollup", and the sweep would clear a real link. So a failed page, a
+ * missing cursor and running out of pages all throw.
+ *
+ * `first` and `after` are this function's variables; the query must declare
+ * them and `variables` must not set them.
+ */
+export async function fetchEveryPage<D, T>(
+  apiKey: string,
+  query: string,
+  variables: Record<string, unknown>,
+  select: (data: D) => Connection<T> | null | undefined,
+  pageSize = MAX_PAGE_SIZE,
+): Promise<T[]> {
+  const nodes: T[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const data = await gql<D>(apiKey, query, { ...variables, first: pageSize, after });
+    const conn = select(data);
+    if (!conn) throw new Error('Linear returned no connection to page through');
+    nodes.push(...conn.nodes);
+    if (!conn.pageInfo.hasNextPage) return nodes;
+    if (!conn.pageInfo.endCursor) throw new Error('Linear reported another page without a cursor');
+    after = conn.pageInfo.endCursor;
+  }
+  throw new Error(`Linear connection ran past ${MAX_PAGES} pages; refusing to return part of it`);
+}
+
+/** A digest has a handful of links. A full page of them is not something to pick from. */
+const LINKS_PAGE = 50;
+/** Releases travel with their first page of issues. Verified under Linear's
+ *  complexity limit at these sizes on 2026-10-20. */
+const RELEASES_PAGE = 50;
+const ISSUES_PAGE = 50;
+
+interface LinkConnection {
+  nodes: Array<{ url: string }>;
+  pageInfo: { hasNextPage: boolean };
+}
+
+function linkUrls(links: LinkConnection, releaseName: string): string[] {
+  if (links.pageInfo.hasNextPage) {
+    throw new Error(`Release "${releaseName}" has more than ${LINKS_PAGE} links; refusing to pick a doc from part of them`);
+  }
+  return links.nodes.map(n => n.url);
+}
+
+/** The URLs linked on one release. The webhook knows the id from its payload. */
+export async function getReleaseLinkUrls(apiKey: string, releaseId: string): Promise<string[]> {
+  // An unknown id comes back as HTTP 200 with `Entity not found: Release` and
+  // null data (observed 2026-10-20), which gql throws on. The null check is for
+  // the null node Linear returns elsewhere for a bogus id.
+  const data = await gql<{ release: { name: string; links: LinkConnection } | null }>(
+    apiKey,
+    `query($id: String!) {
+       release(id: $id) { name links(first: ${LINKS_PAGE}) { nodes { url } pageInfo { hasNextPage } } }
+     }`,
+    { id: releaseId },
+  );
+  if (!data.release) throw new Error(`Linear release not found: ${releaseId}`);
+  return linkUrls(data.release.links, data.release.name);
+}
+
+interface ReleaseNode {
+  id: string;
+  name: string;
+  links: LinkConnection;
+  issues: Connection<{ id: string }>;
+}
+
+const ROLLUP_RELEASES = `
+  query($first: Int!, $after: String, $suffix: String!) {
+    releases(first: $first, after: $after, filter: { name: { endsWith: $suffix } }) {
+      nodes {
+        id
+        name
+        links(first: ${LINKS_PAGE}) { nodes { url } pageInfo { hasNextPage } }
+        issues(first: ${ISSUES_PAGE}) { nodes { id } pageInfo { hasNextPage endCursor } }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }`;
+
+const RELEASE_ISSUES = `
+  query($id: String!, $first: Int!, $after: String) {
+    release(id: $id) {
+      issues(first: $first, after: $after) { nodes { id } pageInfo { hasNextPage endCursor } }
+    }
+  }`;
+
+/**
+ * Every monthly rollup release, with its links and ALL of its issue ids.
+ *
+ * One request in the ordinary case: each release's first page of issues rides
+ * along with it. A release with more issues than that is re-read to the end.
+ */
+export async function listMonthlyRollups(apiKey: string): Promise<RollupRelease[]> {
+  const releases = await fetchEveryPage<{ releases: Connection<ReleaseNode> }, ReleaseNode>(
+    apiKey,
+    ROLLUP_RELEASES,
+    { suffix: ROLLUP_NAME_SUFFIX },
+    d => d.releases,
+    RELEASES_PAGE,
+  );
+
+  const rollups: RollupRelease[] = [];
+  for (const r of releases.filter(r => isMonthlyRollup(r.name))) {
+    const issues = r.issues.pageInfo.hasNextPage
+      ? await fetchEveryPage<{ release: { issues: Connection<{ id: string }> } | null }, { id: string }>(
+          apiKey,
+          RELEASE_ISSUES,
+          { id: r.id },
+          d => d.release?.issues,
+        )
+      : r.issues.nodes;
+    rollups.push({ id: r.id, name: r.name, linkUrls: linkUrls(r.links, r.name), issueIds: issues.map(i => i.id) });
+  }
+  return rollups;
 }

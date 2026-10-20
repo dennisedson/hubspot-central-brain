@@ -70,6 +70,10 @@ export interface LinearIssue {
    *  so the webhook looks it up when it needs it and the payload has none. */
   project?: { id: string; name: string } | null;
   assignee?: { id: string; name: string } | null;
+  /** The releases the issue is in. Linear's schema puts them on every Issue
+   *  webhook (`IssueWebhookPayload.releases`), but no live payload has been
+   *  observed carrying them yet — so absent means "not said", never "none". */
+  releases?: Array<{ id: string; name: string }>;
 }
 
 export interface LinearWebhookPayload {

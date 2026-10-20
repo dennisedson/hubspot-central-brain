@@ -39,7 +39,8 @@
     "compare:changelog-models": "tsx src/scripts/compare-changelog-models.ts",
     "typecheck:settings": "npm --prefix src/app/settings install --no-audit --no-fund && (cd src/app/settings && npx tsc --noEmit)",
     "sync:settings-form": "tsx src/scripts/sync-settings-form.ts",
-    "backfill:rollout-dates": "tsx src/scripts/backfill-rollout-dates.ts"
+    "backfill:rollout-dates": "tsx src/scripts/backfill-rollout-dates.ts",
+    "health": "tsx src/scripts/health.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

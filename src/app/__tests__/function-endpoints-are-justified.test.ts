@@ -36,6 +36,7 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   associate_related_content_fn: 'workflow-action actionUrl',
   fellow_sync: 'workflow-action actionUrl',
   generate_social_draft: 'workflow-action actionUrl',
+  rollup_doc_sync: 'workflow-action actionUrl',
   sync_to_asana: 'workflow-action actionUrl',
   sync_to_linear: 'workflow-action actionUrl',
   video_attribution: 'workflow-action actionUrl',

@@ -88,3 +88,35 @@ describe('workflow-action hsmeta files', () => {
     });
   });
 });
+
+/**
+ * provision-workflows.ts finds each action by SUBSTRING, in order, and takes
+ * the first match. An action whose uid or name contained one of these words
+ * would be handed out as that other action's id, and a workflow would call the
+ * wrong function — with a 200.
+ */
+const CLAIMED_BY_PROVISIONING = [
+  'linear',
+  'asana',
+  'poll',
+  'youtube',
+  'fellow',
+  'social',
+  'associate_related',
+  'associate related',
+];
+
+describe('rollup-doc-sync-hsmeta.json', () => {
+  it('uses a uid and name the provisioning matchers do not claim', () => {
+    const action = load('rollup-doc-sync-hsmeta.json') as {
+      uid?: string;
+      config: { labels?: { en?: { actionName?: string } } };
+    };
+    const uid = (action.uid ?? '').toLowerCase();
+    const name = (action.config.labels?.en?.actionName ?? '').toLowerCase();
+    for (const word of CLAIMED_BY_PROVISIONING) {
+      expect(uid, `uid contains "${word}"`).not.toContain(word);
+      expect(name, `actionName contains "${word}"`).not.toContain(word);
+    }
+  });
+});

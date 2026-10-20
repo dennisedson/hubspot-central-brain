@@ -12,6 +12,71 @@ unless the text says issue.
 
 ---
 
+## 2026-10-20
+
+### `provision:workflows` rewrote live workflows, and no longer does
+
+The first live run of the workflow update path — on dev, to create the rollup
+workflow — landed every PUT and kept `isEnabled` and the daily schedules. It
+also, without being asked:
+
+- set `linearTeamId` on both sync workflows to **`'any'`**, copied from app
+  settings where it means "any team" to the webhook. `SyncToLinear` looks up a
+  team's workflow states with that field, so every HubSpot → Linear stage sync
+  on dev failed;
+- reset `actionTypeVersion` from **75 to 0** on the Associate and LinkedIn
+  workflows.
+
+Caught by snapshotting all seven workflows before the run and diffing after,
+because the script's own "isEnabled preserved" line only echoes what it read.
+Dev was restored from the snapshot. The merge logic moved to
+`src/scripts/flow-actions.ts` so it could be tested: it now keeps the live team
+id when settings only have the sentinel, keeps the live action version, and
+warns about any action left carrying `'any'`. Re-run on dev, all nine
+workflows diffed identical.
+
+Found on the way: **prod's eight Central Brain workflows are all disabled**,
+and its two sync workflows already carry `'any'` from their first
+provisioning.
+
+### Digest doc links from Linear releases
+
+Monthly changelog digests turned out to live in Linear already, as **releases**
+— "October 2026 Changelog Rollup" in a *Monthly Changelog Rollups* pipeline. So
+the containers design from 2026-09-30 (issue #78) is superseded for rollups:
+membership needs no HubSpot record and no association label, because the
+issue webhook already names each issue's releases.
+
+The digest is someone else's, in their Google Doc, linked on the release. Now
+my entries in a rollup carry `changelog_rollup` (the release name, so a month
+is one filter) and `changelog_doc_url` (the doc). The webhook sets them as
+issues change; a daily workflow, *Changelog Rollup Docs (Daily)*, sets and
+clears what no webhook announces — a doc attached late, or a completed
+release rolling unfinished issues on to the next month.
+
+What is load-bearing:
+
+- **Neither path creates a record.** Of October's six issues, two are mine;
+  the others never reach HubSpot. `updateByLinearId` answers false on 404
+  where the sync's upsert would create.
+- **The release's doc wins, and only a rollup doc is ever cleared** — compared
+  by Google Doc id, so a hand-pasted or Create Doc link is never cleared.
+- **The sweep pages strictly.** It reads an issue's *absence* from a release as
+  "it left", so a partial list would clear real links. The new
+  `fetchEveryPage` throws where `AppSettingsApi`'s `fetchAllPages` returns
+  what it has.
+- **Rollups are matched by name**, because Spotlight releases share the
+  pipeline.
+
+`LinearWebhook` now declares `LINEAR_API_KEY`. It already read that variable
+for `getIssueProject`, but never had it, so the project lookup for payloads
+without a project has never run in production — this switches it on.
+
+Not yet observed live: an `Issue` webhook carrying `releases`, and the daily
+workflow's first run. Spec `docs/superpowers/specs/2026-10-20-rollup-doc-link-design.md`.
+
+---
+
 ## 2026-10-02
 
 ### Documentation audit against the code

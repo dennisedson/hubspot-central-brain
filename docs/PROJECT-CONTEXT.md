@@ -152,13 +152,23 @@ it work."
   imported, reported as success). PR #77 is merged.
 - **Cowork prompts.** Six prompts in `vault-template/prompts/`. Marked unverified
   since the day they were written; nobody has watched Cowork execute one.
-- **`provision:workflows` against an already-provisioned portal.** Creating
-  workflows on a fresh portal works, and prod now carries all 8. Updating
-  existing ones returned `400 Invalid request to flow update`; a fix was
-  committed (`71ba6da`, 2026-09-09) and **still** has never been confirmed
-  against a live portal — prod being provisioned says nothing about the update
-  path, which is the one that was broken. Edit existing workflows in the UI
-  until someone re-runs it and reports.
+- **`provision:workflows` against an already-provisioned portal — confirmed on
+  dev 2026-10-20, and fixed.** The `400 Invalid request to flow update` fix
+  (`71ba6da`) holds: every PUT landed, and `isEnabled` and the daily schedules
+  survived. But the first run also rewrote two things — `linearTeamId` to the
+  `'any'` sentinel on both sync workflows, which broke HubSpot → Linear sync,
+  and `actionTypeVersion` from 75 to 0 on three others. Dev was restored from a
+  snapshot; `src/scripts/flow-actions.ts` now carries both over from the live
+  flow, and a re-run on dev diffed **identical** across all 9 workflows. Not yet
+  run on prod.
+- **Rollup doc links** (2026-10-20, `feat/rollup-doc-link`). Monthly changelog
+  rollups are Linear releases; the webhook and a daily sweep put each rollup's
+  Google Doc and name on my entries in it. Unit-tested end to end, and the
+  Linear queries were run read-only against the workspace — but two things are
+  unobserved: that adding an issue to a release sends an `Issue` webhook with
+  `releases` populated (if not, the sweep still delivers within a day), and the
+  first live run of *Changelog Rollup Docs (Daily)*. October's release had no
+  doc linked when this was written. Operator guide §4b.
 
 ### 3.3 Paused or blocked — do not spend time here without new information
 
@@ -338,6 +348,11 @@ left, plus what 2026-10-01 added:
   `provision-workflows.ts` creates them `isEnabled: false` with no
   `enrollmentSchedule`, and prod's 8 workflows will have arrived that way. Edit
   → Enrollment triggers → "On a schedule", as dev's were set by hand.
+  **Checked 2026-10-20: all 8 are still disabled** — so no HubSpot → Linear or
+  Asana sync runs on prod at all. And before enabling the two sync workflows,
+  give them a real Linear team: both carry `linearTeamId: 'any'` from their
+  original provisioning, which `SyncToLinear` cannot look up. Re-running
+  `provision:workflows` will not fix that — it keeps the live value and warns.
 - **Add the load-bearing new properties to `preflight.ts`.**
   `REQUIRED_PROPERTIES` covers 30 properties and none of them are `rollout_*`,
   `changelog_draft` or the drafting settings — so a portal missing them passes
