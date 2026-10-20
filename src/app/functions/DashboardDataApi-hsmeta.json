@@ -1,0 +1,12 @@
+{
+  "uid": "dashboard_data_api",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/DashboardDataApi.js",
+    "endpoint": {
+      "path": "dashboard-data",
+      "methods": ["GET"]
+    },
+    "secretKeys": ["DASHBOARD_SHARED_SECRET", "HS_ACCESS_TOKEN", "LINEAR_API_KEY"]
+  }
+}

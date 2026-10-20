@@ -114,10 +114,12 @@ Each of these cost a day at least once.
   The exceptions are real: workflow actions POST to `actionUrl`, the Breeze
   tools are called by HubSpot's agent runtime, and Google, Linear, Asana and
   PubSubHubbub all hold URLs. So does the **CMS theme** in `src/theme/`, which
-  fetches `content-data-api` and `settings-api` from `getServerSideProps` —
-  server-side CMS rendering, where `hubspot.serverless()` does not exist. Grep
-  `src/theme/` before privatising anything; that is what this missed the first
-  time. Those two remain open to the internet and want a shared secret.
+  renders server-side in HubSpot's CMS, where `hubspot.serverless()` does not
+  exist. Grep `src/theme/` before privatising anything; that is what this missed
+  the first time. The theme used to fetch `content-data-api` and `settings-api`,
+  both unauthenticated; since #127 it has one read-only door,
+  `dashboard_data_api`, gated by `DASHBOARD_SHARED_SECRET` (read with
+  `getSecret()` during SSR), and those two are private.
 
 - **Deploys lie.** `hs project upload` prints "DONE" while the build is still
   BUILDING, and containers lag 60–75s after `[deployed]`. Verify the

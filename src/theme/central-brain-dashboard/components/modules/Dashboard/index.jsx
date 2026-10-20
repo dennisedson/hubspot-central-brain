@@ -1,4 +1,5 @@
 import { ModuleFields, TextField } from '@hubspot/cms-components/fields';
+import { getSecret } from '@hubspot/cms-components';
 import styles from '../../../styles/dashboard.module.css';
 
 export const hublDataTemplate = `{% set hublData = {"portalId": hub_id} %}`;
@@ -18,41 +19,59 @@ function assigneeLabel(filter) {
   return 'All issues';
 }
 
+/**
+ * Server-side only. `getSecret` throws if called from an island, which is the
+ * point: the secret must never reach the browser.
+ *
+ * This used to call content-data-api and settings-api directly, both of which
+ * were public and unauthenticated — and settings-api answers saveSettings and
+ * backfill. Both are private now; dashboard-data is the one read-only door,
+ * and it demands this secret.
+ */
 export async function getServerSideProps({ hublData }) {
   const portalId = hublData?.portalId;
-  if (!portalId) {
-    return {
-      serverSideProps: { pipeline: null, settings: null, fetchError: 'Could not determine portal ID' },
-      cacheConfig: { cacheControl: 'no-cache' },
-    };
-  }
-  const base = `https://${portalId}.hs-sites.com/hs/serverless`;
+  const noData = error => ({
+    serverSideProps: { pipeline: null, settings: null, fetchError: error },
+    caching: { cacheControl: 'no-cache' },
+  });
+
+  if (!portalId) return noData('Could not determine portal ID');
+
   try {
-    const [pipelineRes, settingsRes] = await Promise.all([
-      fetch(`${base}/content-data-api`),
-      fetch(`${base}/settings-api?action=getSettings`),
-    ]);
-    const pipelineRaw = await pipelineRes.json();
-    const settingsRaw = await settingsRes.json();
-    const pipeline = pipelineRes.ok
-      ? (typeof pipelineRaw.body === 'string' ? JSON.parse(pipelineRaw.body) : pipelineRaw)
-      : null;
-    const settings = settingsRes.ok
-      ? (typeof settingsRaw.body === 'string' ? JSON.parse(settingsRaw.body) : settingsRaw)
-      : null;
+    const secret = getSecret('DASHBOARD_SHARED_SECRET');
+    const url =
+      `https://${portalId}.hs-sites.com/hs/serverless/dashboard-data` +
+      `?portalId=${encodeURIComponent(portalId)}&secret=${encodeURIComponent(secret)}`;
+
+    const res = await fetch(url);
+
+    // A failed fetch used to fall through as `pipeline: null`, which the page
+    // rendered as "0 active records". A wrong number is worse than an error,
+    // and that is exactly how a broken endpoint went unnoticed.
+    if (!res.ok) return noData(`Dashboard data unavailable (HTTP ${res.status})`);
+
+    const raw = await res.json();
+    const data = typeof raw.body === 'string' ? JSON.parse(raw.body) : raw;
+
     return {
-      serverSideProps: { pipeline, settings, fetchError: null },
-      cacheConfig: { cacheControl: 'no-cache' },
+      serverSideProps: {
+        pipeline: data.pipeline ?? null,
+        settings: data.settings ?? null,
+        fetchError: null,
+      },
+      caching: { cacheControl: 'no-cache' },
     };
   } catch (err) {
-    return {
-      serverSideProps: { pipeline: null, settings: null, fetchError: String(err) },
-      cacheConfig: { cacheControl: 'no-cache' },
-    };
+    return noData(String(err));
   }
 }
 
-export function Component({ pipeline, settings, fetchError, fieldValues }) {
+export function Component({ serverSideProps, fieldValues }) {
+  // getServerSideProps' return lands under `serverSideProps` — it is NOT
+  // spread into props. Destructuring pipeline/settings/fetchError at the top
+  // level yielded three undefineds, which rendered as "0 active records" with
+  // no error, and looked for six weeks like a portal with nothing in it.
+  const { pipeline, settings, fetchError } = serverSideProps ?? {};
   const activeStages =
     pipeline?.stages?.filter(s => !s.metadata?.isClosed && s.label !== 'Archived') ?? [];
   const recordsByStage = {};
