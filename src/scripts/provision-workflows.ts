@@ -567,10 +567,13 @@ async function main() {
   // was the button on the Video card, so metrics were as fresh as the last
   // person to click it, while three docs described a daily poll.
   const youtubeWorkflowName = 'YouTube → Sync Metrics (Daily)';
+  // Authenticated since 2026-10-20: the action posts to youtube_sync_action,
+  // which refuses a call without the shared secret.
   await upsertWorkflow(youtubeWorkflowName, buildPollWorkflow(
     youtubeWorkflowName,
     config.appConfig.objectTypeId,
     youtubeSyncId,
+    fieldSpec([{ name: 'sharedSecret', value: sharedSecret }]),
   ));
 
   // Step 8b: App Config daily rollup doc sweep. The webhook sets a rollup's doc

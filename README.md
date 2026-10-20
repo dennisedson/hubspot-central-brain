@@ -165,13 +165,21 @@ All pipelines live in `.github/workflows/`:
 | `ci.yml`          | PR → master/develop  | Lint, typecheck, test, `typecheck:cards` + `typecheck:pages`, then HubSpot Dry-Run Validate. **Does not run `typecheck:settings`** — `npm run validate` locally does |
 | `deploy-dev.yml`  | Push to `develop`    | All three extension typechecks, build, rewrite action URLs, upload to dev sandbox |
 | `deploy-prod.yml` | Manual (`workflow_dispatch`) | Same, plus `npm run preflight` against prod before anything uploads |
-| `youtube-sync.yml` | Cron `0 9 * * *` + manual | Sync YouTube metrics, asserting postconditions. **Dev only** — the portal input defaults to `51869810` |
-| `credential-health.yml` | Cron `0 13 * * *` + manual | Asks the `app-health` function on both portals to probe every external credential |
 | `claude.yml`      | `@claude` mention    | Mention-triggered assistant. Shares the broken federation config described in issue #98, so it will fail until that is fixed |
 
-`claude-code-review.yml` was **removed on 2026-10-01** (PR #99). It never
-produced a review: the green checks were skips and the red ones were auth
-failures. Issue #98 has the one-field fix and how to put it back.
+**Nothing here runs on a schedule any more.** Scheduled work is a HubSpot
+"(Daily)" workflow — see `docs/ARCHITECTURE.md` §5.
+
+- `claude-code-review.yml` was **removed on 2026-10-01** (PR #99). It never
+  produced a review: the green checks were skips and the red ones were auth
+  failures. Issue #98 has the one-field fix and how to put it back.
+- `credential-health.yml` was **removed on 2026-10-15** (#125). Its prod job
+  sat behind the deploy approval gate, so fourteen daily runs queued and
+  reported nothing. The probe itself stays: `PORTAL=prod npm run health`, on
+  demand.
+- `youtube-sync.yml` was **removed on 2026-10-20**. It existed because HubSpot
+  was believed to have no scheduler; it ran dev only, hours late, and called the
+  sync with no secret. The *YouTube → Sync Metrics (Daily)* workflow replaces it.
 
 ### GitHub Secrets (per environment)
 
@@ -182,12 +190,12 @@ exists in GitHub, left over from the portal deleted on 2026-09-29.)
 | ------------------------------------ | ----------- | ------- | ------------------------------ |
 | `HUBSPOT_DEV_ACCOUNT_ID`            | dev         | `ci.yml`, `deploy-dev.yml` | Dev sandbox portal ID |
 | `HUBSPOT_DEV_PERSONAL_ACCESS_KEY`   | dev         | `ci.yml`, `deploy-dev.yml` | Dev sandbox PAK |
-| `HUBSPOT_DEV_SYNC_SECRET`           | dev         | `credential-health.yml` | Authenticates the health probe. Not currently set — the dev check warns and skips |
+| `HUBSPOT_DEV_SYNC_SECRET`           | dev         | nothing since #125 | Was the health probe's. `npm run health` reads `.env` locally |
 | `HUBSPOT_PROD_ACCOUNT_ID`           | Prod        | `deploy-prod.yml` | Production portal ID |
 | `HUBSPOT_PROD_PERSONAL_ACCESS_KEY`  | Prod        | `deploy-prod.yml` | Production portal PAK |
 | `HUBSPOT_PROD_SERVICE_KEY`          | Prod        | `deploy-prod.yml` → `preflight` | Private app token the preflight reads the schema with |
 | `HUBSPOT_PROD_DEVELOPER_KEY`        | Prod        | `deploy-prod.yml` → `preflight` | The automation actions API rejects OAuth tokens |
-| `HUBSPOT_PROD_SYNC_SECRET`          | Prod        | `deploy-prod.yml`, `credential-health.yml` | Authenticates the health probe |
+| `HUBSPOT_PROD_SYNC_SECRET`          | Prod        | `deploy-prod.yml` → `preflight` | Required by the scripts' env loader |
 | `ASANA_API_KEY`                     | Prod        | `deploy-prod.yml` → `preflight` | |
 
 > An **environment** secret is invisible to a job that does not declare

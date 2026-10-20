@@ -238,9 +238,6 @@ flowchart LR
     cp --> p2
     v["video"]
     cfg["app_configs (dev) /<br/>app_settings (prod)"]
-    ce["changelog_entry<br/>VESTIGIAL — dev only,<br/>deleted from prod 2026-10"]
-
-    style ce stroke-dasharray: 5 5
 ```
 
 **A changelog is content.** It lives on `content_piece` in a second pipeline,
@@ -249,26 +246,38 @@ associations and routing complexity for no benefit. The workflow actions
 distinguish the two with an `objectType: 'content' | 'changelog'` input field,
 never by which HubSpot object they were called from.
 
-`changelog_entry` was the leftover from before that consolidation, holding zero
-records on both portals. **It has been deleted from prod (22047910).** Dev still
-carries it (`2-67505888`); `provision-asana-property.ts` already treats its
-absence as the expected state, so nothing breaks either way. Do not build on it.
-Portal state here is operator-reported as of 2026-10-02 — this machine cannot
-reach either portal.
+`changelog_entry` was the leftover from before that consolidation. **It is gone
+from both portals** — checked 2026-10-20 against each portal's schema list: dev
+has `content_piece`, `video` and `app_configs`; prod has `content_piece`,
+`video`, `app_settings` and an unrelated `emp_advocacy_stories`.
+`provision-asana-property.ts` already treats its absence as the expected state.
 
 ---
 
 ## 5. What runs on a schedule, and what does not
 
-| Thing | Trigger | Reality |
+**Everything scheduled is a HubSpot "(Daily)" workflow.** No GitHub Action runs
+on a cron any more. The cadence is the workflow's top-level `enrollmentSchedule`
+(`{"type":"DAILY","timeOfDay":{"hour":17,"minute":0}}`), separate from its
+`enrollmentCriteria` — whose `type: 'MANUAL'` describes which records enrol, not
+how often. Reading one for the other is why the YouTube sync spent three weeks on
+a GitHub cron. `provision-workflows.ts` creates each daily **disabled and
+unscheduled**; schedule it and turn it on in the UI.
+
+| Thing | Trigger | Reality, checked 2026-10-20 |
 |---|---|---|
-| `YouTubeSync` | `youtube-sync.yml`, GitHub Actions cron `0 9 * * *` | genuinely daily, but **dev only** — the job's `portal` input defaults to `51869810` and nothing passes prod |
-| `app-health` | `credential-health.yml`, cron `0 13 * * *`, both portals | on `master` and active since 2026-10-01. No scheduled run has been observed yet (checked 2026-10-02 14:29 UTC). GitHub delays this repo's crons by hours — `youtube-sync`'s 09:00 cron has been firing around 15:30 — so absence here is not yet evidence of a fault |
-| "(Daily)" HubSpot workflows | `enrollmentSchedule` | genuinely daily at 17:00 — verified on dev. But the schedule is **set by hand in the UI**, not provisioned: a new portal gets the workflow without one |
-| `AsanaPoll` | workflow action | pull-based, because Asana webhooks proved unreliable |
-| `RollupDocSync` | "Changelog Rollup Docs (Daily)" workflow action | catches what no webhook announces — a doc attached to a release after its issues, and a completed scheduled release rolling issues on to the next month. Schedule set by hand, like the other dailies |
+| `AsanaPoll` | *Asana → Poll for Stage Changes (Daily)* | on, 17:00, on dev. **Off on prod** |
+| `FellowSync` | *Fellow → Sync Action Items to Tasks (Daily)* | on, 17:00, on dev — but every Fellow path answers 404 (`PROJECT-CONTEXT.md` §3.1). Off on prod |
+| `YouTubeSyncAction` | *YouTube → Sync Metrics (Daily)* | exists on both portals, **off on both**. Was a GitHub cron until 2026-10-20. Prod's YouTube refresh token is dead, so prod would fail until re-authorised |
+| `RollupDocSync` | *Changelog Rollup Docs (Daily)* | exists on dev, off. Catches what no webhook announces — a doc attached to a release after its issues, a completed release rolling issues on |
+| `app-health` | `PORTAL=… npm run health`, **on demand** | its daily cron was removed in #125: the prod job inherited the deploy approval gate and fourteen runs queued unreported |
 | `LinearWebhook` | Linear push | real-time |
-| Deploys | merge to `develop` → Dev, `master` → Prod | see the deploy traps in `CLAUDE.md` |
+| Deploys | merge to `develop` → Dev; `master` → Prod, triggered by hand | see the deploy traps in `CLAUDE.md` |
+
+**Prod's eight Central Brain workflows are all disabled** (checked 2026-10-20),
+so no HubSpot → Linear/Asana sync and no daily job runs there yet. Since
+2026-10-20 the two sync workflows can be enabled as they are, `'any'` team and
+all — `SyncToLinear` asks each existing issue for its own team.
 
 **`app-health` is the only check that would notice a dead credential.**
 `npm run preflight` is entirely structural — object ids, pipelines, stages,
@@ -277,7 +286,8 @@ credentials have died silently here: the HubSpot service key (a day to
 diagnose), the YouTube refresh token, and `ANTHROPIC_API_KEY`, which was
 invalid in `.env` and on both portals at once. The probes run *inside the app*,
 because the credentials live in four separate homes (§6) and validating a copy
-in CI proves nothing about the one the running functions use.
+in CI proves nothing about the one the running functions use. It runs only when
+someone runs `npm run health`, so run it before trusting a quiet portal.
 
 ---
 

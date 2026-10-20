@@ -20,19 +20,20 @@ person clicks, connects and authorises to make the thing actually run.
 Be honest with yourself about this before you start, because several of these layers will
 happily accept setup effort and give nothing back yet.
 
-Last reviewed against the code and the merged PRs on **2026-10-02**.
+Last reviewed against the code, the merged PRs and both portals on **2026-10-20**.
 
 | Layer | What it does | Status |
 |---|---|---|
-| **Content spine** | Linear ↔ HubSpot ↔ Asana | **Working.** Exercised daily; 11 records in dev as of 2026-09-29, 82 `content_piece` records on prod as of 2026-10-02 |
+| **Content spine** | Linear ↔ HubSpot ↔ Asana | **Working on dev.** On prod, Linear → HubSpot runs (the webhook), but **HubSpot → Linear/Asana does not: all eight prod workflows are switched off** (checked 2026-10-20). They can be turned on as they are — §1.8 |
+| **Digest doc links** | Each monthly rollup's Google Doc, from its Linear release, on your entries in it | **Deployed to both portals 2026-10-20; not yet seen working live.** Property provisioned on both; the daily workflow exists on dev only — §4b |
 | **Fellow → tasks** | Meeting action items become HubSpot Projects | **In doubt.** Every path on `api.fellow.app` now answers `404` with an HTML page, including the root, and prod has never set `fellow_last_sync`. Found by the credential probe, not yet diagnosed — §6.3 |
 | **Changelog** | Linear issue → Changelog record → pipeline | **Working, carrying records.** 70 changelog records on prod, and the drafting prompts measured against them |
 | **Changelog drafting** | Draft a post or a digest entry from the record, with Claude | **Working.** Card on the record, prompts in version control, model and thinking selectable — §4b |
 | **Rollout dates** | Milestone dates parsed from the Linear description, board sorted by the next one | **Working.** `rollout_*` properties; `1970-01-01` treated as unset |
 | **Cards** | Linear / Asana Status, Related Content, Enterpret Insights, Changelog Draft (Content), Meeting Intelligence (Contacts), YouTube (Video) | **Working** |
 | **App settings surface** | Settings reachable from Connected apps → the app → **Settings** | **Working since 2026-10-01.** This guide previously said it did not exist; the platform's tabs changed — §1.5 |
-| **Video** | YouTube OAuth, metrics sync, AI suggestions, UTM attribution | **Partly proven.** Live Google and Anthropic calls have both now been made. Dev is connected; **prod's refresh token is dead** (`invalid_grant`) and needs re-authorising — §4.2 |
-| **Credential health** | Daily probe of every external credential, from inside the app | **Deployed.** On `master` and active; no scheduled run observed yet — §1.7 |
+| **Video** | YouTube OAuth, metrics sync, AI suggestions, UTM attribution | **Partly proven.** Live Google and Anthropic calls have both now been made. Dev is connected; **prod's refresh token is dead** (`invalid_grant`) and needs re-authorising — §4.2. The daily sync is a HubSpot workflow since 2026-10-20, off on both portals — §4.3 |
+| **Credential health** | Probe of every external credential, from inside the app | **Working, on demand.** `PORTAL=prod npm run health`. Its daily cron was removed in #125 — §1.7 |
 | **Breeze agent tools** | Ask Breeze about your pipeline | **Blocked.** Returns UNAUTHORIZED — see `docs/walkthroughs/` |
 | **Enterpret** | Friction themes on content | **Blocked.** No API key obtainable; data arrives out-of-band (#12) |
 | **Social / LinkedIn** | Auto-drafted posts | **Blocked.** HubSpot Social not connected (#18) |
@@ -149,15 +150,21 @@ Either entrance works and both render the same form:
 
 ### 1.6 Confirm it's alive
 
+Open the settings form (§1.5). If its Linear team and assignee lists fill, the functions are
+deployed and can reach Linear. Then the credentials, which is §1.7.
+
+**Do not curl `settings-api` to check.** It answered 200 until 2026-10-15; since #126/#127 it
+publishes no URL — the form calls it by uid — so a curl answers 404 by design. Only functions
+with a named caller in `function-endpoints-are-justified.test.ts` keep a public URL: workflow
+actions, webhooks, the Breeze tools, `app-health` and the dashboard's `dashboard-data`.
+
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" \
-  https://<portalId>.hs-sites.com/hs/serverless/settings-api      # expect 200
 npx hs app logs --app=<appId> --type=serverless-gateway-execution --since=10m
 ```
 
-Note the log type: these functions are reached through a public gateway URL, so invocations
-land in `serverless-gateway-execution`. `serverless-execution` shows silence whether or not
-anything ran — it is the wrong stream and will mislead you.
+Note the log type: workflow actions and webhooks reach their functions through the public
+gateway, so those invocations land in `serverless-gateway-execution`. `serverless-execution`
+showed silence for them whether or not anything ran — the wrong stream, and misleading.
 
 ### 1.7 Confirm the credentials are alive, not just present
 
@@ -169,22 +176,41 @@ project: the HubSpot service key (a day to diagnose), the YouTube refresh token,
 So the app probes its own credentials. Ask it:
 
 ```bash
-curl -sS -X POST https://<portalId>.hs-sites.com/hs/serverless/app-health \
-  -H 'content-type: application/json' \
-  -d '{"secret":"<SYNC_SHARED_SECRET>","portalId":"<portalId>"}' | jq .
+PORTAL=prod npm run health      # or PORTAL=dev
 ```
 
-It returns **200 even when degraded** — a non-2xx would be indistinguishable from the
-endpoint being down — so read `.checks[]`, not the status code. `unconfigured` means the
-credential is not set on that portal, which is not a failure.
+That posts to the public `app-health` function with the portal's `SYNC_SECRET` from `.env`
+and prints each check. The function returns **200 even when degraded** — a non-2xx would be
+indistinguishable from the endpoint being down — so the script reads `.checks[]`, not the
+status code. `unconfigured` means the credential is not set on that portal, which is not a
+failure.
 
-`.github/workflows/credential-health.yml` runs this against both portals daily at 13:00
-UTC and annotates each broken credential by name. It needs a `HUBSPOT_<PORTAL>_SYNC_SECRET`
-GitHub environment secret; a portal without one warns and skips rather than failing daily.
-Dev has none set today.
+**It runs when you run it.** A daily `credential-health.yml` did this until #125 removed it
+on 2026-10-15: its prod job declared `environment: Prod` to reach the secret, inherited the
+deploy approval gate, and fourteen runs queued behind a reviewer while the job's absence from
+the failure list read as "all clear". Run `npm run health` before trusting a quiet portal.
 
 The endpoint requires the shared secret because it is public and every probe costs a real
 third-party call — unauthenticated, anyone could spend this portal's Anthropic credits.
+
+### 1.8 Turn the workflows on
+
+`provision:workflows` creates every workflow **switched off**, and the "(Daily)" ones with **no
+schedule**. Nothing runs until you turn it on, and a daily runs only once it has a schedule:
+**Edit → Enrollment triggers → "On a schedule" → Daily, 17:00**, then turn it on. Re-running
+the script keeps both.
+
+As of 2026-10-20, all eight on prod are off. What each is safe to switch on:
+
+| Workflow | Turn on? |
+|---|---|
+| Content / Changelog → Sync to Linear + Asana | **Yes.** Both carry `linearTeamId: 'any'`, which is fine for stage syncs since 2026-10-20 — `SyncToLinear` asks each issue for its team. A note promoted from the vault would get `no_team_for_create` instead of a Linear issue until a real team is set on the action |
+| Asana → Poll for Stage Changes (Daily) | **Yes.** Schedule it first |
+| Content / Video → Associate Related Content | **Yes** |
+| Changelog Rollup Docs (Daily) | **Yes**, once it exists on the portal (`provision:workflows` after a deploy) — §4b |
+| YouTube → Sync Metrics (Daily) | **Only once the portal's YouTube token is alive** — §4.2. Prod's is dead, so it would fail daily |
+| Fellow → Sync Action Items to Tasks (Daily) | **Not yet.** Every Fellow path answers 404 — §6.3 |
+| Content → Generate LinkedIn Draft | Pointless until HubSpot Social is connected (#18) |
 
 ---
 
@@ -248,8 +274,9 @@ longer true, and `docs/TEST-PLAN.md` §3 was the document that had it right:
   `{"error":"invalid_grant","error_description":"Bad Request"}` on 2026-10-01 — the second
   time this has happened. Re-authorise it (§4.2), and publish the consent screen first
   (§4.1) or it will die again in seven days.
-- The daily sync in GitHub Actions **only syncs dev**: the job's `portal` input defaults
-  to `51869810` and nothing passes prod, so prod's dead token does not surface there.
+- **No daily sync runs on either portal right now.** The GitHub cron that synced dev was
+  replaced on 2026-10-20 by the *YouTube → Sync Metrics (Daily)* workflow, which is off on
+  both (§4.3). Turn prod's on only after re-authorising, or it fails every day.
 
 The card rendering (test plan §5) still has never been run by anyone.
 
@@ -309,40 +336,26 @@ but the refresh token is not yet set, so no API call can be made. `status` will 
 
 ### 4.3 Sync metrics
 
-**The schedule lives in GitHub, not in HubSpot.** `.github/workflows/youtube-sync.yml` runs it
-on a `0 9 * * *` cron and can be triggered by hand from the Actions tab. The cron syncs **dev
-only** — the `portal` input defaults to `51869810`. To sync prod, dispatch it by hand with
-`22047910`, once prod's refresh token is alive again. GitHub also runs these crons late:
-observed firings have been around 15:30 UTC against a 09:00 schedule.
+**Daily: the *YouTube → Sync Metrics (Daily)* workflow.** Schedule it and switch it on (§1.8)
+once the portal's YouTube token is alive. **By hand: the Sync button on the Video card**, for
+one record or the whole portal.
 
-It lives in GitHub because a GitHub cron needs no provisioning step, no manual enable, and
-its logs are readable without a portal login. HubSpot Projects serverless has no scheduler
-of its own: a function runs when something invokes it — an HTTP request, a workflow step,
-or a card. `provision:workflows` still creates **YouTube → Sync Metrics** as a workflow
-action so the sync can be used as a step inside some other workflow; that was never what
-made it recur.
+The two use two doors. The card calls `youtube_sync` by uid, privately. The workflow posts to
+`youtube_sync_action` at `/youtube-sync`, which refuses a call without the shared secret —
+`provision:workflows` fills in the workflow's `sharedSecret` field.
 
-> **This section used to say the "(Daily)" HubSpot workflows are not daily.** That was
-> wrong, and wrong in a specific way worth knowing: it read `type: 'MANUAL'` off
-> `enrollmentCriteria`, which describes **how records enter** a workflow, and treated it as
-> the cadence. The cadence lives in `enrollmentSchedule`, a separate top-level field. Checked
-> against dev on 2026-10-01, both poll workflows carry
-> `{"type":"DAILY","timeOfDay":{"hour":17,"minute":0}}` and are ON. PR #85.
->
-> **But the schedule is not provisioned.** `provision-workflows.ts` creates them
-> `isEnabled: false` with no `enrollmentSchedule`; dev's was set by hand in the UI and any
-> newly provisioned portal — prod included — needs the same: Edit → Enrollment triggers →
-> "On a schedule". The script preserves an existing schedule on re-run, which is why dev's
-> has survived repeated provisioning. The same comment still reads the old way in
-> `.github/workflows/youtube-sync.yml`; believe this file.
+> **Until 2026-10-20 the daily sync was a GitHub Actions cron**, `youtube-sync.yml`. It was
+> put there on the belief that HubSpot has no scheduler, read off `type: 'MANUAL'` in the
+> workflows' `enrollmentCriteria` — which describes **which records enter**, not the cadence.
+> The cadence is `enrollmentSchedule`, a separate top-level field; dev's Asana and Fellow
+> dailies carry `{"type":"DAILY","timeOfDay":{"hour":17,"minute":0}}` and run (PR #85). The
+> cron outlived the correction: it synced dev only, ran hours late (≈15:30 against 09:00), and
+> called `/youtube-sync` with no secret because the function checked none.
 
-> **The scheduled Action only runs from the default branch.** GitHub runs `schedule` triggers from
-> `master` alone, so the cron is inert until the workflow file is merged there. `workflow_dispatch`
-> works from anywhere in the meantime.
-
-The job asserts postconditions rather than the HTTP status: it fails on a non-empty `errors`
-array, fails when `analyticsStatus` starts `failed:`, warns on `skipped:`, and warns when no Video
-records are found — that last one being indistinguishable from a broken search.
+What the cron did well, and the workflow does not: it **failed loudly on a sync that
+"succeeded" with nothing done**. In the workflow, a sync that cannot authenticate or reach
+YouTube answers 500 and shows as a failed action; one that finds zero Video records answers
+200 with `recordsFound: 0` in its output fields — look there, not just at the green tick.
 
 The sync finds every Video record
 carrying a `youtube_video_id`, fetches statistics in batches of 50, and writes `view_count`,
@@ -474,11 +487,11 @@ why.
 
 **Work enters three ways.** Tag a Linear issue and the webhook upserts a Content or Changelog
 record. Create a Content record by hand in HubSpot. Or let the daily Fellow sync turn meeting
-action items into tasks against the right contact.
+action items into tasks against the right contact — once Fellow answers again (§6.3).
 
-**Then the spine carries it.** Moving a Content record's stage fires *Content → Sync to Linear
-+ Asana*, pushing the new state to the linked issue and task. Changes made directly in Asana
-return via the daily poll.
+**Then the spine carries it** — on a portal whose workflows are switched on (§1.8). Moving a
+Content record's stage fires *Content → Sync to Linear + Asana*, pushing the new state to the
+linked issue and task. Changes made directly in Asana return via the daily poll.
 
 **You watch it from the records.** A Content record shows live Linear/Asana state, related
 content by tag or theme, and the friction theme behind it. A Contact shows meeting history and
@@ -609,9 +622,6 @@ what was stored. That is the architecture, not a shortfall.
   `vault-template/prompts/promote-note.md` is what starts it.
 
 An empty Enterpret card means nobody has run the sync. It is not a fault to report.
-- **`provision:workflows` on an already-provisioned portal** — creating workflows on a fresh
-  portal is fine; updating existing ones has a fix that has not yet been run against a live
-  portal. Edit existing workflows in the UI until it is confirmed.
 - **YouTube push notifications** are blocked by the platform, not by missing work.
   HubSpot's serverless gateway accepts only `application/json` bodies and YouTube's
   WebSub hub sends `application/atom+xml`, so notifications are rejected with 415

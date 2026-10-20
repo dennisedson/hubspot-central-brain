@@ -14,6 +14,43 @@ unless the text says issue.
 
 ## 2026-10-20
 
+### The YouTube daily sync left GitHub, and its endpoint got a lock
+
+`youtube-sync.yml` existed because HubSpot was believed to have no scheduler —
+`enrollmentCriteria.type: 'MANUAL'` read as "a person enrols". The cadence is the
+separate `enrollmentSchedule`, and that was known by 2026-10-01; the cron stayed
+anyway, syncing dev only, around 15:30 for a 09:00 schedule, and posting to
+`/youtube-sync` with no secret because `YouTubeSync` checked none.
+
+The sync now has two doors. `youtube_sync` is private — the Video card calls it
+by uid. `youtube_sync_action` owns `/youtube-sync`, refuses a call without
+`SYNC_SHARED_SECRET`, and is what *YouTube → Sync Metrics (Daily)* posts to; the
+workflow action gained a required `sharedSecret` input, and `provision:workflows`
+fills it. The GitHub workflow is deleted. Lost in the move: the job failed loudly
+on a sync that found nothing — in HubSpot that is a green run with
+`recordsFound: 0`.
+
+Checking the other actions turned up that **only four of twelve workflow
+actions authenticated**, under a comment saying all of them did.
+`workflow-actions.test.ts` now holds the truth: every action checks the secret
+end to end or is named in `NOT_YET_AUTHENTICATED` with its reason, and a new one
+cannot join that list by accident. None of the seven calls Anthropic.
+
+### Documentation audit against the code and both portals
+
+The docs had drifted since the 2026-10-02 audit. This pass checked them against
+the code and against read-only listings of both portals, and corrected: the
+deleted `credential-health.yml` (#125) still described as a daily cron in four
+places; `changelog_entry`, now gone from dev too, still described as dev-only;
+`curl settings-api # expect 200` in the operator guide and test plan, a URL that
+has answered 404 by design since #127; preflight described as missing
+properties it has covered for weeks; "this machine cannot reach either portal";
+the walkthrough run "stopping at 56"; and prod's eight workflows, all switched
+off, not mentioned anywhere. New: operator guide §1.8 on which workflows to turn
+on, two decisions in PROJECT-CONTEXT §4 (rollups are Linear releases; scheduled
+work is a HubSpot daily workflow), a `docs/walkthroughs/README.md` index, and
+dated update notes on the five guides whose instructions would now mislead.
+
 ### `SyncToLinear` asks the issue for its team
 
 Prod's two sync workflows carry `linearTeamId: 'any'`, the assignee-first

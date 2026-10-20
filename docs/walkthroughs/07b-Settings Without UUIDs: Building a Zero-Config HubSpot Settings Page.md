@@ -1,5 +1,7 @@
 ## 🎬 YouTube Episode Guide: Settings Without UUIDs: Building a Zero-Config HubSpot Settings Page
 
+> **⚠️ Update, 2026-10-20 — read before following along.** **`settings-api` no longer publishes an endpoint** (#126, #127). The settings form calls `app_settings_api` by uid through `hubspot.serverless()`, so drop the `endpoint` block from the hsmeta shown here; an `endpoint` is a public, unauthenticated URL, and this one answered `saveSettings`. The rest of the episode stands.
+
 **🎯 Core Learning Objective:**
 "By the end of this video, you will know how to build a HubSpot app settings page that pulls live data from a third-party API (Linear) to show friendly dropdowns instead of asking users to paste raw UUIDs."
 

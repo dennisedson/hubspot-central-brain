@@ -313,14 +313,14 @@ function param(ctx: SyncContext, key: string): string | undefined {
 /**
  * Workflow-action output, alongside the plain outcome the card reads.
  *
- * This function has two callers with different expectations: the Video card
- * calls it over `hubspot.serverless()` and reads the outcome directly, while a
- * workflow step reads `outputFields` out of the response body. Returning both
- * lets one function serve both — the same thing `VideoAttribution` does.
+ * Shared with YouTubeSyncAction, the public, secret-checked door the daily
+ * workflow posts to. This function is now private — the Video card calls it by
+ * uid — but still returns both shapes, so a direct call reads the same either
+ * way.
  *
  * Every value is a string because that is what a workflow field holds.
  */
-function outputFieldsFor(outcome: SyncOutcome): Record<string, string> {
+export function outputFieldsFor(outcome: SyncOutcome): Record<string, string> {
   return {
     syncStatus: outcome.errors.length > 0 ? 'partial' : 'success',
     recordsFound: String(outcome.recordsFound),

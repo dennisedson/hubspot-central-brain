@@ -4,21 +4,53 @@
   "config": {
     "actionUrl": "https://51869810.hs-sites.com/hs/serverless/youtube-sync",
     "isPublished": true,
-    "supportedClients": [{ "client": "WORKFLOWS" }],
+    "supportedClients": [
+      {
+        "client": "WORKFLOWS"
+      }
+    ],
     "objectTypes": [],
-    "inputFields": [],
+    "inputFields": [
+      {
+        "typeDefinition": {
+          "name": "sharedSecret",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": [
+          "STATIC_VALUE"
+        ],
+        "isRequired": false
+      }
+    ],
     "outputFields": [
       {
-        "typeDefinition": { "name": "syncStatus", "type": "string", "fieldType": "text" }
+        "typeDefinition": {
+          "name": "syncStatus",
+          "type": "string",
+          "fieldType": "text"
+        }
       },
       {
-        "typeDefinition": { "name": "recordsFound", "type": "string", "fieldType": "text" }
+        "typeDefinition": {
+          "name": "recordsFound",
+          "type": "string",
+          "fieldType": "text"
+        }
       },
       {
-        "typeDefinition": { "name": "recordsUpdated", "type": "string", "fieldType": "text" }
+        "typeDefinition": {
+          "name": "recordsUpdated",
+          "type": "string",
+          "fieldType": "text"
+        }
       },
       {
-        "typeDefinition": { "name": "analyticsStatus", "type": "string", "fieldType": "text" }
+        "typeDefinition": {
+          "name": "analyticsStatus",
+          "type": "string",
+          "fieldType": "text"
+        }
       }
     ],
     "labels": {
@@ -27,8 +59,12 @@
         "appDisplayName": "Central Brain",
         "actionDescription": "Fetches view, like and comment counts plus average view duration for every Video record carrying a youtube_video_id",
         "actionCardContent": "Sync YouTube → HubSpot",
-        "inputFieldLabels": {},
-        "inputFieldDescriptions": {},
+        "inputFieldLabels": {
+          "sharedSecret": "Shared Secret"
+        },
+        "inputFieldDescriptions": {
+          "sharedSecret": "Shared secret that authenticates this request; must match the SYNC_SHARED_SECRET function secret"
+        },
         "outputFieldLabels": {
           "syncStatus": "Sync Status",
           "recordsFound": "Video Records Found",

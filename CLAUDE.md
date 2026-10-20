@@ -123,6 +123,17 @@ Each of these cost a day at least once.
   `dashboard_data_api`, gated by `DASHBOARD_SHARED_SECRET` (read with
   `getSecret()` during SSR), and those two are private.
 
+- **HubSpot workflows do run on a schedule.** The cadence is the flow's
+  top-level `enrollmentSchedule`; `enrollmentCriteria.type: 'MANUAL'` only says
+  which records enrol. Reading one for the other put the YouTube sync on a
+  GitHub cron for three weeks — dev only, hours late, unauthenticated. Scheduled
+  work is a "(Daily)" workflow (PROJECT-CONTEXT §4); provisioning creates it off
+  and unscheduled, so set both in the UI.
+- **A deployed workflow action cannot gain a required input.** HubSpot rejects
+  the deploy with `BACKWARDS_INCOMPATIBLE_CHANGE_NEW_REQUIRED_FIELD` — "would
+  break active enrollments missing a value for it" — after every check here has
+  passed. Add the input with `isRequired: false` and enforce it in the function,
+  as `youtube_sync_action` does with `sharedSecret`.
 - **Deploys lie.** `hs project upload` prints "DONE" while the build is still
   BUILDING, and containers lag 60–75s after `[deployed]`. Verify the
   postcondition, never the exit code or the status line.

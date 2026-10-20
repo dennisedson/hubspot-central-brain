@@ -42,13 +42,17 @@ whether or not anything ran — it has misled people on this project before.
 ### 1.1 The app is deployed and answering
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" \
-  https://51869810.hs-sites.com/hs/serverless/settings-api
+PORTAL=dev npm run health
 ```
 
-**Expect** `200`.
-**If not** — nothing else in this plan will pass. Check the latest deploy
-succeeded before continuing.
+**Expect** a list of checks, with `hubspot` `ok`.
+**If it cannot connect at all** — nothing else in this plan will pass. Check the
+latest deploy succeeded before continuing.
+
+This step curled `settings-api` and expected `200` until 2026-10-15. That
+function publishes no URL since #126/#127 — the settings form calls it by uid —
+so a curl answers `404` and proves nothing. `app-health` is public by design and
+answers only with the shared secret, which the script reads from `.env`.
 
 ### 1.2 The data model exists
 
@@ -63,10 +67,11 @@ uses, so you are looking for:
 | Videos | `video` | both |
 | App Configs | `app_configs` | dev |
 | App Settings | `app_settings` | prod — portals predating the rename carry this name, and the scripts accept either |
-| Changelog Entries | `changelog_entry` | **dev only.** Vestigial, 0 records, deleted from prod in 2026-10 |
 
-So: **four on dev, three on prod.** This section said "exactly four" when it was
-written, before `changelog_entry` was deleted from prod.
+So: **three on each.** Prod also carries an unrelated `emp_advocacy_stories`.
+`changelog_entry` — the pre-consolidation changelog object — is gone from both,
+checked against each portal's schema list on 2026-10-20. Its presence would be
+the fail signal now.
 
 **Fail signal** — `app_configs` *and* `app_settings` on the same portal. Those
 are not interchangeable: the app reads `app_configs`, and a stray `app_settings`
@@ -351,28 +356,31 @@ redeploy.
 The status above only proves a secret exists. This proves it works:
 
 ```bash
-curl -s -X POST https://51869810.hs-sites.com/hs/serverless/youtube-sync \
-  -H 'Content-Type: application/json' -d '{}'
+PORTAL=dev npm run health
 ```
 
-**Expect** a JSON outcome with `"errors":[]`.
-**Why this is the real test** — the sync exchanges the refresh token for an
-access token *before* it searches for records. A clean response means that
-exchange succeeded. A `500` means it did not.
+**Expect** `youtube` `ok`. `app-health` performs the refresh exchange itself and
+names the failing credential rather than returning a stack trace. Operator
+guide §1.7.
 
-**Cheaper, and it names the credential:** `app-health` probes the refresh
-exchange directly alongside every other credential, and reports a verdict
-rather than a stack trace. Operator guide §1.7.
+**Or run a real sync:** the **Sync** button on a Video card (§5). The sync
+exchanges the refresh token *before* it searches for records, so a clean result
+means the exchange succeeded.
+
+Until 2026-10-20 this step curled `/youtube-sync` with an empty body. That path
+now belongs to `youtube_sync_action`, which answers `401` without the shared
+secret — the endpoint used to be open to anyone.
 
 ---
 
 ## 3b. Credentials are alive, not just present
 
 ```bash
-curl -sS -X POST https://51869810.hs-sites.com/hs/serverless/app-health \
-  -H 'content-type: application/json' \
-  -d '{"secret":"<SYNC_SHARED_SECRET>","portalId":"51869810"}' | jq '.checks[]'
+PORTAL=dev npm run health
 ```
+
+(The script posts `{"secret": <SYNC_SECRET from .env>, "portalId": …}` to the
+public `app-health` function — the same request this step used to make by hand.)
 
 **Expect** `ok` for `hubspot`, `linear`, `asana` and `anthropic`.
 **Expect** the endpoint to answer **200 even when a credential is broken** —
