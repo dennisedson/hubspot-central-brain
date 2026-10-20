@@ -122,6 +122,44 @@ forces action. Two rules are load-bearing:
 today, so a stored copy is right for one day. `ContentDataApi` computes it at
 read time, and `SettingsApp.tsx` orders each pipeline column by it.
 
+### Monthly rollups and their digest doc
+
+Each monthly changelog digest is a **Linear release** named
+`<Month> <Year> Changelog Rollup`, in the "Monthly Changelog Rollups" pipeline.
+The digest's owner — usually not me — attaches its Google Doc to the release as
+a link. Two properties on the entry follow it: `changelog_rollup` (the release
+name) and `changelog_doc_url` (the doc). Spec:
+`docs/superpowers/specs/2026-10-20-rollup-doc-link-design.md`.
+
+**Who decides.** The rule lives once, in `src/app/lib/rollup-doc.ts`, and two
+paths apply it:
+
+| path | when | does |
+|---|---|---|
+| `LinearWebhook` → `applyRollup` | every issue update, after the stage write, in **both** branches | **sets** `changelog_rollup` from the payload and `changelog_doc_url` from the release's links. Never clears |
+| `RollupDocSync` | daily workflow on App Config | **sets and clears**, from every monthly rollup's links and full issue list |
+
+**`changelog_doc_url` has three writers now**: Create Doc on the changelog card,
+a person, and these two paths. A monthly rollup's doc **wins** over whatever is
+there. Only a *rollup doc* — the doc of any monthly rollup, compared by Google
+Doc id — is ever **cleared**, which is how a link the rollup paths wrote is told
+apart from one a person or Create Doc wrote, with no provenance stored.
+
+**Neither path creates a record.** The webhook writes with `updateByLinearId`,
+which answers `false` on 404 where `hsUpsertByUniqueProperty` would create. The
+sweep only considers entries a search finds. So issues in a rollup that belong
+to other people never become records here.
+
+**The webhook's step cannot fail the webhook.** It runs after the stage has
+synced; a Linear error still writes the release name, and a write error is
+reported in the response body as `rollup`, with a 200.
+
+**The sweep's reads are strict.** It decides "this issue left its rollup" from
+the issue's *absence* from Linear's list, so a partial list would clear real
+links. `fetchEveryPage` and `searchAll` throw rather than return part of a set —
+unlike `AppSettingsApi`'s `fetchAllPages`, which is lenient on purpose — and
+every read happens before any write.
+
 ---
 
 ## 3. Settings — one record gates everything
@@ -228,6 +266,7 @@ reach either portal.
 | `app-health` | `credential-health.yml`, cron `0 13 * * *`, both portals | on `master` and active since 2026-10-01. No scheduled run has been observed yet (checked 2026-10-02 14:29 UTC). GitHub delays this repo's crons by hours — `youtube-sync`'s 09:00 cron has been firing around 15:30 — so absence here is not yet evidence of a fault |
 | "(Daily)" HubSpot workflows | `enrollmentSchedule` | genuinely daily at 17:00 — verified on dev. But the schedule is **set by hand in the UI**, not provisioned: a new portal gets the workflow without one |
 | `AsanaPoll` | workflow action | pull-based, because Asana webhooks proved unreliable |
+| `RollupDocSync` | "Changelog Rollup Docs (Daily)" workflow action | catches what no webhook announces — a doc attached to a release after its issues, and a completed scheduled release rolling issues on to the next month. Schedule set by hand, like the other dailies |
 | `LinearWebhook` | Linear push | real-time |
 | Deploys | merge to `develop` → Dev, `master` → Prod | see the deploy traps in `CLAUDE.md` |
 
