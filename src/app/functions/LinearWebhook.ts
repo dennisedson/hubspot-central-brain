@@ -6,9 +6,11 @@ import {
   readAppSettings,
   readProjectState,
   recordUnmappedProject,
+  updateByLinearId,
 } from '../lib/hubspot-client';
-import type { LinearWebhookPayload } from '../lib/types';
-import { getIssueProject } from '../lib/linear-client';
+import type { LinearIssue, LinearWebhookPayload } from '../lib/types';
+import { getIssueProject, getReleaseLinkUrls } from '../lib/linear-client';
+import { isMonthlyRollup, pickRollupDoc, webhookChanges, type RollupDoc } from '../lib/rollup-doc';
 import {
   HS_SYNC_TAG,
   isAnyTeam,
@@ -26,6 +28,63 @@ interface PublicFunctionContext {
   accountId: number;
 }
 
+/**
+ * Puts the monthly rollup an issue is in — and the digest's doc, when its
+ * release links one — on the entry.
+ *
+ * Runs after the stage write, in BOTH branches that make one. Adding an issue
+ * to a release does not change its state, so the "stage already matches"
+ * branch is the one that will usually fire; leaving it out is how rollout
+ * dates once went unwritten.
+ *
+ * Set-only. Clearing a stale link needs the entry's current value and every
+ * rollup's doc, which is the daily sweep's job (RollupDocSync).
+ *
+ * Never fails the webhook. The stage has already synced, and a doc link is not
+ * worth reporting that as a failure, so whatever goes wrong is logged and
+ * returned for the response body.
+ */
+async function applyRollup(objectTypeId: string, issue: LinearIssue): Promise<Record<string, unknown> | undefined> {
+  if (!issue.releases) return undefined;
+  const rollups = issue.releases.filter(r => isMonthlyRollup(r.name));
+  if (rollups.length === 0) return undefined;
+  if (rollups.length > 1) {
+    return { skipped: `in ${rollups.length} monthly rollups`, releases: rollups.map(r => r.name) };
+  }
+
+  const [release] = rollups;
+  let doc: RollupDoc = { kind: 'none' };
+  let linkError: string | undefined;
+  try {
+    const apiKey = process.env.LINEAR_API_KEY;
+    if (!apiKey) throw new Error('LINEAR_API_KEY is not set');
+    doc = pickRollupDoc(await getReleaseLinkUrls(apiKey, release.id));
+  } catch (err) {
+    // The name is still worth writing: it came from the payload, not this call.
+    linkError = err instanceof Error ? err.message : String(err);
+    console.error(`LinearWebhook: could not read links for release ${release.id}: ${linkError}`);
+  }
+
+  const changes = webhookChanges({ name: release.name, doc });
+  try {
+    const found = await updateByLinearId(objectTypeId, issue.id, changes);
+    const skipped = !found
+      ? 'no record for this issue'
+      : doc.kind === 'ambiguous'
+        ? `release links ${doc.urls.length} Google Docs`
+        : undefined;
+    return {
+      release: release.name,
+      wrote: found ? Object.keys(changes) : [],
+      ...(skipped ? { skipped } : {}),
+      ...(linkError ? { linkError } : {}),
+    };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    console.error(`LinearWebhook: could not write rollup fields for ${issue.id}: ${error}`);
+    return { release: release.name, wrote: [], error };
+  }
+}
 
 export async function main(context: PublicFunctionContext): Promise<{ statusCode: number; body: string }> {
   const secret = process.env.LINEAR_WEBHOOK_SECRET;
@@ -201,17 +260,24 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
           payload.data.id,
           payload.data.description,
         );
+        const rollup = await applyRollup(portalConfig.content.objectTypeId, payload.data);
         return {
           statusCode: 200,
-          body: JSON.stringify({ skipped: true, reason: 'stage already matches', refreshed: true }),
+          body: JSON.stringify({
+            skipped: true,
+            reason: 'stage already matches',
+            refreshed: true,
+            ...(rollup ? { rollup } : {}),
+          }),
         };
       }
     }
 
     const result = await upsertContent(payload, context.accountId, pipelineKey);
+    const rollup = await applyRollup(portalConfig.content.objectTypeId, payload.data);
 
     console.log(`${result.action} ${isChangelog ? 'changelog' : 'content'} ${result.id} for Linear ${payload.data.id}`);
-    return { statusCode: 200, body: JSON.stringify({ ok: true, ...result }) };
+    return { statusCode: 200, body: JSON.stringify({ ok: true, ...result, ...(rollup ? { rollup } : {}) }) };
   } catch (err) {
     console.error('Upsert failed:', err);
     return { statusCode: 500, body: JSON.stringify({ error: 'Internal error' }) };
