@@ -55,6 +55,38 @@ export async function findStateIdByName(
   return states.find(s => s.name.toLowerCase() === lower)?.id ?? null;
 }
 
+/**
+ * The id of the named workflow state in the team the issue is in NOW.
+ *
+ * Asked of the issue, not of a configured team. With assignee-first sync the
+ * settings hold the sentinel 'any', and Linear answers team(id: "any") with
+ * "Entity not found: Team"; and an issue moved to another team would otherwise
+ * be handed a state id from the wrong one. States are paged strictly: a team
+ * with more than a page of them is refused rather than half-searched.
+ */
+export async function findIssueStateIdByName(
+  apiKey: string,
+  issueId: string,
+  stateName: string,
+): Promise<string | null> {
+  const data = await gql<{
+    issue: { team: { states: { nodes: LinearState[]; pageInfo: { hasNextPage: boolean } } } } | null;
+  }>(
+    apiKey,
+    `query($issueId: String!) {
+       issue(id: $issueId) { team { states(first: 250) { nodes { id name type } pageInfo { hasNextPage } } } }
+     }`,
+    { issueId },
+  );
+  if (!data.issue) throw new Error(`Linear issue not found: ${issueId}`);
+  const { nodes, pageInfo } = data.issue.team.states;
+  if (pageInfo.hasNextPage) {
+    throw new Error(`The team of issue ${issueId} has more than 250 workflow states; refusing to search part of them`);
+  }
+  const lower = stateName.toLowerCase();
+  return nodes.find(s => s.name.toLowerCase() === lower)?.id ?? null;
+}
+
 export async function updateLinearIssueState(
   apiKey: string,
   issueId: string,
