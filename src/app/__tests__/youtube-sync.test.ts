@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mapAnalyticsToProperties, mapVideoToProperties } from '../functions/YouTubeSync';
 import hsmeta from '../functions/YouTubeSync-hsmeta.json';
+import actionHsmeta from '../functions/YouTubeSyncAction-hsmeta.json';
 
 /**
  * The metrics sync.
@@ -78,9 +79,26 @@ describe('YouTubeSync-hsmeta.json', () => {
     expect(hsmeta.config.entrypoint).toBe('/app/functions/YouTubeSync.js');
   });
 
-  it('matches its endpoint path to the uid convention', () => {
-    expect(hsmeta.config.endpoint.path).toBe('youtube-sync');
+  it('is private: the Video card calls it by uid, so it publishes no URL', () => {
+    // The public door is youtube_sync_action, which checks the shared secret.
+    // Before 2026-10-20 this function owned /youtube-sync with no secret at
+    // all, and a GitHub cron called it unauthenticated.
     expect(hsmeta.uid).toBe('youtube_sync');
+    expect((hsmeta.config as { endpoint?: unknown }).endpoint).toBeUndefined();
+  });
+});
+
+describe('YouTubeSyncAction-hsmeta.json', () => {
+  it('owns the /youtube-sync path the workflow action posts to', () => {
+    expect(actionHsmeta.uid).toBe('youtube_sync_action');
+    expect(actionHsmeta.config.endpoint.path).toBe('youtube-sync');
+    expect(actionHsmeta.config.entrypoint).toBe('/app/functions/YouTubeSyncAction.js');
+  });
+
+  it('declares the shared secret as well as everything the sync needs', () => {
+    for (const key of ['SYNC_SHARED_SECRET', 'HS_ACCESS_TOKEN', 'YOUTUBE_CLIENT_ID', 'YOUTUBE_CLIENT_SECRET', 'YOUTUBE_REFRESH_TOKEN']) {
+      expect(actionHsmeta.config.secretKeys).toContain(key);
+    }
   });
 });
 

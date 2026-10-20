@@ -120,3 +120,67 @@ describe('rollup-doc-sync-hsmeta.json', () => {
     }
   });
 });
+
+/**
+ * Which workflow actions authenticate.
+ *
+ * Every action's actionUrl is a public URL (see
+ * function-endpoints-are-justified.test.ts). Checked 2026-10-20: only four of
+ * twelve made the caller prove anything, while a comment claimed all of them
+ * did. This holds the truth instead of a comment: an action authenticates —
+ * its function declares and verifies SYNC_SHARED_SECRET and the action passes
+ * a `sharedSecret` input — or it is named below with the reason it does not
+ * yet. A new action cannot join the second group by accident.
+ */
+const NOT_YET_AUTHENTICATED: Record<string, string> = {
+  asana_poll: 'polls Asana; no secret input yet — follow-up',
+  fellow_sync: 'Fellow integration unverified (every path 404s) — follow-up',
+  generate_social_draft: 'writes a draft property; HubSpot Social not connected (#18) — follow-up',
+  video_attribution: 'computes UTM links — follow-up',
+  breeze_content_pipeline: "Breeze agent tool: the agent runtime's call shape is unverified (#23)",
+  breeze_friction_finder: "Breeze agent tool: the agent runtime's call shape is unverified (#23)",
+  breeze_meeting_router: "Breeze agent tool: the agent runtime's call shape is unverified (#23)",
+};
+
+const FUNCTIONS_DIR = path.join(__dirname, '..', 'functions');
+
+function functionFor(actionFile: string) {
+  const urlPath = (load(actionFile).config.actionUrl ?? '').split('/').pop();
+  for (const f of fs.readdirSync(FUNCTIONS_DIR).filter(n => n.endsWith('-hsmeta.json'))) {
+    const meta = JSON.parse(fs.readFileSync(path.join(FUNCTIONS_DIR, f), 'utf8')) as {
+      uid: string;
+      config: { entrypoint: string; endpoint?: { path?: string }; secretKeys?: string[] };
+    };
+    if (urlPath && meta.config.endpoint?.path === urlPath) {
+      const source = meta.config.entrypoint.split('/').pop()!.replace(/\.js$/, '.ts');
+      return { meta, source: fs.readFileSync(path.join(FUNCTIONS_DIR, source), 'utf8') };
+    }
+  }
+  return null;
+}
+
+describe('workflow actions authenticate, or say why not', () => {
+  describe.each(files.filter(f => load(f).config.actionUrl))('%s', file => {
+    const fn = functionFor(file);
+
+    it('posts to a function that exists', () => {
+      expect(fn, `${file}: no function publishes its actionUrl path`).not.toBeNull();
+    });
+
+    it('checks the shared secret end to end, or is a named exception', () => {
+      if (!fn) return;
+      const declares = (fn.meta.config.secretKeys ?? []).includes('SYNC_SHARED_SECRET');
+      const verifies = fn.source.includes('verifySharedSecret');
+      const passes = (load(file).config.inputFields ?? []).some(i => i.typeDefinition.name === 'sharedSecret');
+      const authenticated = declares && verifies && passes;
+
+      if (fn.meta.uid in NOT_YET_AUTHENTICATED) {
+        // Keeps the list honest: once one is fixed, it must leave the list.
+        expect(authenticated, `${fn.meta.uid} now authenticates — remove it from NOT_YET_AUTHENTICATED`).toBe(false);
+      } else {
+        expect({ declares, verifies, passes }, `${fn.meta.uid} must declare, verify and receive SYNC_SHARED_SECRET`)
+          .toEqual({ declares: true, verifies: true, passes: true });
+      }
+    });
+  });
+});
