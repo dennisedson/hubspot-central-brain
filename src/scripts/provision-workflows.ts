@@ -10,6 +10,7 @@
 import { getPortalConfig } from '../app/lib/portal-config';
 import { loadEnv } from './script-env';
 import { HS_BASE, objectSearchPath } from '../app/lib/hs-api';
+import { carryOverServerActionFields, sentinelTeamWarnings, type FlowAction } from './flow-actions';
 
 const API = HS_BASE;
 
@@ -202,38 +203,12 @@ interface WorkflowDef {
     return result;
   }
 
-interface FlowAction {
-  actionId: string;
-  actionTypeId: string;
-  fields: Record<string, unknown>;
-}
-
 // nextAvailableActionId is the id HubSpot hands to the next action added in the
 // UI, and the API validates it against the actions in the same body. It is always
 // one past the highest actionId, as a string.
 function nextAvailableActionId(actions: FlowAction[]): string {
   const highest = actions.reduce((max, a) => Math.max(max, Number(a.actionId) || 0), 0);
   return String(highest + 1);
-}
-
-// HubSpot stores fields on a custom action that buildWorkflow() never sets: every
-// custom action whose definition does not opt out with `requiresObject: false`
-// gets an `hs_target_object` field (default "{{ enrolled_object }}"), the target
-// object selector. The server fills those in on create, so they only exist on the
-// live flow. Because PUT replaces the whole actions array, they have to be copied
-// back or the update silently resets a target object someone picked in the UI.
-// Matched on actionId AND actionTypeId so a reordered flow cannot copy the wrong
-// action's selection.
-function carryOverServerActionFields(built: FlowAction[], live: FlowAction[]): FlowAction[] {
-  return built.map(action => {
-    const match = live.find(l => l.actionId === action.actionId && l.actionTypeId === action.actionTypeId);
-    if (!match) return action;
-    const inherited: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(match.fields ?? {})) {
-      if (key.startsWith('hs_') && !(key in action.fields)) inherited[key] = value;
-    }
-    return { ...action, fields: { ...action.fields, ...inherited } };
-  });
 }
 
 function buildWorkflow(def: WorkflowDef) {
@@ -528,10 +503,14 @@ async function main() {
       };
       const result = await hs(token, 'PUT', `/automation/v4/flows/${full.id}`, updatePayload);
       console.log(`  ✓ Updated id=${result.id} (isEnabled=${full.isEnabled} preserved)`);
+      for (const warning of sentinelTeamWarnings(name, actions)) console.warn(`  ⚠ ${warning}`);
     } else {
       console.log(`\nCreating "${name}"...`);
       const result = await hs(token, 'POST', '/automation/v4/flows', payload);
       console.log(`  ✓ Created id=${result.id}`);
+      for (const warning of sentinelTeamWarnings(name, (payload.actions ?? []) as FlowAction[])) {
+        console.warn(`  ⚠ ${warning}`);
+      }
     }
   }
 
