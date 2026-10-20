@@ -184,3 +184,18 @@ describe('workflow actions authenticate, or say why not', () => {
     });
   });
 });
+
+describe('youtube-sync-hsmeta.json — sharedSecret', () => {
+  // HubSpot refuses to add a REQUIRED input to an action that is already
+  // deployed: Deploy › Dev failed on 2026-10-20 with
+  //   BACKWARDS_INCOMPATIBLE_CHANGE_NEW_REQUIRED_FIELD — "Required field
+  //   `sharedSecret` would break active enrollments missing a value for it."
+  // Optional is enough: youtube_sync_action answers 401 without the secret, so
+  // the function enforces what the definition cannot.
+  it('declares the secret input as optional', () => {
+    const field = (load('youtube-sync-hsmeta.json').config.inputFields ?? [])
+      .find(f => f.typeDefinition.name === 'sharedSecret') as { isRequired?: boolean } | undefined;
+    expect(field, 'sharedSecret input is missing').toBeDefined();
+    expect(field?.isRequired).toBe(false);
+  });
+});
