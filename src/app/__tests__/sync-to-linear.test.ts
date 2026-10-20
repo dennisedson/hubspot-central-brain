@@ -8,6 +8,7 @@ beforeEach(async () => {
 
   vi.doMock('@lib/linear-client', () => ({
     findStateIdByName: vi.fn().mockResolvedValue('st-done'),
+    findIssueStateIdByName: vi.fn().mockResolvedValue('st-done'),
     updateLinearIssueState: vi.fn().mockResolvedValue(undefined),
     createIssue: vi.fn().mockResolvedValue({
       id: 'lin-new',
@@ -95,12 +96,29 @@ describe('SyncToLinear.main', () => {
     expect(JSON.parse(result.body).outputFields.syncStatus).toBe('skipped');
   });
 
-  it('returns 200 with syncStatus "skipped" when the Linear state name is not found in the team', async () => {
-    const { findStateIdByName } = await import('@lib/linear-client');
-    vi.mocked(findStateIdByName).mockResolvedValue(null);
+  it("returns 200 with syncStatus \"skipped\" when the issue's team has no state by that name", async () => {
+    // Was asked of the workflow's team until 2026-10-20; an existing issue's
+    // states now come from the issue's own team.
+    const { findIssueStateIdByName } = await import('@lib/linear-client');
+    vi.mocked(findIssueStateIdByName).mockResolvedValue(null);
     const result = await main(baseCtx);
     expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).outputFields).toMatchObject({ syncStatus: 'skipped', reason: 'state_not_found:Done' });
+  });
+
+  it("returns 200 skipped when creating and the configured team has no state by that name", async () => {
+    // The create path still asks the workflow's team — a new issue has no team
+    // of its own yet.
+    const { findStateIdByName, createIssue } = await import('@lib/linear-client');
+    vi.mocked(findStateIdByName).mockResolvedValue(null);
+    const ctx = {
+      ...baseCtx,
+      body: { ...baseCtx.body, inputFields: { ...baseCtx.body.inputFields, linearIssueId: '', hubspotStage: 'outline' } },
+    };
+    const result = await main(ctx);
+    expect(findStateIdByName).toHaveBeenCalledWith('lin_test_key', 'team-1', 'Todo');
     expect(JSON.parse(result.body).outputFields.syncStatus).toBe('skipped');
+    expect(createIssue).not.toHaveBeenCalled();
   });
 
   it('returns 500 when LINEAR_API_KEY is missing', async () => {
@@ -137,7 +155,7 @@ describe('SyncToLinear.main', () => {
   });
 
   it('handles changelog objectType, mapping "reviewing" → "In Review"', async () => {
-    const { findStateIdByName } = await import('@lib/linear-client');
+    const { findIssueStateIdByName } = await import('@lib/linear-client');
     const ctx = {
       ...baseCtx,
       body: {
@@ -146,7 +164,8 @@ describe('SyncToLinear.main', () => {
       },
     };
     await main(ctx);
-    expect(findStateIdByName).toHaveBeenCalledWith('lin_test_key', 'team-1', 'In Review');
+    // The existing issue's team decides — see the describe block below.
+    expect(findIssueStateIdByName).toHaveBeenCalledWith('lin_test_key', 'lin-123', 'In Review');
   });
 });
 
@@ -312,5 +331,63 @@ describe('SyncToLinear.main — no linear issue yet', () => {
     const { createIssue } = await import('@lib/linear-client');
     await main(ctxAt('outline', { title: '' }));
     expect(createIssue).toHaveBeenCalledWith('lin_test_key', expect.objectContaining({ title: 'Untitled' }));
+  });
+});
+
+describe("SyncToLinear — the team comes from the issue, not the workflow", () => {
+  // Prod's two sync workflows carry linearTeamId 'any' — the assignee-first
+  // settings sentinel. Linear answers team(id: "any") with
+  // "Entity not found: Team" (checked 2026-10-20), and that lookup used to run
+  // first, unguarded, so every stage move threw.
+  const anyTeam = (inputFields: Record<string, unknown> = {}) => ({
+    ...baseCtx,
+    body: { ...baseCtx.body, inputFields: { ...baseCtx.body.inputFields, linearTeamId: 'any', ...inputFields } },
+  });
+
+  it("updates an existing issue using its own team when the workflow says 'any'", async () => {
+    const { findStateIdByName, findIssueStateIdByName, updateLinearIssueState } = await import('@lib/linear-client');
+
+    const result = await main(anyTeam());
+
+    expect(findIssueStateIdByName).toHaveBeenCalledWith('lin_test_key', 'lin-123', 'Done');
+    expect(findStateIdByName).not.toHaveBeenCalled();
+    expect(updateLinearIssueState).toHaveBeenCalledWith('lin_test_key', 'lin-123', 'st-done');
+    expect(JSON.parse(result.body).outputFields.syncStatus).toBe('success');
+  });
+
+  it("uses the issue's team even when the workflow names a different real one", async () => {
+    // An issue moved to another team would otherwise be handed a state id
+    // from the wrong team.
+    const { findStateIdByName, findIssueStateIdByName } = await import('@lib/linear-client');
+    await main(baseCtx);
+    expect(findIssueStateIdByName).toHaveBeenCalledWith('lin_test_key', 'lin-123', 'Done');
+    expect(findStateIdByName).not.toHaveBeenCalled();
+  });
+
+  it("answers 200 skipped, not a 500, when Linear can't be asked about the issue", async () => {
+    const { findIssueStateIdByName, updateLinearIssueState } = await import('@lib/linear-client');
+    vi.mocked(findIssueStateIdByName).mockRejectedValue(new Error('Linear GraphQL error: Entity not found: Issue'));
+
+    const result = await main(baseCtx);
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).outputFields).toMatchObject({ syncStatus: 'skipped', reason: 'linear_lookup_failed' });
+    expect(updateLinearIssueState).not.toHaveBeenCalled();
+  });
+
+  it("skips creating, rather than failing, when there is no issue and the team is 'any'", async () => {
+    const { findStateIdByName, createIssue } = await import('@lib/linear-client');
+
+    const result = await main(anyTeam({ linearIssueId: '', hubspotStage: 'outline', title: 'A promoted note' }));
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body).outputFields).toMatchObject({ syncStatus: 'skipped', reason: 'no_team_for_create' });
+    expect(findStateIdByName).not.toHaveBeenCalled();
+    expect(createIssue).not.toHaveBeenCalled();
+  });
+
+  it("still reports below-Outline before it ever looks at the team", async () => {
+    const result = await main(anyTeam({ linearIssueId: '', hubspotStage: 'idea' }));
+    expect(JSON.parse(result.body).outputFields.reason).toBe('below_outline:idea');
   });
 });

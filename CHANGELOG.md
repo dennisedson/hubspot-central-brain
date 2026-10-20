@@ -14,6 +14,22 @@ unless the text says issue.
 
 ## 2026-10-20
 
+### `SyncToLinear` asks the issue for its team
+
+Prod's two sync workflows carry `linearTeamId: 'any'`, the assignee-first
+settings sentinel, and `SyncToLinear` looked up the stage's workflow state in
+that team first, with no guard. Linear answers `team(id: "any")` with
+`Entity not found: Team`, so every stage move on prod would have thrown — hidden
+only because all of prod's workflows are switched off.
+
+An existing issue now supplies its own team (`findIssueStateIdByName`), which is
+also right for a real team id: an issue moved between teams used to be handed a
+state id from the wrong one. A lookup failure answers `skipped:
+linear_lookup_failed` instead of a 500. Creating an issue still needs a real
+team, since a new issue has none to ask; with `'any'` it answers `skipped:
+no_team_for_create` after the content-only and below-Outline checks. That path —
+vault promotion — has never been run.
+
 ### `provision:workflows` rewrote live workflows, and no longer does
 
 The first live run of the workflow update path — on dev, to create the rollup

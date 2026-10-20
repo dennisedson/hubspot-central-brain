@@ -459,7 +459,8 @@ the Asana task the next time the entry changes stage, as Create Doc links do.
    It also re-sends every existing workflow through the update path. Since 2026-10-20 that
    keeps each action's live team id and version, and a re-run on dev changed nothing
    (`PROJECT-CONTEXT.md` §3.2). If it prints `⚠ … linearTeamId is 'any'`, that workflow
-   already held the sentinel — give it a real Linear team before enabling it.
+   already held the sentinel. Stage syncs still work — they use each issue's own team — but a
+   note promoted from the vault cannot create a Linear issue until that action has a real team.
 4. `npm run preflight`.
 
 Each run reports in the workflow's history: `syncStatus` is `ok`, `partial` (out of time — the

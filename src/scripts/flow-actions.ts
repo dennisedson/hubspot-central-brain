@@ -65,12 +65,15 @@ export function carryOverServerActionFields(built: FlowAction[], live: FlowActio
  * One warning per action that will still carry the `'any'` sentinel as its
  * team — on a new flow, or where the live flow already held it, as prod's two
  * sync flows do. Provisioning cannot invent a team, so it says so instead.
+ *
+ * Since SyncToLinear asks an existing issue for its own team, the sentinel only
+ * costs the create path: a promoted vault note answers `no_team_for_create`.
  */
 export function sentinelTeamWarnings(flowName: string, actions: FlowAction[]): string[] {
   return actions
     .filter(a => typeof a.fields.linearTeamId === 'string' && isAnyTeam(a.fields.linearTeamId))
     .map(a =>
-      `"${flowName}" action ${a.actionId}: linearTeamId is '${a.fields.linearTeamId}', which SyncToLinear cannot ` +
-      `look workflow states up with. Set a real Linear team id on that action, or every stage sync it runs will fail.`,
+      `"${flowName}" action ${a.actionId}: linearTeamId is '${a.fields.linearTeamId}'. Stage syncs use each issue's ` +
+      `own team, but a note promoted from the vault cannot create a Linear issue until this is a real team id.`,
     );
 }
