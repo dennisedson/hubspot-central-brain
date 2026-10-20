@@ -7,6 +7,7 @@ import {
   objectPath,
   objectSearchPath,
   objectBatchReadPath,
+  objectBatchUpdatePath,
   associationListPath,
   defaultAssociationPath,
   labeledAssociationPath,
@@ -65,6 +66,12 @@ describe('objectPath', () => {
 describe('objectSearchPath', () => {
   it('builds the CRM search path for an object type', () => {
     expect(objectSearchPath('2-67505887')).toBe('/crm/objects/2026-03/2-67505887/search');
+  });
+});
+
+describe('objectBatchUpdatePath', () => {
+  it('builds the batch update path for an object type', () => {
+    expect(objectBatchUpdatePath('2-67505887')).toBe('/crm/objects/2026-03/2-67505887/batch/update');
   });
 });
 
