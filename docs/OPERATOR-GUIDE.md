@@ -428,6 +428,45 @@ Drafts are stored in `changelog_draft`, **never in `notes`**. `notes` holds the 
 description and is rewritten on every webhook, so anything a person wrote there would be
 destroyed the next time the issue moved.
 
+### Digest doc links — from the Linear release
+
+Monthly digests are **Linear releases** named `<Month> <Year> Changelog Rollup`. Put an issue in
+one and its entry here gets `changelog_rollup` set to the release name — so "everything in
+October" is one filter — and, once the release links a Google Doc, `changelog_doc_url` set to it.
+
+- **Attach the digest's Google Doc to the release** in Linear, as a link. Whoever owns the
+  digest can do it; it only has to happen once per month.
+- **The release's doc wins.** It replaces whatever the entry held, including a doc made with
+  Create Doc. The old value is in the property's history.
+- **Moving an issue to next month's release** moves the name, and clears the old month's doc
+  until the new release has one.
+- **Spotlight releases are ignored**, and so is an issue in two monthly rollups at once (it is
+  reported instead). A release with two Google Docs linked sets the name but no doc.
+- **Only your entries are touched.** Issues in the release that belong to someone else never
+  become records here.
+
+The link usually lands within seconds, from the Linear webhook. What the webhook cannot see —
+the doc being attached after the issues, or a release completing and rolling its unfinished
+issues forward — is caught by the **Changelog Rollup Docs (Daily)** workflow. The link reaches
+the Asana task the next time the entry changes stage, as Create Doc links do.
+
+**Setting it up on a portal, in this order** — the property must exist before the code writes it:
+
+1. `PORTAL=<portal> npm run provision:changelog-drafting` — adds `changelog_rollup`.
+2. Deploy.
+3. `PORTAL=<portal> npm run provision:workflows` — creates *Changelog Rollup Docs (Daily)*,
+   disabled and unscheduled. Edit → Enrollment triggers → "On a schedule", then turn it on.
+   **It also re-sends every existing workflow through the update path**, which has never been
+   confirmed against a live portal (`PROJECT-CONTEXT.md` §3.2). Run it on dev first and check
+   the existing workflows afterwards — or build this one by hand: App Config object, the
+   *Sync Rollup Doc Links* action, the shared secret as its one field.
+4. `npm run preflight`.
+
+Each run reports in the workflow's history: `syncStatus` is `ok`, `partial` (out of time — the
+next run finishes) or `error` (a read failed and nothing was written, or a write failed partway
+— `detail` says which), with counts and, in `detail`, every entry it deliberately left alone and
+why.
+
 ---
 
 ## 5. Daily use — the loops that actually run

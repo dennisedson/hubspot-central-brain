@@ -36,6 +36,7 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
   associateRelatedContentId: string;
   generateSocialDraftId: string;
   youtubeSyncId: string;
+  rollupDocSyncId: string;
 }> {
   const res = await fetch(
     `${API}/automation/v4/actions/${appId}?hapikey=${devKey}&limit=100`,
@@ -87,6 +88,13 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
     (a.uid ?? '').includes('generate_social') ||
     (a.labels?.en?.actionName ?? '').toLowerCase().includes('social'),
   );
+  // Matched exactly, by uid or full name. Its name avoids every word the
+  // matchers above claim — workflow-actions.test.ts holds that — and exact
+  // matching keeps a future action from being mistaken for it.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rollupDocSyncAction = actions.find((a: any) =>
+    a.uid === 'rollup_doc_sync_v1' || a.labels?.en?.actionName === 'Sync Rollup Doc Links',
+  );
 
   if (!asanaSyncAction || !linearAction) {
     throw new Error(
@@ -124,6 +132,12 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
     );
   }
 
+  if (!rollupDocSyncAction) {
+    throw new Error(
+      `Could not find the rollup doc sync action. Make sure you have deployed the project before running this script. Found UIDs: ${actions.map((a: any) => a.uid ?? a.id).join(', ')}`,
+    );
+  }
+
   return {
     syncToAsanaId: `1-${asanaSyncAction.id}`,
     syncToLinearId: `1-${linearAction.id}`,
@@ -132,6 +146,7 @@ async function discoverActionIds(devKey: string, appId: number): Promise<{
     associateRelatedContentId: `1-${associateRelatedContentAction.id}`,
     generateSocialDraftId: `1-${generateSocialDraftAction.id}`,
     youtubeSyncId: `1-${youtubeSyncAction.id}`,
+    rollupDocSyncId: `1-${rollupDocSyncAction.id}`,
   };
 }
 
@@ -337,7 +352,12 @@ function buildWorkflow(def: WorkflowDef) {
   };
 }
 
-function buildPollWorkflow(name: string, appConfigObjectTypeId: string, asanaPollId: string) {
+function buildPollWorkflow(
+  name: string,
+  appConfigObjectTypeId: string,
+  asanaPollId: string,
+  fields: Record<string, string> = {},
+) {
   // MANUAL enrollment: the workflow runs when manually triggered or when records
   // are enrolled programmatically. After creation, open the workflow in HubSpot
   // and configure a recurring schedule (Edit → Enrollment triggers → "On a schedule").
@@ -359,7 +379,7 @@ function buildPollWorkflow(name: string, appConfigObjectTypeId: string, asanaPol
       actionId: '1',
       actionTypeId: asanaPollId,
       actionTypeVersion: 0,
-      fields: {},
+      fields,
     }],
   };
 }
@@ -451,7 +471,7 @@ async function main() {
 
   // Step 1: Discover action definition IDs for our custom workflow actions
   console.log('\nDiscovering custom action IDs...');
-  const { syncToAsanaId, syncToLinearId, asanaPollId, fellowSyncId, associateRelatedContentId, generateSocialDraftId, youtubeSyncId } = await discoverActionIds(developerApiKey, appId);
+  const { syncToAsanaId, syncToLinearId, asanaPollId, fellowSyncId, associateRelatedContentId, generateSocialDraftId, youtubeSyncId, rollupDocSyncId } = await discoverActionIds(developerApiKey, appId);
   console.log(`  appId=${appId}  syncToAsanaId=${syncToAsanaId}  syncToLinearId=${syncToLinearId}  asanaPollId=${asanaPollId}  fellowSyncId=${fellowSyncId}  associateRelatedContentId=${associateRelatedContentId}  generateSocialDraftId=${generateSocialDraftId}`);
 
   // Step 2: Fetch linearTeamId from app settings CRM object
@@ -572,6 +592,18 @@ async function main() {
     youtubeWorkflowName,
     config.appConfig.objectTypeId,
     youtubeSyncId,
+  ));
+
+  // Step 8b: App Config daily rollup doc sweep. The webhook sets a rollup's doc
+  // as issues change; this catches what no webhook announces — the doc being
+  // attached after the issues, and a completed release rolling its unfinished
+  // issues on to next month. Authenticated, unlike the polls above.
+  const rollupWorkflowName = 'Changelog Rollup Docs (Daily)';
+  await upsertWorkflow(rollupWorkflowName, buildPollWorkflow(
+    rollupWorkflowName,
+    config.appConfig.objectTypeId,
+    rollupDocSyncId,
+    fieldSpec([{ name: 'sharedSecret', value: sharedSecret }]),
   ));
 
   // Step 7: Content → Associate Related Content (fires on enter review stage)

@@ -8,6 +8,7 @@ import {
   HS_BASE,
   objectPath,
   objectSearchPath,
+  objectBatchUpdatePath,
   pipelinesPath,
   defaultAssociationPath,
   datedObjectPath,
@@ -90,6 +91,114 @@ export async function hsUpdate(objectTypeId: string, objectId: string, propertie
     body: JSON.stringify({ properties }),
   });
   if (!res.ok) throw new Error(`HubSpot update failed ${res.status}: ${await res.text()}`);
+}
+
+/**
+ * Writes to the record whose `linear_id` matches — and never creates one.
+ *
+ * hsUpsertByUniqueProperty creates on 404, which is right for the sync, where
+ * the issue IS the record, and wrong for anything that only annotates records
+ * the sync already made. A 404 here answers false.
+ */
+export async function updateByLinearId(
+  objectTypeId: string,
+  linearId: string,
+  properties: Record<string, string>,
+): Promise<boolean> {
+  const token = getToken();
+  const res = await fetch(
+    `${HS_BASE}${objectPath(objectTypeId, encodeURIComponent(linearId))}?idProperty=linear_id`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ properties }),
+    },
+  );
+  if (res.status === 404) return false;
+  if (!res.ok) throw new Error(`HubSpot update by linear_id failed ${res.status}: ${await res.text()}`);
+  return true;
+}
+
+export interface SearchFilter {
+  propertyName: string;
+  operator: 'EQ' | 'IN' | 'HAS_PROPERTY';
+  value?: string;
+  values?: string[];
+}
+
+export interface HsRow {
+  id: string;
+  properties: Record<string, string | null>;
+}
+
+const SEARCH_PAGE = 100;
+/** 100 pages of 100 is HubSpot's own ceiling of 10,000 on one search. */
+const MAX_SEARCH_PAGES = 100;
+
+/**
+ * Every record matching ANY of the filter groups, paged to the end.
+ *
+ * hsSearch asks for one result, which is all a lookup needs. This is for a
+ * caller that acts on a record's absence as much as its presence, so it throws
+ * rather than hand back part of the set.
+ */
+export async function searchAll(
+  objectTypeId: string,
+  filterGroups: SearchFilter[][],
+  properties: string[],
+): Promise<HsRow[]> {
+  const token = getToken();
+  const rows: HsRow[] = [];
+  let after: string | undefined;
+  for (let page = 0; page < MAX_SEARCH_PAGES; page++) {
+    const res = await fetch(`${HS_BASE}${objectSearchPath(objectTypeId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        filterGroups: filterGroups.map(filters => ({ filters })),
+        properties,
+        limit: SEARCH_PAGE,
+        ...(after ? { after } : {}),
+      }),
+    });
+    if (!res.ok) throw new Error(`HubSpot search failed ${res.status}: ${await res.text()}`);
+    const body = (await res.json()) as { results?: HsRow[]; paging?: { next?: { after?: string } } };
+    rows.push(...(body.results ?? []));
+    after = body.paging?.next?.after;
+    if (!after) return rows;
+  }
+  throw new Error(`HubSpot search ran past ${MAX_SEARCH_PAGES} pages; refusing to return part of it`);
+}
+
+export const BATCH_UPDATE_LIMIT = 100;
+
+/**
+ * Updates up to 100 records in one call.
+ *
+ * 207 means some inputs failed and others landed. It is `ok`, so it is checked
+ * for by name — a partial failure reported as success is the shape of every
+ * quiet bug this repo has had.
+ */
+export async function batchUpdate(
+  objectTypeId: string,
+  inputs: Array<{ id: string; properties: Record<string, string> }>,
+): Promise<void> {
+  if (inputs.length === 0) return;
+  if (inputs.length > BATCH_UPDATE_LIMIT) {
+    throw new Error(`batchUpdate takes at most ${BATCH_UPDATE_LIMIT} inputs, got ${inputs.length}`);
+  }
+  const token = getToken();
+  const res = await fetch(`${HS_BASE}${objectBatchUpdatePath(objectTypeId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ inputs }),
+  });
+  if (res.status === 207) {
+    const body = (await res.json()) as { errors?: Array<{ message?: string }> };
+    const messages = (body.errors ?? []).map(e => e.message ?? 'unknown error').join('; ');
+    throw new Error(`HubSpot batch update partly failed: ${messages.slice(0, 300)}`);
+  }
+  if (!res.ok) throw new Error(`HubSpot batch update failed ${res.status}: ${await res.text()}`);
 }
 
 export async function findByLinearId(

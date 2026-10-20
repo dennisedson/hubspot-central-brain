@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { isConfigured, DEFAULT_APP_SETTINGS } from '@lib/portal-config';
 import { classifyIssue, parseProjectMap } from '@lib/mapping';
 
@@ -36,6 +36,7 @@ beforeEach(async () => {
     readProjectState: vi.fn().mockResolvedValue({ recordId: 'cfg-1', map: {}, unmapped: [] }),
     recordUnmappedProject: vi.fn().mockResolvedValue(undefined),
     refreshDerivedProperties: vi.fn().mockResolvedValue(undefined),
+    updateByLinearId: vi.fn().mockResolvedValue(true),
   }));
   vi.doMock('@lib/portal-config', async () => ({
     ...(await vi.importActual<typeof import('@lib/portal-config')>('@lib/portal-config')),
@@ -567,5 +568,121 @@ describe('LinearWebhook — noticing a project nobody has mapped', () => {
 
     await main(ctxWithProject('p-new', 'Q3 Docs'));
     expect(mockUpsert).toHaveBeenCalled();
+  });
+});
+
+describe('LinearWebhook — monthly rollup', () => {
+  const OCT_DOC = 'https://docs.google.com/document/d/1OctDoc/edit';
+  const linearFetch = vi.fn();
+
+  beforeEach(() => {
+    linearFetch.mockReset();
+    vi.stubGlobal('fetch', linearFetch);
+    process.env.LINEAR_API_KEY = 'lin_key';
+    // Routed on intent: the only Linear call this path makes reads one release's links.
+    linearFetch.mockImplementation(async (url: string, init: { body: string }) => {
+      const { query, variables } = JSON.parse(init.body);
+      if (url === 'https://api.linear.app/graphql' && query.includes('links(') && variables.id === 'rel-oct') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              release: {
+                name: 'October 2026 Changelog Rollup',
+                links: { nodes: [{ url: OCT_DOC }], pageInfo: { hasNextPage: false } },
+              },
+            },
+          }),
+        };
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.LINEAR_API_KEY;
+  });
+
+  const withReleases = (releases: Array<{ id: string; name: string }>) => ({
+    ...baseCtx,
+    body: { ...baseCtx.body, data: { ...baseCtx.body.data, releases } },
+  });
+  const inOctober = () => withReleases([{ id: 'rel-oct', name: 'October 2026 Changelog Rollup' }]);
+
+  it('writes the digest doc in the stage-already-matches branch', async () => {
+    // Adding an issue to a release does not change its state, so this is the
+    // branch that fires — the shape of the rollout-date bug.
+    const { getCurrentStage, updateByLinearId } = await import('@lib/hubspot-client');
+    vi.mocked(getCurrentStage).mockResolvedValue('stage-idea');
+
+    const result = await main(inOctober());
+
+    expect(updateByLinearId).toHaveBeenCalledWith('2-content', 'lin-1', {
+      changelog_rollup: 'October 2026 Changelog Rollup',
+      changelog_doc_url: OCT_DOC,
+    });
+    expect(JSON.parse(result.body).rollup.wrote).toEqual(['changelog_rollup', 'changelog_doc_url']);
+  });
+
+  it('writes it after an upsert too', async () => {
+    const { upsertContent, updateByLinearId } = await import('@lib/hubspot-client');
+    const result = await main(inOctober());
+    expect(upsertContent).toHaveBeenCalledOnce();
+    expect(updateByLinearId).toHaveBeenCalledOnce();
+    expect(JSON.parse(result.body).ok).toBe(true);
+  });
+
+  it('still syncs the stage, and still names the release, when Linear cannot be reached', async () => {
+    linearFetch.mockRejectedValue(new Error('ECONNRESET'));
+    const { upsertContent, updateByLinearId } = await import('@lib/hubspot-client');
+
+    const result = await main(inOctober());
+    const body = JSON.parse(result.body);
+
+    expect(result.statusCode).toBe(200);
+    expect(upsertContent).toHaveBeenCalledOnce();
+    expect(updateByLinearId).toHaveBeenCalledWith('2-content', 'lin-1', { changelog_rollup: 'October 2026 Changelog Rollup' });
+    expect(body.ok).toBe(true);
+    expect(body.rollup.linkError).toMatch(/ECONNRESET/);
+  });
+
+  it('still answers 200 when the rollup write itself fails', async () => {
+    const { updateByLinearId } = await import('@lib/hubspot-client');
+    vi.mocked(updateByLinearId).mockRejectedValue(new Error('Property "changelog_rollup" does not exist'));
+
+    const result = await main(inOctober());
+    const body = JSON.parse(result.body);
+
+    expect(result.statusCode).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.rollup.error).toMatch(/does not exist/);
+  });
+
+  it('makes no Linear call and no write for an issue only in a Spotlight', async () => {
+    const { updateByLinearId } = await import('@lib/hubspot-client');
+    await main(withReleases([{ id: 'rel-spot', name: 'Spring 2027 Spotlight' }]));
+    expect(linearFetch).not.toHaveBeenCalled();
+    expect(updateByLinearId).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing for an issue in two monthly rollups', async () => {
+    const { updateByLinearId } = await import('@lib/hubspot-client');
+    const result = await main(withReleases([
+      { id: 'rel-oct', name: 'October 2026 Changelog Rollup' },
+      { id: 'rel-nov', name: 'November 2026 Changelog Rollup' },
+    ]));
+    expect(updateByLinearId).not.toHaveBeenCalled();
+    expect(JSON.parse(result.body).rollup.skipped).toMatch(/2 monthly rollups/);
+  });
+
+  it('writes nothing when the payload carries no releases field', async () => {
+    // The control: every payload before this feature looked like this.
+    const { updateByLinearId } = await import('@lib/hubspot-client');
+    const result = await main(baseCtx);
+    expect(updateByLinearId).not.toHaveBeenCalled();
+    expect(linearFetch).not.toHaveBeenCalled();
+    expect(JSON.parse(result.body).rollup).toBeUndefined();
   });
 });

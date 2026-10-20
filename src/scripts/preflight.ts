@@ -79,6 +79,9 @@ const REQUIRED_PROPERTIES: Record<'content' | 'video' | 'appConfig', string[]> =
     // second Google Doc.
     'changelog_draft',
     'changelog_doc_url',
+    // Mirrored from the issue's Linear release. The rollup sweep reads it to
+    // find entries whose rollup has gone stale.
+    'changelog_rollup',
   ],
   video: [
     'youtube_video_id',

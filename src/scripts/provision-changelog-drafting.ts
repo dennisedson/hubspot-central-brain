@@ -4,6 +4,7 @@
  * On content_piece, per changelog record:
  *   changelog_draft       — the draft text itself
  *   changelog_draft_mode  — which shape it is: 'standalone' | 'rollup'
+ *   changelog_rollup      — which monthly rollup release the issue is in
  *
  * On the App Config record, once per portal:
  *   changelog_prompt_standalone — override for the standalone system prompt
@@ -100,6 +101,11 @@ async function main() {
     // The Google Doc made from the draft. Also what makes creation idempotent:
     // set means a document already exists, so do not make a second one.
     { name: 'changelog_doc_url', label: 'Changelog Doc URL', type: 'string', fieldType: 'text' },
+    // The monthly rollup release the issue is in ("October 2026 Changelog
+    // Rollup"), mirrored from Linear by the webhook and the daily sweep, so a
+    // month's entries are one HubSpot filter. Text, not a select: release names
+    // come from Linear, and a new month must not need a provisioning run.
+    { name: 'changelog_rollup', label: 'Changelog Rollup', type: 'string', fieldType: 'text' },
     {
       name: 'changelog_draft_mode',
       label: 'Changelog Draft Mode',

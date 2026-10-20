@@ -4,6 +4,13 @@
 **Date:** 2026-09-30
 **Tracking issue:** [#78](https://github.com/dennisedson/hubspot-central-brain/issues/78)
 
+> **2026-10-20 — the rollup use case is superseded.** Monthly changelog
+> rollups are tracked as **Linear releases** ("October 2026 Changelog Rollup"),
+> so membership already lives in Linear and arrives on the issue webhook. Do not
+> build `cb_contains` or `container_kind` for rollups. See
+> [`2026-10-20-rollup-doc-link-design.md`](2026-10-20-rollup-doc-link-design.md).
+> The video-series use case below still stands.
+
 ---
 
 ## 1. What this is for

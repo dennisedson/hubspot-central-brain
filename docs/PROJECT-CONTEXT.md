@@ -159,6 +159,14 @@ it work."
   against a live portal — prod being provisioned says nothing about the update
   path, which is the one that was broken. Edit existing workflows in the UI
   until someone re-runs it and reports.
+- **Rollup doc links** (2026-10-20, `feat/rollup-doc-link`). Monthly changelog
+  rollups are Linear releases; the webhook and a daily sweep put each rollup's
+  Google Doc and name on my entries in it. Unit-tested end to end, and the
+  Linear queries were run read-only against the workspace — but two things are
+  unobserved: that adding an issue to a release sends an `Issue` webhook with
+  `releases` populated (if not, the sweep still delivers within a day), and the
+  first live run of *Changelog Rollup Docs (Daily)*. October's release had no
+  doc linked when this was written. Operator guide §4b.
 
 ### 3.3 Paused or blocked — do not spend time here without new information
 

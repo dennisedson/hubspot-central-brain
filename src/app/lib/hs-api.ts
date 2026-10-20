@@ -163,6 +163,18 @@ export function objectBatchReadPath(objectType: string): string {
   return `${OBJECTS_V3}/${objectType}/batch/read`;
 }
 
+/**
+ * Update up to 100 records of one object type in one call (POST).
+ * Body: `{ "inputs": [{ "id": "4201", "properties": { … } }] }`.
+ *
+ * Answers 207 Multi-Status when some inputs fail and others land. 207 is `ok`,
+ * so callers must check the status explicitly.
+ */
+// LEGACY v3 — migrate to dated per issue #14
+export function objectBatchUpdatePath(objectType: string): string {
+  return `${OBJECTS_V3}/${objectType}/batch/update`;
+}
+
 // ---------------------------------------------------------------------------
 // Associations (v4)
 // ---------------------------------------------------------------------------
