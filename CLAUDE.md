@@ -148,6 +148,17 @@ Each of these cost a day at least once.
   again. Simulated on 2026-10-20 with `git merge-tree`: squash, three
   conflicts; merge commit, clean. #124 was squashed, which is why this came
   back.
+- **The promotion itself is a merge commit too.** Squash a `develop` →
+  `master` PR and `master` gains a commit `develop` never has; the next
+  promotion then conflicts wherever `develop` has since re-edited those lines.
+  #129 was squashed and left five such files. GitHub's default button is
+  "Squash and merge" — pick **"Create a merge commit"** from its dropdown for
+  any PR whose base is `master` or whose job is to bring `master` into
+  `develop`. Feature PRs into `develop` can squash as before. If a squash
+  slips through, repair it the same way: merge `master` into a branch off
+  `develop` (no content change) and land that with a merge commit (#132, #134).
+- **Before merging into `master`, check:** `git merge-tree --write-tree
+  origin/master origin/develop` exits 0. If it does not, reconcile first.
 - Confirm a UI change renders before building the next thing on top of it.
 - `hs project dev` runs the extension locally and shows the real exception.
   Deploying to read a generic error message is the slow path.
