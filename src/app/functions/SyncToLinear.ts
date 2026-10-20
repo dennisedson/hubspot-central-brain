@@ -1,8 +1,9 @@
-import { findStateIdByName, updateLinearIssueState, createIssue } from '../lib/linear-client';
+import { findStateIdByName, findIssueStateIdByName, updateLinearIssueState, createIssue } from '../lib/linear-client';
 import {
   CONTENT_STAGE_TO_LINEAR_STATE,
   CHANGELOG_STAGE_TO_LINEAR_STATE,
   isFanoutStage,
+  isAnyTeam,
 } from '../lib/mapping';
 import { hsUpdate } from '../lib/hubspot-client';
 import { verifySharedSecret } from '../lib/shared-secret';
@@ -71,15 +72,6 @@ export async function main(context: SyncToLinearContext): Promise<{ statusCode: 
     };
   }
 
-  const stateId = await findStateIdByName(apiKey, linearTeamId, targetStateName);
-  if (!stateId) {
-    console.warn(`Linear state "${targetStateName}" not found in team ${linearTeamId} — available states logged above`);
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ outputFields: { syncStatus: 'skipped', reason: `state_not_found:${targetStateName}` } }),
-    };
-  }
-
   // No Linear issue yet: this record was born in the vault, not in Linear.
   //
   // It only earns an issue once somebody promoted it past the threshold. Below
@@ -93,10 +85,31 @@ export async function main(context: SyncToLinearContext): Promise<{ statusCode: 
       stageName,
       targetStateName,
       linearTeamId,
-      stateId,
       title,
       recordId,
     });
+  }
+
+  // The issue exists, so its own team decides which states it can move to —
+  // not the workflow's linearTeamId, which on an assignee-first portal is the
+  // sentinel 'any', a team Linear does not have. This lookup used to run first
+  // and unguarded, so on prod every stage move threw.
+  let stateId: string | null;
+  try {
+    stateId = await findIssueStateIdByName(apiKey, linearIssueId, targetStateName);
+  } catch (err) {
+    console.error(`Could not read the workflow states for Linear issue ${linearIssueId}:`, err);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ outputFields: { syncStatus: 'skipped', reason: 'linear_lookup_failed' } }),
+    };
+  }
+  if (!stateId) {
+    console.warn(`Linear state "${targetStateName}" not found in the team of issue ${linearIssueId}`);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ outputFields: { syncStatus: 'skipped', reason: `state_not_found:${targetStateName}` } }),
+    };
   }
 
   try {
@@ -128,13 +141,12 @@ interface CreateArgs {
   stageName: string | undefined;
   targetStateName: string;
   linearTeamId: string;
-  stateId: string;
   title: string | undefined;
   recordId: string | undefined;
 }
 
 async function createIssueForRecord(args: CreateArgs): Promise<{ statusCode: number; body: string }> {
-  const { apiKey, config, objectType, stageName, targetStateName, linearTeamId, stateId, title, recordId } = args;
+  const { apiKey, config, objectType, stageName, targetStateName, linearTeamId, title, recordId } = args;
 
   // Only the Content pipeline has a vault front door. Changelog records are
   // born from a Linear issue that already exists, so an unlinked one means
@@ -153,6 +165,36 @@ async function createIssueForRecord(args: CreateArgs): Promise<{ statusCode: num
     return {
       statusCode: 200,
       body: JSON.stringify({ outputFields: { syncStatus: 'skipped', reason: `below_outline:${stageName}` } }),
+    };
+  }
+
+  // A new issue has no team to ask, so it needs a real one from the workflow.
+  // 'any' is the assignee-first sentinel: refused here, by name, rather than
+  // sent to Linear to fail. Promoted notes on such a portal stay without an
+  // issue until a team for new issues is configured.
+  if (isAnyTeam(linearTeamId)) {
+    console.warn(`No team to create a Linear issue in: the workflow's linearTeamId is "${linearTeamId}"`);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ outputFields: { syncStatus: 'skipped', reason: 'no_team_for_create' } }),
+    };
+  }
+
+  let stateId: string | null;
+  try {
+    stateId = await findStateIdByName(apiKey, linearTeamId, targetStateName);
+  } catch (err) {
+    console.error(`Could not read the workflow states for Linear team ${linearTeamId}:`, err);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ outputFields: { syncStatus: 'skipped', reason: 'linear_lookup_failed' } }),
+    };
+  }
+  if (!stateId) {
+    console.warn(`Linear state "${targetStateName}" not found in team ${linearTeamId} — available states logged above`);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ outputFields: { syncStatus: 'skipped', reason: `state_not_found:${targetStateName}` } }),
     };
   }
 
