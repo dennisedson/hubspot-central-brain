@@ -31,7 +31,9 @@ const FUNCTIONS_DIR = join(__dirname, '..', 'functions');
 const PUBLIC_BY_DESIGN: Record<string, string> = {
   // Workflow actions post to actionUrl, which is an https URL in the
   // workflow-action hsmeta. .github/scripts/set-action-urls.sh rewrites the
-  // portal id per deploy. All of these authenticate with SYNC_SHARED_SECRET.
+  // portal id per deploy. NOT all of these authenticate: which ones check
+  // SYNC_SHARED_SECRET, and why the rest do not yet, is held by
+  // workflow-actions.test.ts. This comment used to claim they all did.
   asana_poll: 'workflow-action actionUrl',
   associate_related_content_fn: 'workflow-action actionUrl',
   fellow_sync: 'workflow-action actionUrl',
@@ -40,7 +42,7 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   sync_to_asana: 'workflow-action actionUrl',
   sync_to_linear: 'workflow-action actionUrl',
   video_attribution: 'workflow-action actionUrl',
-  youtube_sync: 'workflow-action actionUrl (also called by uid from VideoCard)',
+  youtube_sync_action: 'workflow-action actionUrl',
 
   // Breeze agent tools are invoked by HubSpot's agent runtime over HTTP.
   breeze_content_pipeline: 'Breeze agent tool, called by URL',
@@ -102,6 +104,7 @@ describe('function endpoints are justified', () => {
     'enterpret_insights_api',
     'content_data_api',
     'app_settings_api',
+    'youtube_sync',
   ])('%s is private — the UI calls it by uid', uid => {
     const fn = allFunctions().find(f => f.uid === uid);
 

@@ -1,5 +1,7 @@
 ## 🎬 YouTube Episode Guide: Your Portal on Glass — Building a CMS React Dashboard with Islands
 
+> **⚠️ Update, 2026-10-20 — read before following along.** **The browser no longer calls `content-data-api` or `settings-api`.** Both are private now — `settings-api` answered `saveSettings` to anyone. The theme makes one server-side call to `dashboard-data`, authenticated with `DASHBOARD_SHARED_SECRET` read through `getSecret()` (episode 58). The CMS React, Islands and layout parts of this guide still hold; the data path in *The Architecture* and the Network-tab check in *Testing* do not.
+
 **🎯 Core Learning Objective:**
 "By the end of this video, you will know how to build a membership-gated, at-a-glance CMS dashboard in a HubSpot Project using CMS React, Islands for client-side interactivity, and your own serverless functions as the data layer — all within the same project as your app."
 

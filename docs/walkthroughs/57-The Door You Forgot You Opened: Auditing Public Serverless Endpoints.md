@@ -1,5 +1,7 @@
 ## 🎬 YouTube Episode Guide: The Door You Forgot You Opened
 
+> **⚠️ Update, 2026-10-20 — read before following along.** This episode **leaves `content_data_api` and `app_settings_api` public** for the CMS theme; episode 58 replaces both with one secret-gated door. And the allowlist comment saying every workflow action authenticates with `SYNC_SHARED_SECRET` was wrong — seven did not. `workflow-actions.test.ts` now names which do (episode 62).
+
 **🎯 Core Learning Objective:**
 "By the end of this video, you will know how to audit every serverless function in your HubSpot app for accidental public exposure, close the ones nothing calls by URL, and write a test that stops them from creeping back open — without breaking the callers that genuinely need a URL."
 
