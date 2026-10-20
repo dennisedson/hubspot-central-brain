@@ -20,7 +20,7 @@
         "supportedValueTypes": [
           "STATIC_VALUE"
         ],
-        "isRequired": true
+        "isRequired": false
       }
     ],
     "outputFields": [
