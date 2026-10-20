@@ -14,6 +14,31 @@ unless the text says issue.
 
 ## 2026-10-20
 
+### `provision:workflows` rewrote live workflows, and no longer does
+
+The first live run of the workflow update path — on dev, to create the rollup
+workflow — landed every PUT and kept `isEnabled` and the daily schedules. It
+also, without being asked:
+
+- set `linearTeamId` on both sync workflows to **`'any'`**, copied from app
+  settings where it means "any team" to the webhook. `SyncToLinear` looks up a
+  team's workflow states with that field, so every HubSpot → Linear stage sync
+  on dev failed;
+- reset `actionTypeVersion` from **75 to 0** on the Associate and LinkedIn
+  workflows.
+
+Caught by snapshotting all seven workflows before the run and diffing after,
+because the script's own "isEnabled preserved" line only echoes what it read.
+Dev was restored from the snapshot. The merge logic moved to
+`src/scripts/flow-actions.ts` so it could be tested: it now keeps the live team
+id when settings only have the sentinel, keeps the live action version, and
+warns about any action left carrying `'any'`. Re-run on dev, all nine
+workflows diffed identical.
+
+Found on the way: **prod's eight Central Brain workflows are all disabled**,
+and its two sync workflows already carry `'any'` from their first
+provisioning.
+
 ### Digest doc links from Linear releases
 
 Monthly changelog digests turned out to live in Linear already, as **releases**

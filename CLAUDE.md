@@ -54,7 +54,11 @@ Each of these cost a day at least once.
   silent empty list downstream becomes an accusation against the user.
 - **Primary display properties cannot be cleared.** That is why `linear_team_id`
   uses the sentinel `'any'`. Read sentinels through their named predicate
-  (`isAnyTeam`), never a truthiness check — `'any'` is truthy.
+  (`isAnyTeam`), never a truthiness check — `'any'` is truthy. And never let the
+  sentinel reach anything that needs a real team: on 2026-10-20
+  `provision:workflows` copied it from settings into the sync workflows'
+  `linearTeamId`, and every HubSpot → Linear stage sync on dev failed until it
+  was restored. `src/scripts/flow-actions.ts` now keeps the live team id.
 - **HubSpot drops null properties** when a handler returns `body` as an object.
   Never let `null` be the success case; return a string. `JSON.stringify`'d
   bodies keep their nulls.

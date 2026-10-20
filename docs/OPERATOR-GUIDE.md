@@ -456,10 +456,10 @@ the Asana task the next time the entry changes stage, as Create Doc links do.
 2. Deploy.
 3. `PORTAL=<portal> npm run provision:workflows` — creates *Changelog Rollup Docs (Daily)*,
    disabled and unscheduled. Edit → Enrollment triggers → "On a schedule", then turn it on.
-   **It also re-sends every existing workflow through the update path**, which has never been
-   confirmed against a live portal (`PROJECT-CONTEXT.md` §3.2). Run it on dev first and check
-   the existing workflows afterwards — or build this one by hand: App Config object, the
-   *Sync Rollup Doc Links* action, the shared secret as its one field.
+   It also re-sends every existing workflow through the update path. Since 2026-10-20 that
+   keeps each action's live team id and version, and a re-run on dev changed nothing
+   (`PROJECT-CONTEXT.md` §3.2). If it prints `⚠ … linearTeamId is 'any'`, that workflow
+   already held the sentinel — give it a real Linear team before enabling it.
 4. `npm run preflight`.
 
 Each run reports in the workflow's history: `syncStatus` is `ok`, `partial` (out of time — the
