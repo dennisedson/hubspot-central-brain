@@ -1,0 +1,12 @@
+{
+  "uid": "rollup_doc_sync",
+  "type": "app-function",
+  "config": {
+    "entrypoint": "/app/functions/RollupDocSync.js",
+    "endpoint": {
+      "path": "rollup-doc-sync",
+      "methods": ["POST"]
+    },
+    "secretKeys": ["LINEAR_API_KEY", "SYNC_SHARED_SECRET", "HS_ACCESS_TOKEN"]
+  }
+}
