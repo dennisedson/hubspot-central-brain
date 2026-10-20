@@ -137,6 +137,15 @@ Each of these cost a day at least once.
   delete-branch-on-merge after a `develop` → `master` PR. It has been restored.
   If `develop` is missing, recreate it from `master` rather than branching off
   `master` and leaving the model behind.
+- **Nothing merges into `master` except `develop`.** #118 and #127 went
+  straight in, and each time the next `develop` → `master` promotion
+  conflicted. The repair is a branch off `develop` that merges `master` in —
+  and that PR must land with **"Create a merge commit", never squash.** A
+  squash copies the resolved content but drops `master` from the ancestry, so
+  git sees both branches editing the same lines and the promotion conflicts
+  again. Simulated on 2026-10-20 with `git merge-tree`: squash, three
+  conflicts; merge commit, clean. #124 was squashed, which is why this came
+  back.
 - Confirm a UI change renders before building the next thing on top of it.
 - `hs project dev` runs the extension locally and shows the real exception.
   Deploying to read a generic error message is the slow path.
