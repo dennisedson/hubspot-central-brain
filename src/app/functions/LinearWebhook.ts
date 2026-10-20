@@ -93,9 +93,19 @@ export async function main(context: PublicFunctionContext): Promise<{ statusCode
     return { statusCode: 500, body: JSON.stringify({ error: 'Server misconfiguration' }) };
   }
 
-  // HubSpot's function runtime strips both custom headers and query parameters,
-  // making standard webhook signature verification impossible. We rely on
-  // schema validation below to reject malformed requests.
+  // Linear signs its webhooks with a `Linear-Signature` header, and HubSpot's
+  // function runtime does not surface custom headers, so that signature cannot
+  // be verified here. The schema validation below is what rejects malformed
+  // requests.
+  //
+  // This comment used to say query parameters were stripped as well. They are
+  // not. Verified 2026-10-15 against the live dev portal:
+  // `content-data-api?pipeline=changelog` returned the changelog stages rather
+  // than the default ones, so the param arrived. They land in `context.params`
+  // and their values are ARRAYS. It matters because a query-param token is a
+  // real option wherever the caller controls the URL — dashboard_data_api is
+  // gated exactly that way. It is not an option here, because Linear decides
+  // what it sends.
   void secret;
 
   const payload = context.body;

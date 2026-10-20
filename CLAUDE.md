@@ -114,10 +114,12 @@ Each of these cost a day at least once.
   The exceptions are real: workflow actions POST to `actionUrl`, the Breeze
   tools are called by HubSpot's agent runtime, and Google, Linear, Asana and
   PubSubHubbub all hold URLs. So does the **CMS theme** in `src/theme/`, which
-  fetches `content-data-api` and `settings-api` from `getServerSideProps` —
-  server-side CMS rendering, where `hubspot.serverless()` does not exist. Grep
-  `src/theme/` before privatising anything; that is what this missed the first
-  time. Those two remain open to the internet and want a shared secret.
+  renders server-side in HubSpot's CMS, where `hubspot.serverless()` does not
+  exist. Grep `src/theme/` before privatising anything; that is what this missed
+  the first time. The theme used to fetch `content-data-api` and `settings-api`,
+  both unauthenticated; since #127 it has one read-only door,
+  `dashboard_data_api`, gated by `DASHBOARD_SHARED_SECRET` (read with
+  `getSecret()` during SSR), and those two are private.
 
 - **Deploys lie.** `hs project upload` prints "DONE" while the build is still
   BUILDING, and containers lag 60–75s after `[deployed]`. Verify the
@@ -135,6 +137,15 @@ Each of these cost a day at least once.
   delete-branch-on-merge after a `develop` → `master` PR. It has been restored.
   If `develop` is missing, recreate it from `master` rather than branching off
   `master` and leaving the model behind.
+- **Nothing merges into `master` except `develop`.** #118 and #127 went
+  straight in, and each time the next `develop` → `master` promotion
+  conflicted. The repair is a branch off `develop` that merges `master` in —
+  and that PR must land with **"Create a merge commit", never squash.** A
+  squash copies the resolved content but drops `master` from the ancestry, so
+  git sees both branches editing the same lines and the promotion conflicts
+  again. Simulated on 2026-10-20 with `git merge-tree`: squash, three
+  conflicts; merge commit, clean. #124 was squashed, which is why this came
+  back.
 - Confirm a UI change renders before building the next thing on top of it.
 - `hs project dev` runs the extension locally and shows the real exception.
   Deploying to read a generic error message is the slow path.

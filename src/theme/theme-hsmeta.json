@@ -3,6 +3,8 @@
   "type": "theme",
   "config": {
     "themePath": "central-brain-dashboard",
-    "secretNames": []
+    "secretNames": [
+      "DASHBOARD_SHARED_SECRET"
+    ]
   }
 }
