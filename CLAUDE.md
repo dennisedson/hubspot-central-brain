@@ -58,7 +58,9 @@ Each of these cost a day at least once.
   sentinel reach anything that needs a real team: on 2026-10-20
   `provision:workflows` copied it from settings into the sync workflows'
   `linearTeamId`, and every HubSpot → Linear stage sync on dev failed until it
-  was restored. `src/scripts/flow-actions.ts` now keeps the live team id.
+  was restored. `src/scripts/flow-actions.ts` now keeps the live team id, and
+  `SyncToLinear` asks an existing issue for its own team
+  (`findIssueStateIdByName`) instead of trusting the workflow's.
 - **HubSpot drops null properties** when a handler returns `body` as an object.
   Never let `null` be the success case; return a string. `JSON.stringify`'d
   bodies keep their nulls.

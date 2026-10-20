@@ -349,10 +349,11 @@ left, plus what 2026-10-01 added:
   `enrollmentSchedule`, and prod's 8 workflows will have arrived that way. Edit
   → Enrollment triggers → "On a schedule", as dev's were set by hand.
   **Checked 2026-10-20: all 8 are still disabled** — so no HubSpot → Linear or
-  Asana sync runs on prod at all. And before enabling the two sync workflows,
-  give them a real Linear team: both carry `linearTeamId: 'any'` from their
-  original provisioning, which `SyncToLinear` cannot look up. Re-running
-  `provision:workflows` will not fix that — it keeps the live value and warns.
+  Asana sync runs on prod at all. Both sync workflows carry
+  `linearTeamId: 'any'` from their original provisioning. That no longer
+  blocks enabling them: since 2026-10-20 `SyncToLinear` asks each existing
+  issue for its own team. It only means a note promoted from the vault gets
+  `no_team_for_create` instead of a Linear issue, until a real team is set.
 - **Add the load-bearing new properties to `preflight.ts`.**
   `REQUIRED_PROPERTIES` covers 30 properties and none of them are `rollout_*`,
   `changelog_draft` or the drafting settings — so a portal missing them passes
