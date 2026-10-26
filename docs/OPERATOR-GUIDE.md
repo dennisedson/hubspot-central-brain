@@ -24,15 +24,15 @@ Last reviewed against the code, the merged PRs and both portals on **2026-10-20*
 
 | Layer | What it does | Status |
 |---|---|---|
-| **Content spine** | Linear ↔ HubSpot ↔ Asana | **Working on dev.** On prod, Linear → HubSpot runs (the webhook), but **HubSpot → Linear/Asana does not: all eight prod workflows are switched off** (checked 2026-10-20). They can be turned on as they are — §1.8 |
-| **Digest doc links** | Each digest's release name and Google Doc, from Linear, on your entries in it | **Deployed to both portals 2026-10-20; not yet seen working live.** Property provisioned on both; the daily workflow exists on dev only — §4b |
+| **Content spine** | Linear ↔ HubSpot ↔ Asana | **Working on dev; on on prod since 2026-10-26**, except the Changelog sync, paused until #142 ships. The 33 active prod records got their Asana tasks by a hand-run sync — §1.8 |
+| **Digest doc links** | Each digest's release name and Google Doc, from Linear, on your entries in it | **Working on prod.** The webhook has been writing them since 2026-10-20; a one-off sweep on 2026-10-26 filled the Spring Spotlight entries. The daily workflow is on and scheduled on both portals since 2026-10-26 — §1.8, §4b |
 | **Fellow → tasks** | Meeting action items become HubSpot Projects | **In doubt.** Every path on `api.fellow.app` now answers `404` with an HTML page, including the root, and prod has never set `fellow_last_sync`. Found by the credential probe, not yet diagnosed — §6.3 |
 | **Changelog** | Linear issue → Changelog record → pipeline | **Working, carrying records.** 70 changelog records on prod, and the drafting prompts measured against them |
 | **Changelog drafting** | Draft a post or a digest entry from the record, with Claude | **Working.** Card on the record, prompts in version control, model and thinking selectable — §4b |
 | **Rollout dates** | Milestone dates parsed from the Linear description, board sorted by the next one | **Working.** `rollout_*` properties; `1970-01-01` treated as unset |
 | **Cards** | Linear / Asana Status, Related Content, Enterpret Insights, Changelog Draft (Content), Meeting Intelligence (Contacts), YouTube (Video) | **Working** |
 | **App settings surface** | Settings reachable from Connected apps → the app → **Settings** | **Working since 2026-10-01.** This guide previously said it did not exist; the platform's tabs changed — §1.5 |
-| **Video** | YouTube OAuth, metrics sync, AI suggestions, UTM attribution | **Partly proven.** Live Google and Anthropic calls have both now been made. Dev is connected; **prod's refresh token is dead** (`invalid_grant`) and needs re-authorising — §4.2. The daily sync is a HubSpot workflow since 2026-10-20, off on both portals — §4.3 |
+| **Video** | YouTube OAuth, metrics sync, AI suggestions, UTM attribution | **Partly proven.** Live Google and Anthropic calls have both now been made. Dev is connected; **prod's refresh token is dead** (`invalid_grant`) and needs re-authorising — §4.2. The daily sync is a HubSpot workflow, on on both portals since 2026-10-26 — prod's fails until re-authorised — §4.3 |
 | **Credential health** | Probe of every external credential, from inside the app | **Working, on demand.** `PORTAL=prod npm run health`. Its daily cron was removed in #125 — §1.7 |
 | **Breeze agent tools** | Ask Breeze about your pipeline | **Blocked.** Returns UNAUTHORIZED — see `docs/walkthroughs/` |
 | **Enterpret** | Friction themes on content | **Blocked.** No API key obtainable; data arrives out-of-band (#12) |
@@ -200,16 +200,19 @@ schedule**. Nothing runs until you turn it on, and a daily runs only once it has
 **Edit → Enrollment triggers → "On a schedule" → Daily, 17:00**, then turn it on. Re-running
 the script keeps both.
 
-As of 2026-10-20, all eight on prod are off. What each is safe to switch on:
+**All of them are on, on both portals, since 2026-10-26** — turned on by API rather than the UI:
+GET the flow, set `isEnabled: true` and (for a daily, if it has none) the `enrollmentSchedule`
+above, PUT the whole body back, then diff against a snapshot. What each one costs while its
+integration is broken:
 
-| Workflow | Turn on? |
+| Workflow | State |
 |---|---|
-| Content / Changelog → Sync to Linear + Asana | **Yes.** Both carry `linearTeamId: 'any'`, which is fine for stage syncs since 2026-10-20 — `SyncToLinear` asks each issue for its team. A note promoted from the vault would get `no_team_for_create` instead of a Linear issue until a real team is set on the action |
+| Content / Changelog → Sync to Linear + Asana | **Content: on. Changelog: paused on prod** (2026-10-26) until #142 is deployed — it bounced Todo and Canceled issues back to Backlog. Both Both carry `linearTeamId: 'any'`, which is fine for stage syncs since 2026-10-20 — `SyncToLinear` asks each issue for its team. A note promoted from the vault would get `no_team_for_create` instead of a Linear issue until a real team is set on the action |
 | Asana → Poll for Stage Changes (Daily) | **Yes.** Schedule it first |
 | Content / Video → Associate Related Content | **Yes** |
 | Changelog Rollup Docs (Daily) | **Yes**, once it exists on the portal (`provision:workflows` after a deploy) — §4b |
-| YouTube → Sync Metrics (Daily) | **Only once the portal's YouTube token is alive** — §4.2. Prod's is dead, so it would fail daily |
-| Fellow → Sync Action Items to Tasks (Daily) | **Not yet.** Every Fellow path answers 404 — §6.3 |
+| YouTube → Sync Metrics (Daily) | On. **Prod's fails daily** until its YouTube token is re-authorised — §4.2 |
+| Fellow → Sync Action Items to Tasks (Daily) | On. **Fails daily** while every Fellow path answers 404 — §6.3 |
 | Content → Generate LinkedIn Draft | Pointless until HubSpot Social is connected (#18) |
 
 ---
@@ -274,9 +277,8 @@ longer true, and `docs/TEST-PLAN.md` §3 was the document that had it right:
   `{"error":"invalid_grant","error_description":"Bad Request"}` on 2026-10-01 — the second
   time this has happened. Re-authorise it (§4.2), and publish the consent screen first
   (§4.1) or it will die again in seven days.
-- **No daily sync runs on either portal right now.** The GitHub cron that synced dev was
-  replaced on 2026-10-20 by the *YouTube → Sync Metrics (Daily)* workflow, which is off on
-  both (§4.3). Turn prod's on only after re-authorising, or it fails every day.
+- **The daily sync is on, on both portals, since 2026-10-26** (§4.3). The GitHub cron it
+  replaced synced dev only. **Prod's fails every day** until it is re-authorised.
 
 The card rendering (test plan §5) still has never been run by anyone.
 
