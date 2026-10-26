@@ -271,20 +271,20 @@ how often. Reading one for the other is why the YouTube sync spent three weeks o
 a GitHub cron. `provision-workflows.ts` creates each daily **disabled and
 unscheduled**; schedule it and turn it on in the UI.
 
-| Thing | Trigger | Reality, checked 2026-10-20 |
+| Thing | Trigger | Reality, checked 2026-10-26 |
 |---|---|---|
-| `AsanaPoll` | *Asana → Poll for Stage Changes (Daily)* | on, 17:00, on dev. **Off on prod** |
-| `FellowSync` | *Fellow → Sync Action Items to Tasks (Daily)* | on, 17:00, on dev — but every Fellow path answers 404 (`PROJECT-CONTEXT.md` §3.1). Off on prod |
-| `YouTubeSyncAction` | *YouTube → Sync Metrics (Daily)* | exists on both portals, **off on both**. Was a GitHub cron until 2026-10-20. Prod's YouTube refresh token is dead, so prod would fail until re-authorised |
-| `RollupDocSync` | *Changelog Rollup Docs (Daily)* | exists on dev, off. Catches what no webhook announces — a doc attached to a release after its issues, a completed release rolling issues on |
+| `AsanaPoll` | *Asana → Poll for Stage Changes (Daily)* | on, 17:00, both portals (prod since 2026-10-26) |
+| `FellowSync` | *Fellow → Sync Action Items to Tasks (Daily)* | on, 17:00, both portals — and failing: every Fellow path answers 404 (`PROJECT-CONTEXT.md` §3.1) |
+| `YouTubeSyncAction` | *YouTube → Sync Metrics (Daily)* | on, 17:00, both portals since 2026-10-26. Was a GitHub cron until 2026-10-20. **Prod's fails** until its YouTube refresh token is re-authorised |
+| `RollupDocSync` | *Changelog Rollup Docs (Daily)* | on, 17:00, both portals since 2026-10-26. Catches what no webhook announces — a doc attached to a release after its issues, a completed release rolling issues on |
 | `app-health` | `PORTAL=… npm run health`, **on demand** | its daily cron was removed in #125: the prod job inherited the deploy approval gate and fourteen runs queued unreported |
 | `LinearWebhook` | Linear push | real-time |
 | Deploys | merge to `develop` → Dev; `master` → Prod, triggered by hand | see the deploy traps in `CLAUDE.md` |
 
-**Prod's eight Central Brain workflows are all disabled** (checked 2026-10-20),
-so no HubSpot → Linear/Asana sync and no daily job runs there yet. Since
-2026-10-20 the two sync workflows can be enabled as they are, `'any'` team and
-all — `SyncToLinear` asks each existing issue for its own team.
+**Prod's Central Brain workflows were all off until 2026-10-26**, so no HubSpot →
+Linear/Asana sync and no daily job ran there before that. The two sync workflows
+went on with their `'any'` team — `SyncToLinear` asks each existing issue for its
+own team.
 
 **`app-health` is the only check that would notice a dead credential.**
 `npm run preflight` is entirely structural — object ids, pipelines, stages,

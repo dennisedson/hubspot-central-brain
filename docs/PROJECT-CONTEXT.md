@@ -78,16 +78,21 @@ Portal state, checked 2026-10-20, with 2026-10-26 additions:
   portals with before/after snapshots — the only change on each was the YouTube
   daily gaining its secret. A one-off rollup sweep on prod set *Spring 2027
   Spotlight* on 12 records; **21 prod records now carry a release** (9 monthly,
-  12 Spotlight). Every prod workflow is still **off**, the rollup daily included.
+  12 Spotlight). Then **every Central Brain workflow on both portals was turned
+  on**, the four dailies scheduled for 17:00 — by API, from before/after
+  snapshots (operator guide §1.8). So on prod HubSpot → Linear/Asana sync now
+  runs, and each record's next stage move can create its first Asana task in
+  *BuildRel | Advocacy Content Factory*: none of the 94 had one. Prod's YouTube
+  and Fellow dailies are on knowingly and will fail until their credentials
+  are fixed (§5).
 - **Prod `22047910`** was deployed twice that day (#129, #135), so it carries the
   rollup doc links (#128), the provisioning fix (#130) and the `SyncToLinear`
-  team fix (#133). **All eight Central Brain workflows on prod are switched
-  off**, so HubSpot → Linear/Asana sync does not run there; Linear → HubSpot
-  (the webhook) does.
+  team fix (#133). Its eight Central Brain workflows were all still switched
+  off that day — turned on 2026-10-26, above.
 - **`changelog_entry` is gone from both portals.**
-- **Dev `51869810`** has its workflows on, except the two dailies created that
-  day — *Changelog Rollup Docs* and *YouTube → Sync Metrics* — which are off and
-  unscheduled.
+- **Dev `51869810`** had its workflows on, except the two dailies created that
+  day — *Changelog Rollup Docs* and *YouTube → Sync Metrics* — turned on and
+  scheduled 2026-10-26.
 
 ### 3.1 Works end to end
 
@@ -155,11 +160,11 @@ it work."
     second time that has happened; see the consent-screen trap in
     `OPERATOR-GUIDE.md` §4.1.
 
-  **No daily sync runs on either portal right now.** It was a GitHub Actions
-  cron from 2026-09-28 — dev only, hours late, and calling `/youtube-sync` with
-  no secret. On 2026-10-20 it became the *YouTube → Sync Metrics (Daily)*
-  workflow, behind the shared secret (§4); that workflow is off on both portals,
-  and prod's must stay off until its token is re-authorised.
+  The daily sync was a GitHub Actions cron from 2026-09-28 — dev only, hours
+  late, and calling `/youtube-sync` with no secret. On 2026-10-20 it became the
+  *YouTube → Sync Metrics (Daily)* workflow, behind the shared secret (§4), on
+  and scheduled on both portals since 2026-10-26. **Prod's fails every day**
+  until its token is re-authorised.
 - **The 2026-09-30 settings work** — project routing UI, historical-import
   preview, unmapped-project banner. **The test gap is closed.** PR #82
   ("test(settings): cover the project routing work, and fix what it exposed")
@@ -189,8 +194,9 @@ it work."
     `ok`, 12 updated, 0 cleared, 0 skipped; a read-only preview beforehand
     predicted exactly that, and one afterwards found nothing left.
 
-  Not yet running on its own: *Changelog Rollup Docs (Daily)* exists on both
-  portals, **off and unscheduled**. Operator guide §4b.
+  *Changelog Rollup Docs (Daily)* has run on its own since 2026-10-26 (on and
+  scheduled on both portals); its first scheduled run is not yet observed.
+  Operator guide §4b.
 - **Workflow-action authentication.** Every action URL is public. Four actions
   check the shared secret end to end — the two sync actions, rollup docs and
   related content — and since 2026-10-20 the YouTube sync makes five. Seven do
@@ -393,25 +399,23 @@ is tracked as such (#23–#34, #62).
 
 ### What remains before it
 
-As of 2026-10-20. The first item is the one that stands between prod and MVP
-point 2.
+As of 2026-10-26.
 
-- **Turn on prod's workflows.** All eight are off, so stage changes do not leave
-  HubSpot on prod. The two sync workflows can go on as they are — their
-  `linearTeamId: 'any'` stopped mattering for stage syncs on 2026-10-20 — and so
-  can the Asana poll (schedule it first) and the two Associate workflows. Operator
-  guide §1.8 lists each, with what to leave off and why.
-- **Schedule and turn on *Changelog Rollup Docs (Daily)*** on both portals
-  (Daily, 17:00). It exists on both since 2026-10-26; until it runs, a doc
-  attached to a release after its issues reaches HubSpot only by hand.
+- **Watch prod's first days with the spine on.** All its workflows went on
+  2026-10-26. Expect Asana tasks to appear in *BuildRel | Advocacy Content
+  Factory* as records move stage — none of the 94 had one — and check for echo:
+  a stage change arriving from Linear should not bounce back as a second
+  Linear update. Read the first scheduled runs of the four dailies at 17:00.
 - **Re-authorise YouTube on prod.** The refresh token is dead
   (`invalid_grant`, PR #104) and `?action=status` will keep answering
   `connected` while a token-shaped string sits in the secret. Operator guide
   §4.1–§4.2; publish the consent screen first or it will die again in 7 days.
-  Only then turn on prod's *YouTube → Sync Metrics (Daily)*.
+  Prod's *YouTube → Sync Metrics (Daily)* is already on and fails daily until
+  then — turned on knowingly on 2026-10-26.
 - **Find out whether Fellow still exists.** Every path on `api.fellow.app`
   404s with HTML and prod has never set `fellow_last_sync` (§3.1). Either a URL
-  changed or the integration is gone; both need a person, not a guess.
+  changed or the integration is gone; both need a person, not a guess. Its
+  daily is on on both portals and fails until then.
 - **Authenticate the seven remaining workflow actions** named in
   `NOT_YET_AUTHENTICATED` (§3.2), the Breeze three once their call shape is
   known. Each is a secret check in the function, a `sharedSecret` input on the
