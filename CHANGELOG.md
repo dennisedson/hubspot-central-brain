@@ -14,6 +14,28 @@ unless the text says issue.
 
 ## 2026-10-26
 
+### Syncing back to Linear no longer bounces issues
+
+Asked to run the Linear and Asana syncs by hand across prod, a read-only preview
+first showed what a mass run would do: 8 Linear issues would move, and most of
+those moves were wrong. The changelog stage map is many-to-one — Backlog, Todo
+and Canceled all mean `identified`, which maps back to **Backlog** alone — so
+`SyncToLinear` pushing the stage back unasked moved Todo issues to Backlog and
+reopened cancelled ones. That was live on prod from the moment its workflows
+went on, so the Changelog sync was paused within the hour.
+
+`SyncToLinear` now reads the issue's current state with its team's states in one
+query (`getIssueWorkflow`, replacing `findIssueStateIdByName`) and moves nothing
+Linear already has right (`linear_already_agrees`) or that sits in a state the
+map does not know (`linear_state_unmapped:Duplicate`). A record moved on the
+HubSpot board still moves its issue.
+
+The hand-run sync itself: three issues pushed to Linear (DEVADV-876, 319 → In
+Progress; 1453 → In Review), one record pulled from it (DEVADV-1440 → drafting),
+four left as Linear has them, and Asana tasks created for the 33 active records
+through the deployed action — one canary checked in Asana first. Published and
+archived work got none.
+
 ### Spotlight releases now show on their issues
 
 Asked why DEVADV-555 showed no release in HubSpot: it sits in *Spring 2027

@@ -123,6 +123,13 @@ Each of these cost a day at least once.
   `dashboard_data_api`, gated by `DASHBOARD_SHARED_SECRET` (read with
   `getSecret()` during SSR), and those two are private.
 
+- **A many-to-one stage map bounces when synced back.** Backlog, Todo and
+  Canceled all mean changelog `identified`, which maps back to Backlog alone —
+  so pushing the stage to Linear unasked moved Todo issues to Backlog and
+  reopened cancelled ones, live on prod for an hour on 2026-10-26.
+  `SyncToLinear` now reads the issue's current state and moves nothing Linear
+  already has right, or that sits in a state the map does not know. Any sync
+  that writes back through a lossy map needs the same check.
 - **HubSpot workflows do run on a schedule.** The cadence is the flow's
   top-level `enrollmentSchedule`; `enrollmentCriteria.type: 'MANUAL'` only says
   which records enrol. Reading one for the other put the YouTube sync on a
