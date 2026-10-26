@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { main } from '../functions/RollupDocSync';
+import { ROLLUP_PIPELINE_ID } from '@lib/rollup-doc';
 
 vi.mock('@lib/portal-config', async () => ({
   ...(await vi.importActual<typeof import('@lib/portal-config')>('@lib/portal-config')),
@@ -10,7 +11,7 @@ const OCT_DOC = 'https://docs.google.com/document/d/1OctDoc/edit';
 const OWN_DOC = 'https://docs.google.com/document/d/1OwnDoc/edit';
 const HS = 'https://api.hubapi.com/crm/objects/2026-03/2-content';
 
-interface FakeRelease { id: string; name: string; links: string[]; issues: string[] }
+interface FakeRelease { id: string; name: string; links: string[]; issues: string[]; pipelineId?: string }
 interface FakeEntry { id: string; linear_id?: string; changelog_doc_url?: string; changelog_rollup?: string }
 type Filter = { propertyName: keyof FakeEntry; operator: string; values?: string[] };
 
@@ -34,10 +35,11 @@ function world(
     if (url === 'https://api.linear.app/graphql') {
       if (body.query.includes('releases(')) {
         const nodes = releases
-          .filter(r => r.name.endsWith(body.variables.suffix))
+          .filter(r => (r.pipelineId ?? ROLLUP_PIPELINE_ID) === body.variables.pipelineId)
           .map(r => ({
             id: r.id,
             name: r.name,
+            pipeline: { id: r.pipelineId ?? ROLLUP_PIPELINE_ID },
             links: { nodes: r.links.map(u => ({ url: u })), pageInfo: { hasNextPage: false } },
             issues: {
               nodes: r.issues.slice(0, ISSUES_PAGE).map(id => ({ id })),
@@ -161,13 +163,13 @@ describe('RollupDocSync', () => {
     expect(out(res)).toMatchObject({ syncStatus: 'ok', updated: '0' });
   });
 
-  it('leaves alone, and reports, an issue in two monthly rollups', async () => {
+  it('leaves alone, and reports, an issue in two rollup releases', async () => {
     const november: FakeRelease = { id: 'r-nov', name: 'November 2026 Changelog Rollup', links: [], issues: ['iss-876'] };
     const { writes } = world([OCTOBER, november], [{ id: '101', linear_id: 'iss-876' }]);
     const res = await main(ctx());
     expect(writes).toEqual([]);
     expect(out(res).skipped).toBe('1');
-    expect(out(res).detail).toMatch(/iss-876: in 2 monthly rollups/);
+    expect(out(res).detail).toMatch(/iss-876: in 2 rollup releases/);
   });
 
   it("reads past the first page of a release's issues", async () => {
@@ -200,9 +202,18 @@ describe('RollupDocSync', () => {
     expect(writes).toEqual([]);
   });
 
-  it('ignores Spotlight releases', async () => {
-    const spotlight: FakeRelease = { id: 'r-spot', name: 'Spring 2027 Spotlight', links: [OWN_DOC], issues: ['iss-876'] };
-    const { writes } = world([spotlight], [{ id: '101', linear_id: 'iss-876' }]);
+  it('names the Spotlight a record is in — every release in the pipeline counts', async () => {
+    // DEVADV-555 sat in Spring 2027 Spotlight with no release showing in HubSpot,
+    // because rollups were matched by name until 2026-10-26.
+    const spotlight: FakeRelease = { id: 'r-spring', name: 'Spring 2027 Spotlight', links: [], issues: ['iss-555'] };
+    const { writes } = world([spotlight], [{ id: '555', linear_id: 'iss-555' }]);
+    await main(ctx());
+    expect(writes).toEqual([{ id: '555', properties: { changelog_rollup: 'Spring 2027 Spotlight' } }]);
+  });
+
+  it('ignores releases in any other pipeline', async () => {
+    const elsewhere: FakeRelease = { id: 'r-x', name: 'Q4 Launch', links: [OWN_DOC], issues: ['iss-876'], pipelineId: 'pipe-other' };
+    const { writes } = world([elsewhere], [{ id: '101', linear_id: 'iss-876' }]);
     await main(ctx());
     expect(writes).toEqual([]);
   });

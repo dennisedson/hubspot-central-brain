@@ -571,26 +571,38 @@ describe('LinearWebhook — noticing a project nobody has mapped', () => {
   });
 });
 
-describe('LinearWebhook — monthly rollup', () => {
+describe('LinearWebhook — rollup releases', () => {
+  // A digest is any release in Linear's "Monthly Changelog Rollups" pipeline,
+  // Spotlights included (2026-10-26). Membership is the pipeline id.
+  const ROLLUP = 'b597dbf5-1813-447d-ba29-2a13106b9274';
   const OCT_DOC = 'https://docs.google.com/document/d/1OctDoc/edit';
   const linearFetch = vi.fn();
+
+  const LINEAR_RELEASES: Record<string, { name: string; pipelineId: string; links: string[] }> = {
+    'rel-oct': { name: 'October 2026 Changelog Rollup', pipelineId: ROLLUP, links: [OCT_DOC] },
+    'rel-nov': { name: 'November 2026 Changelog Rollup', pipelineId: ROLLUP, links: [] },
+    'rel-spring': { name: 'Spring 2027 Spotlight', pipelineId: ROLLUP, links: [] },
+    'rel-elsewhere': { name: 'Q4 Launch', pipelineId: 'pipe-other', links: [] },
+  };
 
   beforeEach(() => {
     linearFetch.mockReset();
     vi.stubGlobal('fetch', linearFetch);
     process.env.LINEAR_API_KEY = 'lin_key';
-    // Routed on intent: the only Linear call this path makes reads one release's links.
+    // Routed on intent: the only Linear call this path makes reads one release.
     linearFetch.mockImplementation(async (url: string, init: { body: string }) => {
       const { query, variables } = JSON.parse(init.body);
-      if (url === 'https://api.linear.app/graphql' && query.includes('links(') && variables.id === 'rel-oct') {
+      const r = LINEAR_RELEASES[variables?.id];
+      if (url === 'https://api.linear.app/graphql' && query.includes('release(id: $id)') && r) {
         return {
           ok: true,
           status: 200,
           json: async () => ({
             data: {
               release: {
-                name: 'October 2026 Changelog Rollup',
-                links: { nodes: [{ url: OCT_DOC }], pageInfo: { hasNextPage: false } },
+                name: r.name,
+                pipeline: { id: r.pipelineId },
+                links: { nodes: r.links.map(u => ({ url: u })), pageInfo: { hasNextPage: false } },
               },
             },
           }),
@@ -605,11 +617,13 @@ describe('LinearWebhook — monthly rollup', () => {
     delete process.env.LINEAR_API_KEY;
   });
 
-  const withReleases = (releases: Array<{ id: string; name: string }>) => ({
+  type PayloadRelease = { id: string; name: string; pipeline?: { id: string } | null };
+  const withReleases = (releases: PayloadRelease[]) => ({
     ...baseCtx,
     body: { ...baseCtx.body, data: { ...baseCtx.body.data, releases } },
   });
-  const inOctober = () => withReleases([{ id: 'rel-oct', name: 'October 2026 Changelog Rollup' }]);
+  // As the schema documents it: each release names its pipeline.
+  const inOctober = () => withReleases([{ id: 'rel-oct', name: 'October 2026 Changelog Rollup', pipeline: { id: ROLLUP } }]);
 
   it('writes the digest doc in the stage-already-matches branch', async () => {
     // Adding an issue to a release does not change its state, so this is the
@@ -634,7 +648,37 @@ describe('LinearWebhook — monthly rollup', () => {
     expect(JSON.parse(result.body).ok).toBe(true);
   });
 
+  it('names the Spotlight an issue is in — DEVADV-555 showed none', async () => {
+    const { updateByLinearId } = await import('@lib/hubspot-client');
+    await main(withReleases([{ id: 'rel-spring', name: 'Spring 2027 Spotlight', pipeline: { id: ROLLUP } }]));
+    expect(updateByLinearId).toHaveBeenCalledWith('2-content', 'lin-1', { changelog_rollup: 'Spring 2027 Spotlight' });
+  });
+
+  it("asks Linear for the pipeline when the payload doesn't say", async () => {
+    // No live payload has been seen carrying `pipeline`, so an absent one is
+    // looked up rather than assumed either way.
+    const { updateByLinearId } = await import('@lib/hubspot-client');
+    await main(withReleases([{ id: 'rel-spring', name: 'Spring 2027 Spotlight' }]));
+    expect(linearFetch).toHaveBeenCalledOnce();
+    expect(updateByLinearId).toHaveBeenCalledWith('2-content', 'lin-1', { changelog_rollup: 'Spring 2027 Spotlight' });
+  });
+
+  it('makes no Linear call and no write for a release the payload places in another pipeline', async () => {
+    const { updateByLinearId } = await import('@lib/hubspot-client');
+    await main(withReleases([{ id: 'rel-elsewhere', name: 'Q4 Launch', pipeline: { id: 'pipe-other' } }]));
+    expect(linearFetch).not.toHaveBeenCalled();
+    expect(updateByLinearId).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing for a release Linear places in another pipeline', async () => {
+    const { updateByLinearId } = await import('@lib/hubspot-client');
+    await main(withReleases([{ id: 'rel-elsewhere', name: 'Q4 Launch' }]));
+    expect(updateByLinearId).not.toHaveBeenCalled();
+  });
+
   it('still syncs the stage, and still names the release, when Linear cannot be reached', async () => {
+    // The payload's own word that the release is in the rollup pipeline is
+    // enough to write the name; the doc needs Linear.
     linearFetch.mockRejectedValue(new Error('ECONNRESET'));
     const { upsertContent, updateByLinearId } = await import('@lib/hubspot-client');
 
@@ -646,6 +690,17 @@ describe('LinearWebhook — monthly rollup', () => {
     expect(updateByLinearId).toHaveBeenCalledWith('2-content', 'lin-1', { changelog_rollup: 'October 2026 Changelog Rollup' });
     expect(body.ok).toBe(true);
     expect(body.rollup.linkError).toMatch(/ECONNRESET/);
+  });
+
+  it('writes nothing, and says why, when Linear cannot be reached and the payload named no pipeline', async () => {
+    linearFetch.mockRejectedValue(new Error('ECONNRESET'));
+    const { updateByLinearId } = await import('@lib/hubspot-client');
+
+    const result = await main(withReleases([{ id: 'rel-spring', name: 'Spring 2027 Spotlight' }]));
+
+    expect(result.statusCode).toBe(200);
+    expect(updateByLinearId).not.toHaveBeenCalled();
+    expect(JSON.parse(result.body).rollup.linkError).toMatch(/ECONNRESET/);
   });
 
   it('still answers 200 when the rollup write itself fails', async () => {
@@ -660,21 +715,14 @@ describe('LinearWebhook — monthly rollup', () => {
     expect(body.rollup.error).toMatch(/does not exist/);
   });
 
-  it('makes no Linear call and no write for an issue only in a Spotlight', async () => {
-    const { updateByLinearId } = await import('@lib/hubspot-client');
-    await main(withReleases([{ id: 'rel-spot', name: 'Spring 2027 Spotlight' }]));
-    expect(linearFetch).not.toHaveBeenCalled();
-    expect(updateByLinearId).not.toHaveBeenCalled();
-  });
-
-  it('writes nothing for an issue in two monthly rollups', async () => {
+  it('writes nothing for an issue in two rollup releases — a Spotlight counts', async () => {
     const { updateByLinearId } = await import('@lib/hubspot-client');
     const result = await main(withReleases([
-      { id: 'rel-oct', name: 'October 2026 Changelog Rollup' },
-      { id: 'rel-nov', name: 'November 2026 Changelog Rollup' },
+      { id: 'rel-oct', name: 'October 2026 Changelog Rollup', pipeline: { id: ROLLUP } },
+      { id: 'rel-spring', name: 'Spring 2027 Spotlight', pipeline: { id: ROLLUP } },
     ]));
     expect(updateByLinearId).not.toHaveBeenCalled();
-    expect(JSON.parse(result.body).rollup.skipped).toMatch(/2 monthly rollups/);
+    expect(JSON.parse(result.body).rollup.skipped).toMatch(/2 rollup releases/);
   });
 
   it('writes nothing when the payload carries no releases field', async () => {

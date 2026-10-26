@@ -1,6 +1,6 @@
 import type { LinearState } from './types';
 import { HS_SYNC_TAG } from './mapping';
-import { isMonthlyRollup, ROLLUP_NAME_SUFFIX, type RollupRelease } from './rollup-doc';
+import { isRollupPipeline, ROLLUP_PIPELINE_ID, type RollupRelease } from './rollup-doc';
 
 const LINEAR_API = 'https://api.linear.app/graphql';
 
@@ -302,35 +302,54 @@ function linkUrls(links: LinkConnection, releaseName: string): string[] {
   return links.nodes.map(n => n.url);
 }
 
-/** The URLs linked on one release. The webhook knows the id from its payload. */
-export async function getReleaseLinkUrls(apiKey: string, releaseId: string): Promise<string[]> {
+export interface ReleaseDetail {
+  name: string;
+  pipelineId: string;
+  linkUrls: string[];
+}
+
+/**
+ * One release's name, pipeline and linked URLs. The webhook knows the id from
+ * its payload; it asks for the pipeline here when the payload did not say.
+ */
+export async function getRelease(apiKey: string, releaseId: string): Promise<ReleaseDetail> {
   // An unknown id comes back as HTTP 200 with `Entity not found: Release` and
   // null data (observed 2026-10-20), which gql throws on. The null check is for
   // the null node Linear returns elsewhere for a bogus id.
-  const data = await gql<{ release: { name: string; links: LinkConnection } | null }>(
+  const data = await gql<{ release: { name: string; pipeline: { id: string }; links: LinkConnection } | null }>(
     apiKey,
     `query($id: String!) {
-       release(id: $id) { name links(first: ${LINKS_PAGE}) { nodes { url } pageInfo { hasNextPage } } }
+       release(id: $id) {
+         name
+         pipeline { id }
+         links(first: ${LINKS_PAGE}) { nodes { url } pageInfo { hasNextPage } }
+       }
      }`,
     { id: releaseId },
   );
   if (!data.release) throw new Error(`Linear release not found: ${releaseId}`);
-  return linkUrls(data.release.links, data.release.name);
+  return {
+    name: data.release.name,
+    pipelineId: data.release.pipeline.id,
+    linkUrls: linkUrls(data.release.links, data.release.name),
+  };
 }
 
 interface ReleaseNode {
   id: string;
   name: string;
+  pipeline: { id: string };
   links: LinkConnection;
   issues: Connection<{ id: string }>;
 }
 
 const ROLLUP_RELEASES = `
-  query($first: Int!, $after: String, $suffix: String!) {
-    releases(first: $first, after: $after, filter: { name: { endsWith: $suffix } }) {
+  query($first: Int!, $after: String, $pipelineId: ID!) {
+    releases(first: $first, after: $after, filter: { pipeline: { id: { eq: $pipelineId } } }) {
       nodes {
         id
         name
+        pipeline { id }
         links(first: ${LINKS_PAGE}) { nodes { url } pageInfo { hasNextPage } }
         issues(first: ${ISSUES_PAGE}) { nodes { id } pageInfo { hasNextPage endCursor } }
       }
@@ -346,22 +365,24 @@ const RELEASE_ISSUES = `
   }`;
 
 /**
- * Every monthly rollup release, with its links and ALL of its issue ids.
+ * Every release in the rollup pipeline — monthly rollups and Spotlights — with
+ * its links and ALL of its issue ids. Filtered by pipeline id in the query, and
+ * checked again here.
  *
  * One request in the ordinary case: each release's first page of issues rides
  * along with it. A release with more issues than that is re-read to the end.
  */
-export async function listMonthlyRollups(apiKey: string): Promise<RollupRelease[]> {
+export async function listRollupReleases(apiKey: string): Promise<RollupRelease[]> {
   const releases = await fetchEveryPage<{ releases: Connection<ReleaseNode> }, ReleaseNode>(
     apiKey,
     ROLLUP_RELEASES,
-    { suffix: ROLLUP_NAME_SUFFIX },
+    { pipelineId: ROLLUP_PIPELINE_ID },
     d => d.releases,
     RELEASES_PAGE,
   );
 
   const rollups: RollupRelease[] = [];
-  for (const r of releases.filter(r => isMonthlyRollup(r.name))) {
+  for (const r of releases.filter(r => isRollupPipeline(r.pipeline?.id))) {
     const issues = r.issues.pageInfo.hasNextPage
       ? await fetchEveryPage<{ release: { issues: Connection<{ id: string }> } | null }, { id: string }>(
           apiKey,
@@ -370,7 +391,13 @@ export async function listMonthlyRollups(apiKey: string): Promise<RollupRelease[
           d => d.release?.issues,
         )
       : r.issues.nodes;
-    rollups.push({ id: r.id, name: r.name, linkUrls: linkUrls(r.links, r.name), issueIds: issues.map(i => i.id) });
+    rollups.push({
+      id: r.id,
+      name: r.name,
+      pipelineId: r.pipeline.id,
+      linkUrls: linkUrls(r.links, r.name),
+      issueIds: issues.map(i => i.id),
+    });
   }
   return rollups;
 }

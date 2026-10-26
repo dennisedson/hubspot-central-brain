@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchEveryPage, getReleaseLinkUrls, listMonthlyRollups } from '@lib/linear-client';
+import { fetchEveryPage, getRelease, listRollupReleases } from '@lib/linear-client';
+import { ROLLUP_PIPELINE_ID } from '@lib/rollup-doc';
 
 /**
  * Its own file because linear-client.test.ts queues responses in call order,
@@ -20,10 +21,11 @@ function route(handler: (gql: Gql) => unknown) {
 
 const OCT_DOC = 'https://docs.google.com/document/d/1OctDoc/edit';
 
-function release(id: string, name: string, links: string[], issues: string[], moreIssues = false) {
+function release(id: string, name: string, links: string[], issues: string[], moreIssues = false, pipelineId = ROLLUP_PIPELINE_ID) {
   return {
     id,
     name,
+    pipeline: { id: pipelineId },
     links: { nodes: links.map(url => ({ url })), pageInfo: { hasNextPage: false } },
     issues: {
       nodes: issues.map(i => ({ id: i })),
@@ -73,18 +75,19 @@ describe('fetchEveryPage', () => {
   });
 });
 
-describe('listMonthlyRollups', () => {
-  it('returns monthly rollups with their links and issues, and asks Linear to filter by suffix', async () => {
+describe('listRollupReleases', () => {
+  it('asks Linear for the rollup pipeline and returns every release in it, Spotlights included', async () => {
     route(({ query, variables }) => {
       if (query.includes('releases(')) {
-        expect(variables.suffix).toBe('Changelog Rollup');
+        expect(variables.pipelineId).toBe(ROLLUP_PIPELINE_ID);
         return ok({
           releases: {
             nodes: [
               release('r-oct', 'October 2026 Changelog Rollup', [OCT_DOC, 'https://example.com'], ['i-1', 'i-2']),
-              // Ends with the suffix, so Linear's filter lets it through; the
-              // full pattern does not.
-              release('r-hol', 'Holiday Changelog Rollup', [], ['i-9']),
+              release('r-spring', 'Spring 2027 Spotlight', [], ['i-555']),
+              // Linear's filter should never let this through; if it did, the
+              // pipeline check here still would not.
+              release('r-x', 'Elsewhere', [], ['i-9'], false, 'pipe-other'),
             ],
             pageInfo: { hasNextPage: false, endCursor: null },
           },
@@ -93,13 +96,15 @@ describe('listMonthlyRollups', () => {
       throw new Error(`unexpected query: ${query}`);
     });
 
-    expect(await listMonthlyRollups('k')).toEqual([
+    expect(await listRollupReleases('k')).toEqual([
       {
         id: 'r-oct',
         name: 'October 2026 Changelog Rollup',
+        pipelineId: ROLLUP_PIPELINE_ID,
         linkUrls: [OCT_DOC, 'https://example.com'],
         issueIds: ['i-1', 'i-2'],
       },
+      { id: 'r-spring', name: 'Spring 2027 Spotlight', pipelineId: ROLLUP_PIPELINE_ID, linkUrls: [], issueIds: ['i-555'] },
     ]);
   });
 
@@ -122,7 +127,7 @@ describe('listMonthlyRollups', () => {
       throw new Error(`unexpected query: ${query}`);
     });
 
-    const [oct] = await listMonthlyRollups('k');
+    const [oct] = await listRollupReleases('k');
     expect(oct.issueIds).toEqual(['i-1', 'i-2', 'i-3']);
   });
 
@@ -138,25 +143,34 @@ describe('listMonthlyRollups', () => {
         },
       }),
     );
-    await expect(listMonthlyRollups('k')).rejects.toThrow(/links/);
+    await expect(listRollupReleases('k')).rejects.toThrow(/links/);
   });
 });
 
-describe('getReleaseLinkUrls', () => {
-  it('returns the URLs linked on the release', async () => {
+describe('getRelease', () => {
+  it("returns a release's name, pipeline and linked URLs", async () => {
     route(({ query, variables }) => {
       expect(query).toContain('links(');
-      expect(variables.id).toBe('r-oct');
+      expect(query).toContain('pipeline');
+      expect(variables.id).toBe('r-spring');
       return ok({
-        release: { name: 'October 2026 Changelog Rollup', links: { nodes: [{ url: OCT_DOC }], pageInfo: { hasNextPage: false } } },
+        release: {
+          name: 'Spring 2027 Spotlight',
+          pipeline: { id: ROLLUP_PIPELINE_ID },
+          links: { nodes: [{ url: OCT_DOC }], pageInfo: { hasNextPage: false } },
+        },
       });
     });
-    expect(await getReleaseLinkUrls('k', 'r-oct')).toEqual([OCT_DOC]);
+    expect(await getRelease('k', 'r-spring')).toEqual({
+      name: 'Spring 2027 Spotlight',
+      pipelineId: ROLLUP_PIPELINE_ID,
+      linkUrls: [OCT_DOC],
+    });
   });
 
   it('throws on a null release rather than reporting no links', async () => {
     route(() => ok({ release: null }));
-    await expect(getReleaseLinkUrls('k', 'nope')).rejects.toThrow(/not found/);
+    await expect(getRelease('k', 'nope')).rejects.toThrow(/not found/);
   });
 
   it('throws on the error Linear actually sends for an unknown release', async () => {
@@ -169,6 +183,6 @@ describe('getReleaseLinkUrls', () => {
         errors: [{ message: 'Entity not found: Release', extensions: { code: 'INPUT_ERROR', statusCode: 400 } }],
       }),
     }));
-    await expect(getReleaseLinkUrls('k', 'nope')).rejects.toThrow(/Entity not found/);
+    await expect(getRelease('k', 'nope')).rejects.toThrow(/Entity not found/);
   });
 });

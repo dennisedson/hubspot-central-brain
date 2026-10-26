@@ -237,7 +237,7 @@ it work."
   deploys `DONE` to a surface that does not exist is worth raising as a
   platform/DX bug.
 - **Issue #78** (content containers and lineage) is still open, but its rollup
-  half is superseded: monthly rollups are Linear releases (#128). The
+  half is superseded: digests are Linear releases (#128). The
   video-series half still stands.
 - **Issues #23–#34 and #62** are Phase 5 — explicitly post-MVP. They are a
   backlog, not work in progress.
@@ -280,15 +280,21 @@ and `8008340` reverted it five minutes later. If you find yourself adding an
 The `changelog_entry` object is **gone from both portals** (checked 2026-10-20).
 Do not bring it back.
 
-### Monthly changelog rollups are Linear releases — 2026-10-20
+### Digests are Linear releases — 2026-10-20, membership amended 2026-10-26
 
-A digest is a release named `<Month> <Year> Changelog Rollup` in Linear's
-*Monthly Changelog Rollups* pipeline, owned by whoever writes it, with its
-Google Doc linked on the release. Membership arrives on the issue webhook, so
-HubSpot needs no digest record and no association label for it — the rollup half
-of the containers design (#78) is superseded. Matched by name, because Spotlight
-releases share the pipeline. The release's doc overrides whatever an entry
-holds; only a rollup's doc is ever cleared. Spec
+A digest is a release in Linear's *Monthly Changelog Rollups* pipeline — a
+monthly rollup (`October 2026 Changelog Rollup`) or a Spotlight
+(`Spring 2027 Spotlight`) — owned by whoever writes it, with its Google Doc
+linked on the release. Membership arrives on the issue webhook, so HubSpot needs
+no digest record and no association label for it — the rollup half of the
+containers design (#78) is superseded.
+
+**Every release in that pipeline counts, matched by the pipeline's id.** It was
+the name pattern until 2026-10-26, which left Spotlight issues showing no release;
+the operator chose the whole pipeline over a separate "all releases" property,
+accepting that an issue in both a monthly rollup and a Spotlight gets neither
+(skipped and reported). The release's doc overrides whatever an entry holds; only
+a rollup release's doc is ever cleared. Spec
 `docs/superpowers/specs/2026-10-20-rollup-doc-link-design.md`.
 
 ### Scheduled work is a HubSpot "(Daily)" workflow, not a GitHub cron — 2026-10-20

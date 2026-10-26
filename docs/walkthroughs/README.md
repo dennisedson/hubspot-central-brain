@@ -21,6 +21,8 @@ change would mislead someone following along, the guide carries a dated
   pipeline on `content_piece` (ep 15).
 - **`SyncToLinear` asks the issue for its team** (ep 61); `provision:workflows`
   keeps each action's live team and version (ep 60).
+- **A digest is any release in the rollup pipeline**, Spotlights included —
+  matched by the pipeline's id, not the release name (ep 63).
 - **Merges into `master` are merge commits** — `CLAUDE.md` → Process.
 
 ## Gap
@@ -92,7 +94,8 @@ narrative.
 | 56 | [One Brain, Two Machines: Shared Instructions That Make Your AI Write Tests](56-One%20Brain,%20Two%20Machines:%20Shared%20Instructions%20That%20Make%20Your%20AI%20Write%20Tests.md) |  |
 | 57 | [The Door You Forgot You Opened: Auditing Public Serverless Endpoints](57-The%20Door%20You%20Forgot%20You%20Opened:%20Auditing%20Public%20Serverless%20Endpoints.md) | Superseded in part by ep 58 and ep 62 — note at top |
 | 58 | [One Door, One Key: Securing an Endpoint Two Callers Share](58-One%20Door,%20One%20Key:%20Securing%20an%20Endpoint%20Two%20Callers%20Share.md) |  |
-| 59 | [Follow the Release: Syncing a Digest Doc Link from Linear Without Owning the Digest](59-Follow%20the%20Release:%20Syncing%20a%20Digest%20Doc%20Link%20from%20Linear%20Without%20Owning%20the%20Digest.md) |  |
+| 59 | [Follow the Release: Syncing a Digest Doc Link from Linear Without Owning the Digest](59-Follow%20the%20Release:%20Syncing%20a%20Digest%20Doc%20Link%20from%20Linear%20Without%20Owning%20the%20Digest.md) | Rollups matched by pipeline, not name — note at top, ep 63 |
 | 60 | [Snapshot, Run, Diff: Catching a Provisioning Script That Rewrote Live Workflows](60-Snapshot,%20Run,%20Diff:%20Catching%20a%20Provisioning%20Script%20That%20Rewrote%20Live%20Workflows.md) |  |
 | 61 | [Ask the Issue, Not the Config: Resolving a Linear Team From the Record Itself](61-Ask%20the%20Issue,%20Not%20the%20Config:%20Resolving%20a%20Linear%20Team%20From%20the%20Record%20Itself.md) |  |
 | 62 | [The Scheduler You Already Had: Moving a Cron Out of GitHub and Behind a Secret](62-The%20Scheduler%20You%20Already%20Had:%20Moving%20a%20Cron%20Out%20of%20GitHub%20and%20Behind%20a%20Secret.md) |  |
+| 63 | [Membership Is the Container, Not the Name: Matching Linear Releases by Pipeline](63-Membership%20Is%20the%20Container,%20Not%20the%20Name:%20Matching%20Linear%20Releases%20by%20Pipeline.md) |  |

@@ -1,6 +1,16 @@
 # Rollup doc links from Linear releases — design
 
 **Status:** approved 2026-10-20, being built on `feat/rollup-doc-link`.
+> **Amended 2026-10-26: membership is the pipeline, not the name.** Every
+> release in Linear's *Monthly Changelog Rollups* pipeline (id
+> `b597dbf5-1813-447d-ba29-2a13106b9274`) counts — monthly rollups and
+> Spotlights alike — so Spotlight issues show their release too. Read "monthly
+> rollup" below as "release in that pipeline". `isMonthlyRollup(name)` became
+> `isRollupPipeline(id)`; `listMonthlyRollups` became `listRollupReleases`;
+> the webhook reads a release's pipeline from Linear when its payload does not
+> say. Accepted cost: an issue in both a monthly rollup and a Spotlight is in two
+> rollup releases, so it is skipped and reported, and gets neither.
+
 **Supersedes:** the *rollup* half of
 [`2026-09-30-content-containers-and-lineage-design.md`](2026-09-30-content-containers-and-lineage-design.md)
 (issue #78). The video-series half of that spec is unaffected.
