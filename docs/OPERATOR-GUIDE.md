@@ -24,7 +24,7 @@ Last reviewed against the code, the merged PRs and both portals on **2026-10-20*
 
 | Layer | What it does | Status |
 |---|---|---|
-| **Content spine** | Linear ↔ HubSpot ↔ Asana | **Working on dev; on on prod since 2026-10-26**, except the Changelog sync, paused until #142 ships. The 33 active prod records got their Asana tasks by a hand-run sync — §1.8 |
+| **Content spine** | Linear ↔ HubSpot ↔ Asana | **Working on dev; on on prod since 2026-10-26**, not yet watched over days there. The 33 active prod records got their Asana tasks by a hand-run sync — §1.8 |
 | **Digest doc links** | Each digest's release name and Google Doc, from Linear, on your entries in it | **Working on prod.** The webhook has been writing them since 2026-10-20; a one-off sweep on 2026-10-26 filled the Spring Spotlight entries. The daily workflow is on and scheduled on both portals since 2026-10-26 — §1.8, §4b |
 | **Fellow → tasks** | Meeting action items become HubSpot Projects | **In doubt.** Every path on `api.fellow.app` now answers `404` with an HTML page, including the root, and prod has never set `fellow_last_sync`. Found by the credential probe, not yet diagnosed — §6.3 |
 | **Changelog** | Linear issue → Changelog record → pipeline | **Working, carrying records.** 70 changelog records on prod, and the drafting prompts measured against them |
@@ -207,7 +207,7 @@ integration is broken:
 
 | Workflow | State |
 |---|---|
-| Content / Changelog → Sync to Linear + Asana | **Content: on. Changelog: paused on prod** (2026-10-26) until #142 is deployed — it bounced Todo and Canceled issues back to Backlog. Both Both carry `linearTeamId: 'any'`, which is fine for stage syncs since 2026-10-20 — `SyncToLinear` asks each issue for its team. A note promoted from the vault would get `no_team_for_create` instead of a Linear issue until a real team is set on the action |
+| Content / Changelog → Sync to Linear + Asana | **On.** The Changelog one was paused for three hours on 2026-10-26 while #142 stopped it bouncing Todo and Canceled issues back to Backlog. Both carry `linearTeamId: 'any'`, which is fine for stage syncs since 2026-10-20 — `SyncToLinear` asks each issue for its team. A note promoted from the vault would get `no_team_for_create` instead of a Linear issue until a real team is set on the action |
 | Asana → Poll for Stage Changes (Daily) | **Yes.** Schedule it first |
 | Content / Video → Associate Related Content | **Yes** |
 | Changelog Rollup Docs (Daily) | **Yes**, once it exists on the portal (`provision:workflows` after a deploy) — §4b |

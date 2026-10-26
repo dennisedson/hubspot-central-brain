@@ -295,7 +295,7 @@ unscheduled**; schedule it and turn it on in the UI.
 
 **Prod's Central Brain workflows were all off until 2026-10-26**, so no HubSpot →
 Linear/Asana sync and no daily job ran there before that. The Changelog sync was
-paused again within the hour, for the bounce bug #142 fixes. The two sync workflows
+paused within the hour for the bounce bug #142 fixed, and back on once it shipped. The two sync workflows
 went on with their `'any'` team — `SyncToLinear` asks each existing issue for its
 own team.
 
