@@ -1,10 +1,11 @@
 /**
- * Monthly changelog rollups, and the digest doc each one links to.
+ * Changelog digests — the releases in Linear's rollup pipeline — and the doc each links to.
  *
- * The team tracks each monthly digest as a Linear release — "October 2026
- * Changelog Rollup" — in the "Monthly Changelog Rollups" pipeline. Whoever owns
- * a digest attaches its Google Doc to the release as a link, and every entry of
- * mine in that release should carry the link in `changelog_doc_url`.
+ * The team tracks each digest as a Linear release — "October 2026 Changelog
+ * Rollup", "Spring 2027 Spotlight" — in the "Monthly Changelog Rollups"
+ * pipeline. Whoever owns a digest attaches its Google Doc to the release as a
+ * link, and every entry of mine in that release should carry the link in
+ * `changelog_doc_url`, and the release's name in `changelog_rollup`.
  * See docs/superpowers/specs/2026-10-20-rollup-doc-link-design.md.
  *
  * Pure and I/O-free so the webhook and the daily sweep decide through the same
@@ -12,18 +13,19 @@
  */
 
 /**
- * Recognised by NAME, not by pipeline: the same pipeline holds Spotlight
- * releases ("Spring 2027 Spotlight", 24 issues) that are not changelog digests.
- * Anchored at both ends, so "October 2026 Changelog Rollup (draft)" is not one.
+ * The Linear release pipeline whose releases are digests: "Monthly Changelog
+ * Rollups". It holds the monthly rollups AND the Spotlights ("Spring 2027
+ * Spotlight"), and since 2026-10-26 every release in it counts — the operator
+ * wanted Spotlight membership on the cards too.
+ *
+ * Matched by id, which survives a rename. It used to be the name pattern
+ * `<Month> <Year> Changelog Rollup`, which is why Spotlight issues showed no
+ * release at all.
  */
-const MONTHLY_ROLLUP =
-  /^(January|February|March|April|May|June|July|August|September|October|November|December) \d{4} Changelog Rollup$/;
+export const ROLLUP_PIPELINE_ID = 'b597dbf5-1813-447d-ba29-2a13106b9274';
 
-/** What Linear is asked to filter on. The full pattern is still checked here. */
-export const ROLLUP_NAME_SUFFIX = 'Changelog Rollup';
-
-export function isMonthlyRollup(name: string): boolean {
-  return MONTHLY_ROLLUP.test(name.trim());
+export function isRollupPipeline(pipelineId: string | null | undefined): boolean {
+  return pipelineId === ROLLUP_PIPELINE_ID;
 }
 
 /**
@@ -60,15 +62,16 @@ export function pickRollupDoc(urls: string[]): RollupDoc {
   return { kind: 'ambiguous', urls: docs };
 }
 
-/** A monthly rollup release as the sweep reads it from Linear. */
+/** A release in the rollup pipeline, as the sweep reads it from Linear. */
 export interface RollupRelease {
   id: string;
   name: string;
+  pipelineId: string;
   linkUrls: string[];
   issueIds: string[];
 }
 
-/** One monthly rollup an issue is in, with its digest doc resolved. */
+/** One rollup release an issue is in, with its digest doc resolved. */
 export interface IssueRollup {
   name: string;
   doc: RollupDoc;
@@ -81,9 +84,9 @@ export interface RollupFields {
 }
 
 export interface SweepPlan {
-  /** Linear issue id → the monthly rollups it is in. */
+  /** Linear issue id → the rollup releases it is in. */
   issueRollups: Map<string, IssueRollup[]>;
-  /** The id of every Google Doc linked on any monthly rollup — ambiguous ones included. */
+  /** The id of every Google Doc linked on any rollup release — ambiguous ones included. */
   rollupDocIds: Set<string>;
 }
 
@@ -91,7 +94,7 @@ export function planSweep(releases: RollupRelease[]): SweepPlan {
   const issueRollups = new Map<string, IssueRollup[]>();
   const rollupDocIds = new Set<string>();
   for (const release of releases) {
-    if (!isMonthlyRollup(release.name)) continue;
+    if (!isRollupPipeline(release.pipelineId)) continue;
     for (const url of release.linkUrls) {
       const id = googleDocId(url);
       if (id) rollupDocIds.add(id);
@@ -112,12 +115,12 @@ export interface Decision {
 }
 
 /**
- * What one entry should hold, given the monthly rollups its issue is in
+ * What one entry should hold, given the rollup releases its issue is in
  * according to Linear. The spec's §4 table, row for row.
  *
  * Precedence runs one way: a release that HAS a doc overwrites whatever the
  * entry holds. Clearing runs the other: only "a rollup doc" — the doc of ANY
- * monthly rollup — is ever cleared. That is how a link this feature wrote is
+ * rollup release — is ever cleared. That is how a link this feature wrote is
  * told apart from one a person pasted or Create Doc made, without storing where
  * each came from.
  */
@@ -129,7 +132,7 @@ export function decideEntry(
   if (rollups.length > 1) {
     return {
       changes: {},
-      skipped: `in ${rollups.length} monthly rollups (${rollups.map(r => r.name).join(', ')})`,
+      skipped: `in ${rollups.length} rollup releases (${rollups.map(r => r.name).join(', ')})`,
     };
   }
 

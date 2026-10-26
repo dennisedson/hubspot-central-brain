@@ -9,8 +9,8 @@ import {
   updateByLinearId,
 } from '../lib/hubspot-client';
 import type { LinearIssue, LinearWebhookPayload } from '../lib/types';
-import { getIssueProject, getReleaseLinkUrls } from '../lib/linear-client';
-import { isMonthlyRollup, pickRollupDoc, webhookChanges, type RollupDoc } from '../lib/rollup-doc';
+import { getIssueProject, getRelease } from '../lib/linear-client';
+import { isRollupPipeline, pickRollupDoc, webhookChanges, type IssueRollup } from '../lib/rollup-doc';
 import {
   HS_SYNC_TAG,
   isAnyTeam,
@@ -29,13 +29,20 @@ interface PublicFunctionContext {
 }
 
 /**
- * Puts the monthly rollup an issue is in — and the digest's doc, when its
- * release links one — on the entry.
+ * Puts the rollup release an issue is in — and the digest's doc, when the
+ * release links one — on the entry. A rollup release is any release in Linear's
+ * "Monthly Changelog Rollups" pipeline: monthly rollups and Spotlights alike.
  *
  * Runs after the stage write, in BOTH branches that make one. Adding an issue
  * to a release does not change its state, so the "stage already matches"
  * branch is the one that will usually fire; leaving it out is how rollout
  * dates once went unwritten.
+ *
+ * Membership is decided by the pipeline. A release the payload places in
+ * another pipeline costs nothing; one it places in the rollup pipeline, or does
+ * not place at all, is read from Linear for its pipeline and links. Linear's
+ * schema puts the pipeline in the payload, but no live payload has been seen
+ * carrying it, so an absent one is looked up rather than assumed.
  *
  * Set-only. Clearing a stale link needs the entry's current value and every
  * rollup's doc, which is the daily sweep's job (RollupDocSync).
@@ -46,35 +53,50 @@ interface PublicFunctionContext {
  */
 async function applyRollup(objectTypeId: string, issue: LinearIssue): Promise<Record<string, unknown> | undefined> {
   if (!issue.releases) return undefined;
-  const rollups = issue.releases.filter(r => isMonthlyRollup(r.name));
-  if (rollups.length === 0) return undefined;
+  const candidates = issue.releases.filter(r => !r.pipeline?.id || isRollupPipeline(r.pipeline.id));
+  if (candidates.length === 0) return undefined;
+
+  const apiKey = process.env.LINEAR_API_KEY;
+  const rollups: IssueRollup[] = [];
+  const linkErrors: string[] = [];
+  for (const candidate of candidates) {
+    try {
+      if (!apiKey) throw new Error('LINEAR_API_KEY is not set');
+      const release = await getRelease(apiKey, candidate.id);
+      if (isRollupPipeline(release.pipelineId)) {
+        rollups.push({ name: release.name, doc: pickRollupDoc(release.linkUrls) });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      linkErrors.push(`${candidate.name}: ${message}`);
+      console.error(`LinearWebhook: could not read release ${candidate.id}: ${message}`);
+      // The payload's own word that the release is in the rollup pipeline is
+      // enough to write its name. Without that word there is nothing to go on.
+      if (isRollupPipeline(candidate.pipeline?.id)) rollups.push({ name: candidate.name, doc: { kind: 'none' } });
+    }
+  }
+  const linkError = linkErrors.length > 0 ? linkErrors.join('; ') : undefined;
+
+  if (rollups.length === 0) return linkError ? { wrote: [], linkError } : undefined;
   if (rollups.length > 1) {
-    return { skipped: `in ${rollups.length} monthly rollups`, releases: rollups.map(r => r.name) };
+    return {
+      skipped: `in ${rollups.length} rollup releases`,
+      releases: rollups.map(r => r.name),
+      ...(linkError ? { linkError } : {}),
+    };
   }
 
-  const [release] = rollups;
-  let doc: RollupDoc = { kind: 'none' };
-  let linkError: string | undefined;
-  try {
-    const apiKey = process.env.LINEAR_API_KEY;
-    if (!apiKey) throw new Error('LINEAR_API_KEY is not set');
-    doc = pickRollupDoc(await getReleaseLinkUrls(apiKey, release.id));
-  } catch (err) {
-    // The name is still worth writing: it came from the payload, not this call.
-    linkError = err instanceof Error ? err.message : String(err);
-    console.error(`LinearWebhook: could not read links for release ${release.id}: ${linkError}`);
-  }
-
-  const changes = webhookChanges({ name: release.name, doc });
+  const [rollup] = rollups;
+  const changes = webhookChanges(rollup);
   try {
     const found = await updateByLinearId(objectTypeId, issue.id, changes);
     const skipped = !found
       ? 'no record for this issue'
-      : doc.kind === 'ambiguous'
-        ? `release links ${doc.urls.length} Google Docs`
+      : rollup.doc.kind === 'ambiguous'
+        ? `release links ${rollup.doc.urls.length} Google Docs`
         : undefined;
     return {
-      release: release.name,
+      release: rollup.name,
       wrote: found ? Object.keys(changes) : [],
       ...(skipped ? { skipped } : {}),
       ...(linkError ? { linkError } : {}),
@@ -82,7 +104,7 @@ async function applyRollup(objectTypeId: string, issue: LinearIssue): Promise<Re
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     console.error(`LinearWebhook: could not write rollup fields for ${issue.id}: ${error}`);
-    return { release: release.name, wrote: [], error };
+    return { release: rollup.name, wrote: [], error };
   }
 }
 
