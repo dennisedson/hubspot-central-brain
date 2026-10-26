@@ -1,5 +1,7 @@
 ## 🎬 YouTube Episode Guide: Follow the Release
 
+> **⚠️ Update, 2026-10-26 — read before following along.** Rollups are no longer matched **by name**. Every release in Linear's *Monthly Changelog Rollups* pipeline counts, matched by the pipeline's id — so Spotlight releases show on their issues too. `isMonthlyRollup(name)` became `isRollupPipeline(id)`, and the webhook reads a release's pipeline from Linear when its payload doesn't say (episode 63). The rest of the episode stands.
+
 **🎯 Core Learning Objective:**
 "By the end of this video, you will know how to sync a value that lives on a *group* in one system — a Google Doc link on a Linear release — onto every member record in your CRM, using one pure rule, a set-only webhook path and a strict daily sweep, without ever creating a record you don't own and without a partial read wiping out good data."
 
