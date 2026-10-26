@@ -8,7 +8,17 @@ beforeEach(async () => {
 
   vi.doMock('@lib/linear-client', () => ({
     findStateIdByName: vi.fn().mockResolvedValue('st-done'),
-    findIssueStateIdByName: vi.fn().mockResolvedValue('st-done'),
+    getIssueWorkflow: vi.fn().mockResolvedValue({
+      currentState: 'In Progress',
+      states: [
+        { id: 'st-backlog', name: 'Backlog', type: 'backlog' },
+        { id: 'st-todo', name: 'Todo', type: 'unstarted' },
+        { id: 'st-progress', name: 'In Progress', type: 'started' },
+        { id: 'st-review', name: 'In Review', type: 'started' },
+        { id: 'st-done', name: 'Done', type: 'completed' },
+        { id: 'st-canceled', name: 'Canceled', type: 'canceled' },
+      ],
+    }),
     updateLinearIssueState: vi.fn().mockResolvedValue(undefined),
     createIssue: vi.fn().mockResolvedValue({
       id: 'lin-new',
@@ -99,8 +109,8 @@ describe('SyncToLinear.main', () => {
   it("returns 200 with syncStatus \"skipped\" when the issue's team has no state by that name", async () => {
     // Was asked of the workflow's team until 2026-10-20; an existing issue's
     // states now come from the issue's own team.
-    const { findIssueStateIdByName } = await import('@lib/linear-client');
-    vi.mocked(findIssueStateIdByName).mockResolvedValue(null);
+    const { getIssueWorkflow } = await import('@lib/linear-client');
+    vi.mocked(getIssueWorkflow).mockResolvedValue({ currentState: 'In Progress', states: [{ id: 'st-progress', name: 'In Progress', type: 'started' }] });
     const result = await main(baseCtx);
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body).outputFields).toMatchObject({ syncStatus: 'skipped', reason: 'state_not_found:Done' });
@@ -155,7 +165,7 @@ describe('SyncToLinear.main', () => {
   });
 
   it('handles changelog objectType, mapping "reviewing" → "In Review"', async () => {
-    const { findIssueStateIdByName } = await import('@lib/linear-client');
+    const { getIssueWorkflow, updateLinearIssueState } = await import('@lib/linear-client');
     const ctx = {
       ...baseCtx,
       body: {
@@ -165,7 +175,8 @@ describe('SyncToLinear.main', () => {
     };
     await main(ctx);
     // The existing issue's team decides — see the describe block below.
-    expect(findIssueStateIdByName).toHaveBeenCalledWith('lin_test_key', 'lin-123', 'In Review');
+    expect(getIssueWorkflow).toHaveBeenCalledWith('lin_test_key', 'lin-123');
+    expect(updateLinearIssueState).toHaveBeenCalledWith('lin_test_key', 'lin-123', 'st-review');
   });
 });
 
@@ -345,11 +356,11 @@ describe("SyncToLinear — the team comes from the issue, not the workflow", () 
   });
 
   it("updates an existing issue using its own team when the workflow says 'any'", async () => {
-    const { findStateIdByName, findIssueStateIdByName, updateLinearIssueState } = await import('@lib/linear-client');
+    const { findStateIdByName, getIssueWorkflow, updateLinearIssueState } = await import('@lib/linear-client');
 
     const result = await main(anyTeam());
 
-    expect(findIssueStateIdByName).toHaveBeenCalledWith('lin_test_key', 'lin-123', 'Done');
+    expect(getIssueWorkflow).toHaveBeenCalledWith('lin_test_key', 'lin-123');
     expect(findStateIdByName).not.toHaveBeenCalled();
     expect(updateLinearIssueState).toHaveBeenCalledWith('lin_test_key', 'lin-123', 'st-done');
     expect(JSON.parse(result.body).outputFields.syncStatus).toBe('success');
@@ -358,15 +369,15 @@ describe("SyncToLinear — the team comes from the issue, not the workflow", () 
   it("uses the issue's team even when the workflow names a different real one", async () => {
     // An issue moved to another team would otherwise be handed a state id
     // from the wrong team.
-    const { findStateIdByName, findIssueStateIdByName } = await import('@lib/linear-client');
+    const { findStateIdByName, getIssueWorkflow } = await import('@lib/linear-client');
     await main(baseCtx);
-    expect(findIssueStateIdByName).toHaveBeenCalledWith('lin_test_key', 'lin-123', 'Done');
+    expect(getIssueWorkflow).toHaveBeenCalledWith('lin_test_key', 'lin-123');
     expect(findStateIdByName).not.toHaveBeenCalled();
   });
 
   it("answers 200 skipped, not a 500, when Linear can't be asked about the issue", async () => {
-    const { findIssueStateIdByName, updateLinearIssueState } = await import('@lib/linear-client');
-    vi.mocked(findIssueStateIdByName).mockRejectedValue(new Error('Linear GraphQL error: Entity not found: Issue'));
+    const { getIssueWorkflow, updateLinearIssueState } = await import('@lib/linear-client');
+    vi.mocked(getIssueWorkflow).mockRejectedValue(new Error('Linear GraphQL error: Entity not found: Issue'));
 
     const result = await main(baseCtx);
 
@@ -389,5 +400,65 @@ describe("SyncToLinear — the team comes from the issue, not the workflow", () 
   it("still reports below-Outline before it ever looks at the team", async () => {
     const result = await main(anyTeam({ linearIssueId: '', hubspotStage: 'idea' }));
     expect(JSON.parse(result.body).outputFields.reason).toBe('below_outline:idea');
+  });
+});
+
+describe('SyncToLinear — never bounce an issue Linear already has right', () => {
+  // The changelog map is many-to-one: Backlog, Todo and Canceled all mean
+  // `identified`, which maps back to Backlog alone. So an issue moved to Todo
+  // or Canceled in Linear changed the HubSpot stage, fired this action, and was
+  // pushed to Backlog — a cancelled issue reopened. Found on prod 2026-10-26.
+  const changelogAt = (stage: string) => ({
+    ...baseCtx,
+    body: { ...baseCtx.body, inputFields: { ...baseCtx.body.inputFields, objectType: 'changelog', hubspotStage: stage } },
+  });
+  const contentAt = (stage: string) => ({
+    ...baseCtx,
+    body: { ...baseCtx.body, inputFields: { ...baseCtx.body.inputFields, objectType: 'content', hubspotStage: stage } },
+  });
+  async function linearSays(currentState: string) {
+    const { getIssueWorkflow } = await import('@lib/linear-client');
+    const base = await vi.mocked(getIssueWorkflow).getMockImplementation()?.('k', 'x');
+    vi.mocked(getIssueWorkflow).mockResolvedValue({ ...(base as object), currentState } as never);
+  }
+
+  it.each(['Todo', 'Canceled', 'Backlog'])('leaves a changelog issue in %s alone when HubSpot says identified', async state => {
+    await linearSays(state);
+    const { updateLinearIssueState } = await import('@lib/linear-client');
+
+    const result = await main(changelogAt('identified'));
+
+    expect(updateLinearIssueState).not.toHaveBeenCalled();
+    expect(JSON.parse(result.body).outputFields).toMatchObject({ syncStatus: 'skipped', reason: 'linear_already_agrees' });
+  });
+
+  it("never moves an issue out of a state the mapping doesn't know — DEVDOCS-73 was Duplicate", async () => {
+    await linearSays('Duplicate');
+    const { updateLinearIssueState } = await import('@lib/linear-client');
+
+    const result = await main(contentAt('idea'));
+
+    expect(updateLinearIssueState).not.toHaveBeenCalled();
+    expect(JSON.parse(result.body).outputFields).toMatchObject({ syncStatus: 'skipped', reason: 'linear_state_unmapped:Duplicate' });
+  });
+
+  it('still moves the issue when HubSpot was moved somewhere Linear is not — the control', async () => {
+    // Someone dragged the card back to Identified while Linear says In Progress:
+    // that is a real instruction, and Backlog is what it means.
+    await linearSays('In Progress');
+    const { updateLinearIssueState } = await import('@lib/linear-client');
+
+    await main(changelogAt('identified'));
+
+    expect(updateLinearIssueState).toHaveBeenCalledWith('lin_test_key', 'lin-123', 'st-backlog');
+  });
+
+  it('still round-trips the content pipeline, which maps one-to-one', async () => {
+    await linearSays('Backlog');
+    const { updateLinearIssueState } = await import('@lib/linear-client');
+
+    await main(contentAt('outline'));
+
+    expect(updateLinearIssueState).toHaveBeenCalledWith('lin_test_key', 'lin-123', 'st-todo');
   });
 });

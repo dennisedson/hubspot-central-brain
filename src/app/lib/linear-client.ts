@@ -55,26 +55,38 @@ export async function findStateIdByName(
   return states.find(s => s.name.toLowerCase() === lower)?.id ?? null;
 }
 
+export interface IssueWorkflow {
+  /** The state the issue is in now, by name. */
+  currentState: string;
+  /** Every workflow state of the team the issue is in now. */
+  states: LinearState[];
+}
+
 /**
- * The id of the named workflow state in the team the issue is in NOW.
+ * An issue's current state, and the states of the team it is in NOW — one
+ * query, both halves of what SyncToLinear needs to decide whether to move it.
  *
  * Asked of the issue, not of a configured team. With assignee-first sync the
  * settings hold the sentinel 'any', and Linear answers team(id: "any") with
  * "Entity not found: Team"; and an issue moved to another team would otherwise
- * be handed a state id from the wrong one. States are paged strictly: a team
- * with more than a page of them is refused rather than half-searched.
+ * be handed a state id from the wrong one. The current state is what stops a
+ * many-to-one stage map bouncing an issue Linear already has right. States are
+ * paged strictly: a team with more than a page of them is refused rather than
+ * half-searched.
  */
-export async function findIssueStateIdByName(
-  apiKey: string,
-  issueId: string,
-  stateName: string,
-): Promise<string | null> {
+export async function getIssueWorkflow(apiKey: string, issueId: string): Promise<IssueWorkflow> {
   const data = await gql<{
-    issue: { team: { states: { nodes: LinearState[]; pageInfo: { hasNextPage: boolean } } } } | null;
+    issue: {
+      state: { name: string };
+      team: { states: { nodes: LinearState[]; pageInfo: { hasNextPage: boolean } } };
+    } | null;
   }>(
     apiKey,
     `query($issueId: String!) {
-       issue(id: $issueId) { team { states(first: 250) { nodes { id name type } pageInfo { hasNextPage } } } }
+       issue(id: $issueId) {
+         state { name }
+         team { states(first: 250) { nodes { id name type } pageInfo { hasNextPage } } }
+       }
      }`,
     { issueId },
   );
@@ -83,8 +95,7 @@ export async function findIssueStateIdByName(
   if (pageInfo.hasNextPage) {
     throw new Error(`The team of issue ${issueId} has more than 250 workflow states; refusing to search part of them`);
   }
-  const lower = stateName.toLowerCase();
-  return nodes.find(s => s.name.toLowerCase() === lower)?.id ?? null;
+  return { currentState: data.issue.state.name, states: nodes };
 }
 
 export async function updateLinearIssueState(

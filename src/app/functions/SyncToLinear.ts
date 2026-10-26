@@ -1,7 +1,9 @@
-import { findStateIdByName, findIssueStateIdByName, updateLinearIssueState, createIssue } from '../lib/linear-client';
+import { findStateIdByName, getIssueWorkflow, updateLinearIssueState, createIssue } from '../lib/linear-client';
 import {
   CONTENT_STAGE_TO_LINEAR_STATE,
   CHANGELOG_STAGE_TO_LINEAR_STATE,
+  LINEAR_STATE_TO_CONTENT_STAGE,
+  LINEAR_STATE_TO_CHANGELOG_STAGE,
   isFanoutStage,
   isAnyTeam,
 } from '../lib/mapping';
@@ -94,9 +96,9 @@ export async function main(context: SyncToLinearContext): Promise<{ statusCode: 
   // not the workflow's linearTeamId, which on an assignee-first portal is the
   // sentinel 'any', a team Linear does not have. This lookup used to run first
   // and unguarded, so on prod every stage move threw.
-  let stateId: string | null;
+  let workflow: { currentState: string; states: Array<{ id: string; name: string }> };
   try {
-    stateId = await findIssueStateIdByName(apiKey, linearIssueId, targetStateName);
+    workflow = await getIssueWorkflow(apiKey, linearIssueId);
   } catch (err) {
     console.error(`Could not read the workflow states for Linear issue ${linearIssueId}:`, err);
     return {
@@ -104,6 +106,37 @@ export async function main(context: SyncToLinearContext): Promise<{ statusCode: 
       body: JSON.stringify({ outputFields: { syncStatus: 'skipped', reason: 'linear_lookup_failed' } }),
     };
   }
+
+  // Do nothing when Linear already says what HubSpot says. The changelog map is
+  // many-to-one — Backlog, Todo and Canceled all mean `identified`, which maps
+  // back to Backlog alone — so pushing the stage back unasked moved Todo issues
+  // to Backlog and reopened cancelled ones. Most stage changes arrive FROM
+  // Linear; this is what keeps them from bouncing. (Found on prod, 2026-10-26.)
+  //
+  // And never move an issue out of a state the map does not know — Duplicate,
+  // Triage — because there is no telling what the move would undo.
+  const linearToStage = (objectType === 'changelog'
+    ? LINEAR_STATE_TO_CHANGELOG_STAGE
+    : LINEAR_STATE_TO_CONTENT_STAGE) as Record<string, string>;
+  const current = workflow.currentState;
+  const currentStage = Object.entries(linearToStage).find(([state]) => state.toLowerCase() === current.toLowerCase())?.[1];
+  if (currentStage === undefined) {
+    console.log(`Linear issue ${linearIssueId} is in "${current}", which no HubSpot stage maps to — leaving it`);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ outputFields: { syncStatus: 'skipped', reason: `linear_state_unmapped:${current}` } }),
+    };
+  }
+  if (currentStage === stageName) {
+    console.log(`Linear issue ${linearIssueId} is already "${current}", which means "${stageName}" — nothing to move`);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ outputFields: { syncStatus: 'skipped', reason: 'linear_already_agrees', linearStateName: current } }),
+    };
+  }
+
+  const lower = targetStateName.toLowerCase();
+  const stateId = workflow.states.find(st => st.name.toLowerCase() === lower)?.id ?? null;
   if (!stateId) {
     console.warn(`Linear state "${targetStateName}" not found in the team of issue ${linearIssueId}`);
     return {
