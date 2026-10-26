@@ -122,10 +122,13 @@ forces action. Two rules are load-bearing:
 today, so a stored copy is right for one day. `ContentDataApi` computes it at
 read time, and `SettingsApp.tsx` orders each pipeline column by it.
 
-### Monthly rollups and their digest doc
+### Rollup releases and their digest doc
 
-Each monthly changelog digest is a **Linear release** named
-`<Month> <Year> Changelog Rollup`, in the "Monthly Changelog Rollups" pipeline.
+Each changelog digest is a **Linear release** in the "Monthly Changelog
+Rollups" pipeline — the monthly rollups (`October 2026 Changelog Rollup`) and
+the Spotlights (`Spring 2027 Spotlight`) alike. Membership is the pipeline's id
+(`ROLLUP_PIPELINE_ID`), not the release name; until 2026-10-26 it was the name
+pattern, and Spotlight issues showed no release.
 The digest's owner — usually not me — attaches its Google Doc to the release as
 a link. Two properties on the entry follow it: `changelog_rollup` (the release
 name) and `changelog_doc_url` (the doc). Spec:
@@ -137,11 +140,11 @@ paths apply it:
 | path | when | does |
 |---|---|---|
 | `LinearWebhook` → `applyRollup` | every issue update, after the stage write, in **both** branches | **sets** `changelog_rollup` from the payload and `changelog_doc_url` from the release's links. Never clears |
-| `RollupDocSync` | daily workflow on App Config | **sets and clears**, from every monthly rollup's links and full issue list |
+| `RollupDocSync` | daily workflow on App Config | **sets and clears**, from every rollup release's links and full issue list |
 
 **`changelog_doc_url` has three writers now**: Create Doc on the changelog card,
-a person, and these two paths. A monthly rollup's doc **wins** over whatever is
-there. Only a *rollup doc* — the doc of any monthly rollup, compared by Google
+a person, and these two paths. A rollup release's doc **wins** over whatever is
+there. Only a *rollup doc* — the doc of any rollup release, compared by Google
 Doc id — is ever **cleared**, which is how a link the rollup paths wrote is told
 apart from one a person or Create Doc wrote, with no provenance stored.
 
@@ -160,6 +163,10 @@ links. `fetchEveryPage` and `searchAll` throw rather than return part of a set �
 unlike `AppSettingsApi`'s `fetchAllPages`, which is lenient on purpose — and
 every read happens before any write.
 
+
+**An issue in two rollup releases gets neither.** A Spotlight counts, so an
+issue in October and in Spring Spotlight is skipped and reported by both paths.
+That was the accepted cost of counting the whole pipeline.
 ---
 
 ## 3. Settings — one record gates everything

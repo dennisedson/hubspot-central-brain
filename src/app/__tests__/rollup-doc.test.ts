@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  isMonthlyRollup,
+  ROLLUP_PIPELINE_ID,
+  isRollupPipeline,
   googleDocId,
   pickRollupDoc,
   planSweep,
@@ -19,21 +20,19 @@ const NOV_NO_DOC: IssueRollup = { name: 'November 2026 Changelog Rollup', doc: {
 const ROLLUP_DOCS = new Set([googleDocId(OCT_DOC)!, googleDocId(NOV_DOC)!]);
 const EMPTY: RollupFields = { changelog_doc_url: '', changelog_rollup: '' };
 
-describe('isMonthlyRollup', () => {
-  it.each([
-    'October 2026 Changelog Rollup',
-    'January 2027 Changelog Rollup',
-    '  August 2027 Changelog Rollup ',
-  ])('accepts %s', name => expect(isMonthlyRollup(name)).toBe(true));
+describe('isRollupPipeline', () => {
+  // A digest is any release in Linear's "Monthly Changelog Rollups" pipeline —
+  // monthly rollups and Spotlights alike (decided 2026-10-26). Matched by the
+  // pipeline's id, which survives a rename; names do not matter.
+  it('accepts the Monthly Changelog Rollups pipeline', () => {
+    expect(ROLLUP_PIPELINE_ID).toBe('b597dbf5-1813-447d-ba29-2a13106b9274');
+    expect(isRollupPipeline(ROLLUP_PIPELINE_ID)).toBe(true);
+  });
 
-  it.each([
-    'Spring 2027 Spotlight', // same Linear pipeline, not a changelog digest
-    'Fall 2027 Spotlight',
-    'October 2026 Changelog Rollup (draft)',
-    'Holiday Changelog Rollup',
-    'Octember 2026 Changelog Rollup',
-    'october 2026 changelog rollup',
-  ])('rejects %s', name => expect(isMonthlyRollup(name)).toBe(false));
+  it.each([['another pipeline', 'pipe-other'], ['empty', ''], ['null', null], ['undefined', undefined]])(
+    'rejects %s',
+    (_label, id) => expect(isRollupPipeline(id as string | null | undefined)).toBe(false),
+  );
 });
 
 describe('googleDocId', () => {
@@ -72,10 +71,10 @@ describe('pickRollupDoc', () => {
 });
 
 describe('planSweep', () => {
-  it('maps each issue to its monthly rollups and collects every rollup doc', () => {
+  it('maps each issue to its rollup releases and collects every rollup doc', () => {
     const plan = planSweep([
-      { id: 'r-oct', name: 'October 2026 Changelog Rollup', linkUrls: [OCT_DOC], issueIds: ['i-1', 'i-2'] },
-      { id: 'r-nov', name: 'November 2026 Changelog Rollup', linkUrls: [], issueIds: ['i-3'] },
+      { id: 'r-oct', name: 'October 2026 Changelog Rollup', pipelineId: ROLLUP_PIPELINE_ID, linkUrls: [OCT_DOC], issueIds: ['i-1', 'i-2'] },
+      { id: 'r-nov', name: 'November 2026 Changelog Rollup', pipelineId: ROLLUP_PIPELINE_ID, linkUrls: [], issueIds: ['i-3'] },
     ]);
     expect(plan.issueRollups.get('i-1')).toEqual([OCT]);
     expect(plan.issueRollups.get('i-3')).toEqual([NOV_NO_DOC]);
@@ -84,14 +83,23 @@ describe('planSweep', () => {
 
   it('gives an issue in two releases both of them', () => {
     const plan = planSweep([
-      { id: 'r-oct', name: 'October 2026 Changelog Rollup', linkUrls: [OCT_DOC], issueIds: ['i-1'] },
-      { id: 'r-nov', name: 'November 2026 Changelog Rollup', linkUrls: [], issueIds: ['i-1'] },
+      { id: 'r-oct', name: 'October 2026 Changelog Rollup', pipelineId: ROLLUP_PIPELINE_ID, linkUrls: [OCT_DOC], issueIds: ['i-1'] },
+      { id: 'r-nov', name: 'November 2026 Changelog Rollup', pipelineId: ROLLUP_PIPELINE_ID, linkUrls: [], issueIds: ['i-1'] },
     ]);
     expect(plan.issueRollups.get('i-1')).toEqual([OCT, NOV_NO_DOC]);
   });
 
-  it('ignores releases that are not monthly rollups', () => {
-    const plan = planSweep([{ id: 'r-spot', name: 'Spring 2027 Spotlight', linkUrls: [OWN_DOC], issueIds: ['i-1'] }]);
+  it('includes a Spotlight — membership is the pipeline, not the name', () => {
+    const plan = planSweep([
+      { id: 'r-spring', name: 'Spring 2027 Spotlight', pipelineId: ROLLUP_PIPELINE_ID, linkUrls: [], issueIds: ['i-555'] },
+    ]);
+    expect(plan.issueRollups.get('i-555')).toEqual([{ name: 'Spring 2027 Spotlight', doc: { kind: 'none' } }]);
+  });
+
+  it('ignores releases in any other pipeline', () => {
+    const plan = planSweep([
+      { id: 'r-x', name: 'October 2026 Changelog Rollup', pipelineId: 'pipe-other', linkUrls: [OWN_DOC], issueIds: ['i-1'] },
+    ]);
     expect(plan.issueRollups.size).toBe(0);
     expect(plan.rollupDocIds.size).toBe(0);
   });
@@ -100,7 +108,7 @@ describe('planSweep', () => {
     // So a link written before the second doc appeared can still be recognised,
     // and cleared, later.
     const plan = planSweep([
-      { id: 'r-oct', name: 'October 2026 Changelog Rollup', linkUrls: [OCT_DOC, NOV_DOC], issueIds: [] },
+      { id: 'r-oct', name: 'October 2026 Changelog Rollup', pipelineId: ROLLUP_PIPELINE_ID, linkUrls: [OCT_DOC, NOV_DOC], issueIds: [] },
     ]);
     expect(plan.rollupDocIds).toEqual(new Set([googleDocId(OCT_DOC), googleDocId(NOV_DOC)]));
   });
@@ -158,10 +166,10 @@ describe('decideEntry', () => {
     expect(decision.skipped).toMatch(/2 Google Docs/);
   });
 
-  it('changes nothing, and says why, for an issue in two monthly rollups', () => {
+  it('changes nothing, and says why, for an issue in two rollup releases', () => {
     const decision = decideEntry(EMPTY, [OCT, NOV_NO_DOC], ROLLUP_DOCS);
     expect(decision.changes).toEqual({});
-    expect(decision.skipped).toMatch(/in 2 monthly rollups/);
+    expect(decision.skipped).toMatch(/in 2 rollup releases/);
   });
 });
 

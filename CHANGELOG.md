@@ -12,6 +12,36 @@ unless the text says issue.
 
 ---
 
+## 2026-10-26
+
+### Spotlight releases now show on their issues
+
+Asked why DEVADV-555 showed no release in HubSpot: it sits in *Spring 2027
+Spotlight*, in the same *Monthly Changelog Rollups* pipeline as the monthly
+digests, but rollups were matched by **name** (`<Month> <Year> Changelog
+Rollup`). Twelve of my issues were in that Spotlight with an empty
+`changelog_rollup`. A read-only preview of the sweep had first shown nothing out
+of sync — the 9 monthly entries were all correct — and a release-by-release
+report showed where the gap really was.
+
+Membership is now the pipeline, matched by id (`ROLLUP_PIPELINE_ID`): every
+release in it counts, Spotlights included. `listRollupReleases` filters Linear by
+pipeline; the webhook reads a release's pipeline from Linear when the payload
+does not name it, and writes the name from the payload alone only when the
+payload says the release is in the pipeline. Accepted cost, chosen over a
+separate "all releases" property: an issue in both a monthly rollup and a
+Spotlight is in two rollup releases and gets neither — none of mine is today.
+
+Also on 2026-10-20, recorded here: #136's dev deploy was rejected because a
+deployed workflow action cannot gain a required input
+(`BACKWARDS_INCOMPATIBLE_CHANGE_NEW_REQUIRED_FIELD`); #138 made `sharedSecret`
+optional, the function still enforcing it. Prod was then provisioned from
+`master` — the rollup workflow created, all eleven existing workflows diffed
+identical — and dev from `develop`, where the only change was the YouTube
+workflow gaining its secret.
+
+---
+
 ## 2026-10-20
 
 ### The YouTube daily sync left GitHub, and its endpoint got a lock

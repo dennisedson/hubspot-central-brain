@@ -1,12 +1,14 @@
-import { listMonthlyRollups } from '../lib/linear-client';
+import { listRollupReleases } from '../lib/linear-client';
 import { searchAll, batchUpdate, BATCH_UPDATE_LIMIT, type HsRow } from '../lib/hubspot-client';
 import { planSweep, decideEntry, type SweepPlan } from '../lib/rollup-doc';
 import { verifySharedSecret } from '../lib/shared-secret';
 import { getPortalConfig } from '../lib/portal-config';
 
 /**
- * The daily rollup sweep: puts each monthly rollup's digest doc on my entries
- * in it, and clears the ones that have gone stale.
+ * The daily rollup sweep: puts each rollup release's name and digest doc on my
+ * entries in it, and clears the ones that have gone stale. A rollup release is
+ * any release in Linear's "Monthly Changelog Rollups" pipeline — monthly
+ * rollups and Spotlights alike.
  *
  * WHY A SWEEP AS WELL AS THE WEBHOOK
  * ---------------------------------
@@ -14,7 +16,7 @@ import { getPortalConfig } from '../lib/portal-config';
  * the answer without touching any issue: the digest owner attaching the doc to
  * the release, and a scheduled release completing and moving its unfinished
  * issues on to the next one. Nothing reports either, so once a day this reads
- * every monthly rollup and makes the entries match.
+ * every rollup release and makes the entries match.
  *
  * It never creates a record. It considers only entries that already exist —
  * those whose linear_id Linear reports in a rollup, plus every entry already
@@ -119,7 +121,7 @@ export async function main(context: RollupDocSyncContext): Promise<Result> {
   let plan: SweepPlan;
   let entries: HsRow[];
   try {
-    plan = planSweep(await listMonthlyRollups(apiKey));
+    plan = planSweep(await listRollupReleases(apiKey));
     entries = await findEntries(objectTypeId, [...plan.issueRollups.keys()]);
   } catch (err) {
     console.error(`RollupDocSync: read failed: ${reason(err)}`);

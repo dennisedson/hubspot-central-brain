@@ -25,7 +25,7 @@ Last reviewed against the code, the merged PRs and both portals on **2026-10-20*
 | Layer | What it does | Status |
 |---|---|---|
 | **Content spine** | Linear ↔ HubSpot ↔ Asana | **Working on dev.** On prod, Linear → HubSpot runs (the webhook), but **HubSpot → Linear/Asana does not: all eight prod workflows are switched off** (checked 2026-10-20). They can be turned on as they are — §1.8 |
-| **Digest doc links** | Each monthly rollup's Google Doc, from its Linear release, on your entries in it | **Deployed to both portals 2026-10-20; not yet seen working live.** Property provisioned on both; the daily workflow exists on dev only — §4b |
+| **Digest doc links** | Each digest's release name and Google Doc, from Linear, on your entries in it | **Deployed to both portals 2026-10-20; not yet seen working live.** Property provisioned on both; the daily workflow exists on dev only — §4b |
 | **Fellow → tasks** | Meeting action items become HubSpot Projects | **In doubt.** Every path on `api.fellow.app` now answers `404` with an HTML page, including the root, and prod has never set `fellow_last_sync`. Found by the credential probe, not yet diagnosed — §6.3 |
 | **Changelog** | Linear issue → Changelog record → pipeline | **Working, carrying records.** 70 changelog records on prod, and the drafting prompts measured against them |
 | **Changelog drafting** | Draft a post or a digest entry from the record, with Claude | **Working.** Card on the record, prompts in version control, model and thinking selectable — §4b |
@@ -443,9 +443,11 @@ destroyed the next time the issue moved.
 
 ### Digest doc links — from the Linear release
 
-Monthly digests are **Linear releases** named `<Month> <Year> Changelog Rollup`. Put an issue in
-one and its entry here gets `changelog_rollup` set to the release name — so "everything in
-October" is one filter — and, once the release links a Google Doc, `changelog_doc_url` set to it.
+Digests are **Linear releases** in the *Monthly Changelog Rollups* pipeline — the monthly rollups
+and the Spotlights. Put an issue in one and its entry here gets `changelog_rollup` set to the
+release name — so "everything in October", or in Spring Spotlight, is one filter — and, once the
+release links a Google Doc, `changelog_doc_url` set to it. Add **Changelog Rollup** to the board's
+cards to see it there (board view → view configuration → **Card settings** → **Card contents**).
 
 - **Attach the digest's Google Doc to the release** in Linear, as a link. Whoever owns the
   digest can do it; it only has to happen once per month.
@@ -453,8 +455,9 @@ October" is one filter — and, once the release links a Google Doc, `changelog_
   Create Doc. The old value is in the property's history.
 - **Moving an issue to next month's release** moves the name, and clears the old month's doc
   until the new release has one.
-- **Spotlight releases are ignored**, and so is an issue in two monthly rollups at once (it is
-  reported instead). A release with two Google Docs linked sets the name but no doc.
+- **Every release in the pipeline counts**, Spotlights included. An issue in two of them at once —
+  say October and Spring Spotlight — gets neither, and is reported instead. A release with two
+  Google Docs linked sets the name but no doc.
 - **Only your entries are touched.** Issues in the release that belong to someone else never
   become records here.
 
