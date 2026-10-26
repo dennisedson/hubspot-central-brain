@@ -99,6 +99,18 @@ branch calls `refreshDerivedProperties` and answers
 that, adding a date to an existing issue produced no write and the pipeline
 board kept sorting on the old one.
 
+### And back again: HubSpot → Linear
+
+A stage change on a record fires *Content/Changelog → Sync to Linear + Asana*,
+and `SyncToLinear` moves the issue — but **only when Linear disagrees**. It
+reads the issue's current state (`getIssueWorkflow`) and does nothing when that
+state already maps to the record's stage, or when it is a state the map does not
+know (Duplicate, Triage). Most stage changes *start* in Linear, and the changelog
+map is many-to-one — Backlog, Todo and Canceled all mean `identified`, which
+maps back to Backlog alone — so without that check a Todo issue was pushed to
+Backlog and a cancelled one reopened. Outcomes are in `syncStatus`/`reason`:
+`linear_already_agrees`, `linear_state_unmapped:<state>`.
+
 ### Rollout milestone dates
 
 `notes` carries the Linear issue description, which for rollout issues is a

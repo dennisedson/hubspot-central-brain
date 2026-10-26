@@ -19,8 +19,9 @@ change would mislead someone following along, the guide carries a dated
   more (ep 62); the credential health check is on demand (`npm run health`).
 - **`changelog_entry` is gone** from both portals. A changelog is the second
   pipeline on `content_piece` (ep 15).
-- **`SyncToLinear` asks the issue for its team** (ep 61); `provision:workflows`
-  keeps each action's live team and version (ep 60).
+- **`SyncToLinear` asks the issue for its team** (ep 61), and moves nothing
+  Linear already has right (ep 64); `provision:workflows` keeps each action's
+  live team and version (ep 60).
 - **A digest is any release in the rollup pipeline**, Spotlights included —
   matched by the pipeline's id, not the release name (ep 63).
 - **Merges into `master` are merge commits** — `CLAUDE.md` → Process.
@@ -99,3 +100,4 @@ narrative.
 | 61 | [Ask the Issue, Not the Config: Resolving a Linear Team From the Record Itself](61-Ask%20the%20Issue,%20Not%20the%20Config:%20Resolving%20a%20Linear%20Team%20From%20the%20Record%20Itself.md) |  |
 | 62 | [The Scheduler You Already Had: Moving a Cron Out of GitHub and Behind a Secret](62-The%20Scheduler%20You%20Already%20Had:%20Moving%20a%20Cron%20Out%20of%20GitHub%20and%20Behind%20a%20Secret.md) |  |
 | 63 | [Membership Is the Container, Not the Name: Matching Linear Releases by Pipeline](63-Membership%20Is%20the%20Container,%20Not%20the%20Name:%20Matching%20Linear%20Releases%20by%20Pipeline.md) |  |
+| 64 | [Preview the Bulk Sync: The Round Trip That Reopened Cancelled Issues](64-Preview%20the%20Bulk%20Sync:%20The%20Round%20Trip%20That%20Reopened%20Cancelled%20Issues.md) |  |
