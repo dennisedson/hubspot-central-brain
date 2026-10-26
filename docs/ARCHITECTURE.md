@@ -282,7 +282,8 @@ unscheduled**; schedule it and turn it on in the UI.
 | Deploys | merge to `develop` → Dev; `master` → Prod, triggered by hand | see the deploy traps in `CLAUDE.md` |
 
 **Prod's Central Brain workflows were all off until 2026-10-26**, so no HubSpot →
-Linear/Asana sync and no daily job ran there before that. The two sync workflows
+Linear/Asana sync and no daily job ran there before that. The Changelog sync was
+paused again within the hour, for the bounce bug #142 fixes. The two sync workflows
 went on with their `'any'` team — `SyncToLinear` asks each existing issue for its
 own team.
 

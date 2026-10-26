@@ -85,6 +85,13 @@ Portal state, checked 2026-10-20, with 2026-10-26 additions:
   *BuildRel | Advocacy Content Factory*: none of the 94 had one. Prod's YouTube
   and Fellow dailies are on knowingly and will fail until their credentials
   are fixed (§5).
+- **2026-10-26, later:** a hand-run sync, previewed first. Asana tasks created
+  for the **33 active records** (published and archived got none); DEVADV-876
+  and 319 pushed to In Progress and 1453 to In Review in Linear; DEVADV-1440
+  pulled to *drafting* in HubSpot. The preview also exposed a **bounce bug**: a
+  changelog issue moved to Todo or Canceled in Linear was pushed back to Backlog
+  by the sync. **Prod's *Changelog → Sync to Linear + Asana* is paused** until
+  the fix (#142) is deployed; everything else stays on.
 - **Prod `22047910`** was deployed twice that day (#129, #135), so it carries the
   rollup doc links (#128), the provisioning fix (#130) and the `SyncToLinear`
   team fix (#133). Its eight Central Brain workflows were all still switched
@@ -401,7 +408,9 @@ is tracked as such (#23–#34, #62).
 
 As of 2026-10-26.
 
-- **Watch prod's first days with the spine on.** All its workflows went on
+- **Deploy #142, then re-enable prod's *Changelog → Sync to Linear + Asana*.**
+  It is paused because of the bounce bug #142 fixes.
+- **Watch prod's first days with the spine on.** Its workflows went on
   2026-10-26. Expect Asana tasks to appear in *BuildRel | Advocacy Content
   Factory* as records move stage — none of the 94 had one — and check for echo:
   a stage change arriving from Linear should not bounce back as a second
