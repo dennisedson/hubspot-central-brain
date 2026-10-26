@@ -25,7 +25,7 @@ Last reviewed against the code, the merged PRs and both portals on **2026-10-20*
 | Layer | What it does | Status |
 |---|---|---|
 | **Content spine** | Linear ↔ HubSpot ↔ Asana | **Working on dev.** On prod, Linear → HubSpot runs (the webhook), but **HubSpot → Linear/Asana does not: all eight prod workflows are switched off** (checked 2026-10-20). They can be turned on as they are — §1.8 |
-| **Digest doc links** | Each digest's release name and Google Doc, from Linear, on your entries in it | **Deployed to both portals 2026-10-20; not yet seen working live.** Property provisioned on both; the daily workflow exists on dev only — §4b |
+| **Digest doc links** | Each digest's release name and Google Doc, from Linear, on your entries in it | **Working on prod.** The webhook has been writing them since 2026-10-20; a one-off sweep on 2026-10-26 filled the Spring Spotlight entries. The daily workflow exists on both portals but is off — §1.8, §4b |
 | **Fellow → tasks** | Meeting action items become HubSpot Projects | **In doubt.** Every path on `api.fellow.app` now answers `404` with an HTML page, including the root, and prod has never set `fellow_last_sync`. Found by the credential probe, not yet diagnosed — §6.3 |
 | **Changelog** | Linear issue → Changelog record → pipeline | **Working, carrying records.** 70 changelog records on prod, and the drafting prompts measured against them |
 | **Changelog drafting** | Draft a post or a digest entry from the record, with Claude | **Working.** Card on the record, prompts in version control, model and thinking selectable — §4b |

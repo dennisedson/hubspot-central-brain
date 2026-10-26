@@ -72,7 +72,13 @@ Baseline: `npm run validate` exits 0 with **1,322 tests across 67 files** on
 `feat/youtube-daily-in-hubspot` (1,142 across 55 on 2026-10-02; 999 across 44 on
 2026-09-30).
 
-Portal state, checked 2026-10-20:
+Portal state, checked 2026-10-20, with 2026-10-26 additions:
+- **2026-10-26:** prod deployed again (#140), carrying the YouTube door (#136,
+  #138) and pipeline-based rollups (#139). `provision:workflows` run on both
+  portals with before/after snapshots — the only change on each was the YouTube
+  daily gaining its secret. A one-off rollup sweep on prod set *Spring 2027
+  Spotlight* on 12 records; **21 prod records now carry a release** (9 monthly,
+  12 Spotlight). Every prod workflow is still **off**, the rollup daily included.
 - **Prod `22047910`** was deployed twice that day (#129, #135), so it carries the
   rollup doc links (#128), the provisioning fix (#130) and the `SyncToLinear`
   team fix (#133). **All eight Central Brain workflows on prod are switched
@@ -172,15 +178,19 @@ it work."
   snapshot; `src/scripts/flow-actions.ts` now carries both over from the live
   flow, and a re-run on dev diffed **identical** across all 9 workflows. Not yet
   run on prod.
-- **Rollup doc links** (#128, deployed to both portals 2026-10-20). Monthly
-  changelog rollups are Linear releases; the webhook and a daily sweep put each
-  rollup's Google Doc and name on my entries in it. `changelog_rollup` is
-  provisioned on both portals and the action is deployed on both. Unit-tested end
-  to end, and the Linear queries were run read-only against the workspace — but
-  three things are unobserved: an `Issue` webhook carrying `releases` (if it does
-  not, the sweep still delivers within a day), the first live run of *Changelog
-  Rollup Docs (Daily)* (exists on dev, off; not yet created on prod), and a doc
-  on October's release, which had none. Operator guide §4b.
+- **Rollup doc links — working on prod** (#128, #139). Digests are Linear
+  releases in the *Monthly Changelog Rollups* pipeline; the webhook and a sweep
+  put each one's name and Google Doc on my entries in it. **Observed live:**
+  - **The webhook carries `releases`.** Nine prod records had their release, and
+    October's had its doc, before the sweep had ever run — only the webhook could
+    have written them. (Whether each release's `pipeline` rides along is still
+    unseen; the webhook looks it up when absent.)
+  - **The sweep**, run once by hand on 2026-10-26 through its real endpoint:
+    `ok`, 12 updated, 0 cleared, 0 skipped; a read-only preview beforehand
+    predicted exactly that, and one afterwards found nothing left.
+
+  Not yet running on its own: *Changelog Rollup Docs (Daily)* exists on both
+  portals, **off and unscheduled**. Operator guide §4b.
 - **Workflow-action authentication.** Every action URL is public. Four actions
   check the shared secret end to end — the two sync actions, rollup docs and
   related content — and since 2026-10-20 the YouTube sync makes five. Seven do
@@ -391,9 +401,9 @@ point 2.
   `linearTeamId: 'any'` stopped mattering for stage syncs on 2026-10-20 — and so
   can the Asana poll (schedule it first) and the two Associate workflows. Operator
   guide §1.8 lists each, with what to leave off and why.
-- **Create and schedule *Changelog Rollup Docs (Daily)* on prod**
-  (`PORTAL=prod npm run provision:workflows` — safe to re-run since #130), and
-  attach the digest's Google Doc to `October 2026 Changelog Rollup` in Linear.
+- **Schedule and turn on *Changelog Rollup Docs (Daily)*** on both portals
+  (Daily, 17:00). It exists on both since 2026-10-26; until it runs, a doc
+  attached to a release after its issues reaches HubSpot only by hand.
 - **Re-authorise YouTube on prod.** The refresh token is dead
   (`invalid_grant`, PR #104) and `?action=status` will keep answering
   `connected` while a token-shaped string sits in the secret. Operator guide
